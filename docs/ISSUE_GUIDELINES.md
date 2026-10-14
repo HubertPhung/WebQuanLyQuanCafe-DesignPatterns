@@ -167,5 +167,46 @@ Dưới đây là 15 Issue được chuẩn hóa bằng tiếng Anh theo quy chu
 14. `[Integration][API] Connect Next.js Server Actions to Java Backend on port 8080` — `@HubertPhung` & `@0Yaam` (`scope:integration`, `type:feature`, `priority:p1-high`)
 15. `[QA][E2E] Execute End-to-End integration testing and complete project report` — All 5 team members (`scope:test`, `scope:docs`, `type:test`, `priority:p1-high`)
 
+---
 
+## 7. Quy chuẩn Phân nhánh Git & Quy trình Pull Request (Git Workflow)
 
+Để bảo đảm tính toàn vẹn của mã nguồn và tránh xung đột (no-conflict), nhóm áp dụng nghiêm ngặt quy trình làm việc thông qua Pull Request:
+
+### 7.1. Quy ước Đặt tên Nhánh (Branch Naming Convention)
+- **Nhánh chính (`master`):** Là nhánh ổn định (production-ready). **NGHIÊM CẤM push trực tiếp vào `master`**.
+- **Nhánh tính năng theo thành viên:** Sử dụng tiền tố `feature/<ten-thanh-vien>` hoặc `feature/<ten-thanh-vien>-issue-<so-issue>`.
+  - Phùng Nguyễn Hoài Bo: `feature/hoai-bo`
+  - Nguyễn Trí Vương: `feature/vuong`
+  - Nguyễn Thị Hoàng Yến: `feature/yam`
+  - Nguyễn Quốc Thịnh: `feature/thinh`
+  - Trần Tiến Đạt: `feature/dat`
+
+### 7.2. Chu trình Làm việc 6 Bước Chuẩn (Standard 6-Step Workflow)
+```mermaid
+flowchart LR
+    A["1. git checkout -b feature/hoai-bo"] --> B["2. Code & Unit Test"]
+    B --> C["3. git push origin feature/hoai-bo"]
+    C --> D["4. Tạo Pull Request vào master"]
+    D --> E["5. CI/CD Tự động Kiểm thử (Frontend & Backend)"]
+    E --> F["6. Review & Merge PR vào master"]
+```
+
+1. **Tạo nhánh cá nhân từ `master` mới nhất:**
+   ```bash
+   git checkout master
+   git pull origin master
+   git checkout -b feature/hoai-bo
+   ```
+2. **Triển khai code và viết Unit Test (JUnit 5 / Next.js test).**
+3. **Commit theo chuẩn Conventional Commits và push lên GitHub:**
+   ```bash
+   git add .
+   git commit -m "feat(backend): implement SystemConfigManager Singleton pattern (#3)"
+   git push -u origin feature/hoai-bo
+   ```
+4. **Tạo Pull Request trên GitHub hướng về nhánh `master`:**
+   - Tiêu đề PR bám sát tiêu đề Issue.
+   - Thêm `Closes #<so-issue>` vào nội dung PR để GitHub tự động đóng issue khi merge.
+5. **Đợi GitHub Actions CI/CD chạy xong:** Đảm bảo cả hai job `Frontend CI` và `Backend CI` đều đạt trạng thái màu xanh (PASS 100%).
+6. **Thực hiện Merge PR vào `master`:** Sau khi merge, đồng bộ lại nhánh `master` cục bộ.
