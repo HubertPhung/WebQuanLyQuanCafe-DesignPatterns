@@ -140,31 +140,32 @@ flowchart TD
 
 ---
 
-## 6. Danh mục 15 Issue Chuẩn hóa Triển khai (Standardized Backlog)
+## 6. Danh mục 15 Issue Chuẩn hóa Triển khai (Standardized English Backlog)
 
-Dưới đây là 15 Issue được chuẩn hóa theo quy chuẩn rút gọn `[Scope][Pattern] Động từ + Tên Class - Nghiệp vụ`, phân tầng 4 giai đoạn và phân bổ đồng đều cho 5 thành viên trong nhóm:
+Dưới đây là 15 Issue được chuẩn hóa bằng tiếng Anh theo quy chuẩn rút gọn `[Scope][Pattern] Action Verb + Class Name - Specific Business Feature`, phân tầng 4 giai đoạn và phân bổ đồng đều cho 5 thành viên trong nhóm:
 
-### [GIAI ĐOẠN 1: NỀN TẢNG DỮ LIỆU & LƯU TRỮ (FOUNDATION)]
-1. `[Backend][Core] Khởi tạo cấu trúc dự án Java SE và các lớp thực thể POJO` — `@HubertPhung` (`scope:backend`, `type:feature`, `priority:p0-blocker`)
-2. `[Backend][DAO] Xây dựng tầng DAO kết nối JDBC Supabase và In-Memory Store` — `@vuong123s` (`scope:backend`, `type:feature`, `priority:p1-high`)
+### [PHASE 1: FOUNDATION & PERSISTENCE LAYER]
+1. `[Backend][Core] Initialize Java SE project structure and core POJO entities` — `@HubertPhung` (`scope:backend`, `type:feature`, `priority:p0-blocker`)
+2. `[Backend][DAO] Implement DAO layer with JDBC Supabase and In-Memory Store` — `@vuong123s` (`scope:backend`, `type:feature`, `priority:p1-high`)
 
-### [GIAI ĐOẠN 2: TRIỂN KHAI 7 MẪU THIẾT KẾ GOF ĐỘC LẬP (INDEPENDENT PATTERNS)]
-3. `[Backend][Singleton] Cài đặt SystemConfigManager quản lý thông số toàn cục` — `@HubertPhung` (`scope:backend`, `type:pattern`, `priority:p1-high`)
-4. `[Backend][Factory] Cài đặt PaymentProcessorFactory xử lý thanh toán đa kênh` — `@0Yaam` (`scope:backend`, `type:pattern`, `priority:p1-high`)
-5. `[Backend][Decorator] Cài đặt ToppingDecorator tùy biến đồ uống và nâng Size L` — `@0Yaam` (`scope:backend`, `type:pattern`, `priority:p1-high`)
-6. `[Backend][Builder] Cài đặt OrderBuilder xây dựng thực thể hóa đơn Order linh hoạt` — `@elgthinhnguyen` (`scope:backend`, `type:pattern`, `priority:p1-high`)
-7. `[Backend][Strategy] Cài đặt DiscountStrategy đa thuật toán chiết khấu voucher` — `@1convitt` (`scope:backend`, `type:pattern`, `priority:p1-high`)
-8. `[Backend][Observer] Cài đặt OrderEventSubject phát sự kiện tích điểm và cập nhật bàn` — `@elgthinhnguyen` (`scope:backend`, `type:pattern`, `priority:p1-high`)
-9. `[Backend][Chain] Cài đặt ReservationValidator chuỗi kiểm định đặt bàn 3 bước` — `@1convitt` (`scope:backend`, `type:pattern`, `priority:p1-high`)
-10. `[Backend][Adapter] Cài đặt ReservationToOrderAdapter ánh xạ phiếu đặt bàn sang POS` — `@vuong123s` (`scope:backend`, `type:pattern`, `priority:p1-high`)
+### [PHASE 2: 7 INDEPENDENT GOF PATTERNS (PARALLEL WORK)]
+3. `[Backend][Singleton] Implement SystemConfigManager for global cafe parameters` — `@HubertPhung` (`scope:backend`, `type:pattern`, `priority:p1-high`)
+4. `[Backend][Factory] Implement PaymentProcessorFactory for multi-channel checkout` — `@0Yaam` (`scope:backend`, `type:pattern`, `priority:p1-high`)
+5. `[Backend][Decorator] Implement ToppingDecorator for beverage customization and Size L` — `@0Yaam` (`scope:backend`, `type:pattern`, `priority:p1-high`)
+6. `[Backend][Builder] Implement OrderBuilder for flexible POS order assembly` — `@elgthinhnguyen` (`scope:backend`, `type:pattern`, `priority:p1-high`)
+7. `[Backend][Strategy] Implement DiscountStrategy for voucher calculation algorithms` — `@1convitt` (`scope:backend`, `type:pattern`, `priority:p1-high`)
+8. `[Backend][Observer] Implement OrderEventSubject for CRM points and table sync` — `@elgthinhnguyen` (`scope:backend`, `type:pattern`, `priority:p1-high`)
+9. `[Backend][Chain] Implement ReservationValidator for 3-step booking validation` — `@1convitt` (`scope:backend`, `type:pattern`, `priority:p1-high`)
+10. `[Backend][Adapter] Implement ReservationToOrderAdapter to map bookings to POS orders` — `@vuong123s` (`scope:backend`, `type:pattern`, `priority:p1-high`)
 
-### [GIAI ĐOẠN 3: MẪU PHỨC HỢP & GIAO TIẾP MẠNG (COMPOSITE & SERVER)]
-11. `[Backend][Facade] Cài đặt PosCheckoutFacade gom toàn bộ quy trình thanh toán POS` — `@HubertPhung` (`scope:backend`, `type:pattern`, `priority:p0-blocker`)
-12. `[Backend][Server] Cài đặt Java SE HttpServer cổng 8080 và các REST HttpHandler` — `@HubertPhung` & `@elgthinhnguyen` (`scope:backend`, `type:feature`, `priority:p1-high`)
+### [PHASE 3: COMPOSITE PATTERN & SERVER NETWORKING]
+11. `[Backend][Facade] Implement PosCheckoutFacade orchestrating POS checkout workflow` — `@HubertPhung` (`scope:backend`, `type:pattern`, `priority:p0-blocker`)
+12. `[Backend][Server] Implement Java SE HttpServer on port 8080 with REST handlers` — `@HubertPhung` & `@elgthinhnguyen` (`scope:backend`, `type:feature`, `priority:p1-high`)
 
-### [GIAI ĐOẠN 4: KIỂM THỬ, TÍCH HỢP & NGHIỆM THU (TESTING & QA)]
-13. `[Test][JUnit5] Viết bộ kiểm thử đơn vị JUnit 5 cho toàn bộ 9 Design Patterns` — `@vuong123s` & `@1convitt` (`scope:test`, `type:test`, `priority:p1-high`)
-14. `[Integration][API] Kết nối Next.js Server Actions sang Java Backend qua cổng 8080` — `@HubertPhung` & `@0Yaam` (`scope:integration`, `type:feature`, `priority:p1-high`)
-15. `[QA][E2E] Kiểm thử tích hợp toàn trình End-to-End và hoàn thiện báo cáo đồ án` — Cả nhóm 5 thành viên (`scope:test`, `scope:docs`, `type:test`, `priority:p1-high`)
+### [PHASE 4: TESTING, INTEGRATION & ACCEPTANCE QA]
+13. `[Test][JUnit5] Implement comprehensive JUnit 5 unit test suite for 9 GoF patterns` — `@vuong123s` & `@1convitt` (`scope:test`, `type:test`, `priority:p1-high`)
+14. `[Integration][API] Connect Next.js Server Actions to Java Backend on port 8080` — `@HubertPhung` & `@0Yaam` (`scope:integration`, `type:feature`, `priority:p1-high`)
+15. `[QA][E2E] Execute End-to-End integration testing and complete project report` — All 5 team members (`scope:test`, `scope:docs`, `type:test`, `priority:p1-high`)
+
 
 
