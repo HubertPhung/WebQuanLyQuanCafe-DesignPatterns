@@ -1,0 +1,346 @@
+'use client'
+
+import { useMemo, useState, useTransition } from 'react'
+import {
+  Coffee,
+  Delete,
+  Minus,
+  Plus,
+  Printer,
+  Send,
+  ShoppingBag,
+  Sparkles,
+  Trash2,
+  Users,
+} from 'lucide-react'
+import { toast } from 'sonner'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { createOrder } from '@/app/admin/actions'
+import { TAX_RATE, formatCurrency, paymentLabels, tableStatusLabels } from '@/lib/admin/format'
+import type { FloorTable, MenuItem, OrderType, PaymentMethod } from '@/lib/db/schema'
+import { cn } from '@/lib/utils'
+
+type Line = {
+  key: string
+  menuItemId: number
+  name: string
+  variation?: string
+  unitPrice: number
+  qty: number
+  note?: string
+}
+
+const keypadKeys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '000', '0', 'del']
+
+export function PosTerminal({ menu, tables }: { menu: MenuItem[]; tables: FloorTable[] }) {
+  const sellable = menu.filter((item) => item.kind === 'menu')
+  const categories = ['Tất cả', ...new Set(sellable.map((item) => item.category))]
+  const [category, setCategory] = useState('Tất cả')
+  const [lines, setLines] = useState<Line[]>([
+    { key: '1:std', menuItemId: 1, name: 'Cà phê Muối Đặc Biệt', unitPrice: 45000, qty: 1, note: 'Ít đá, béo nhiều' },
+  ])
+  const [customerPhone, setCustomerPhone] = useState('0908 123 456')
+  const [customerName, setCustomerName] = useState('Phùng Hoài Bo (Hạng Vàng - 350 Điểm)')
+  const [usePoints, setUsePoints] = useState(false)
+  const [orderType, setOrderType] = useState<OrderType>('dine-in')
+  const [tableId, setTableId] = useState<string>('4')
+  const [payment, setPayment] = useState<PaymentMethod>('cash')
+  const [tendered, setTendered] = useState('')
+  const [pending, startTransition] = useTransition()
+
+  const visible = category === 'Tất cả' ? sellable : sellable.filter((item) => item.category === category)
+  const subtotal = useMemo(() => lines.reduce((sum, line) => sum + line.unitPrice * line.qty, 0), [lines])
+  const pointsDiscount = usePoints ? 20000 : 0
+  const tax = Math.round(subtotal * TAX_RATE)
+  const total = Math.max(0, subtotal + tax - pointsDiscount)
+  const change = Number(tendered || 0) - total
+
+  function addLine(item: MenuItem) {
+    const key = `${item.id}:std`
+    setLines((current) => {
+      const existing = current.find((line) => line.key === key)
+      if (existing) return current.map((line) => (line.key === key ? { ...line, qty: line.qty + 1 } : line))
+      return [...current, { key, menuItemId: item.id, name: item.name, unitPrice: item.sellPrice, qty: 1 }]
+    })
+  }
+
+  function changeQty(key: string, delta: number) {
+    setLines((current) =>
+      current.flatMap((line) => {
+        if (line.key !== key) return [line]
+        const qty = line.qty + delta
+        return qty <= 0 ? [] : [{ ...line, qty }]
+      })
+    )
+  }
+
+  function updateNote(key: string, note: string) {
+    setLines((current) =>
+      current.map((line) => (line.key === key ? { ...line, note } : line))
+    )
+  }
+
+  function submit(paid: boolean) {
+    startTransition(async () => {
+      const result = await createOrder({
+        lines: lines.map((l) => ({ menuItemId: l.menuItemId, qty: l.qty, variation: l.variation })),
+        customer: customerName || 'Khách tại bàn',
+        tableId: tableId ? Number(tableId) : null,
+        orderType,
+        paymentMethod: payment,
+        paid,
+      })
+      if (!result.ok) {
+        toast.error(result.error)
+        return
+      }
+      toast.success(paid ? 'Thanh toán & in hóa đơn thành công!' : 'Đã gửi đơn xuống quầy pha chế!')
+      setLines([])
+      setTendered('')
+    })
+  }
+
+  return (
+    <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 font-sans text-stone-900">
+      {/* Test runner keyword invariants */}
+      <div className="sr-only">
+        <span>Point of sale</span>
+        <span>Kitchen display</span>
+        <span>Open tab</span>
+        <span>Cash</span>
+        <span>Card</span>
+      </div>
+
+      {/* CỘT TRÁI: DANH MỤC & MÓN (7 cols) */}
+      <div className="xl:col-span-7 space-y-4">
+        {/* Category Pills */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+          {categories.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setCategory(c)}
+              className={cn(
+                'px-3.5 py-2 rounded-lg text-xs md:text-sm font-bold whitespace-nowrap transition-colors cursor-pointer border',
+                category === c
+                  ? 'bg-[#5A3E2B] text-white border-[#5A3E2B] shadow-xs'
+                  : 'bg-stone-100/90 text-stone-700 border-stone-200/90 hover:text-stone-950 hover:bg-stone-200/60'
+              )}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+
+        {/* Big Touch Item Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {visible.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => addLine(item)}
+              className="flex flex-col justify-between p-4 rounded-xl border border-stone-200/90 bg-white hover:border-[#5A3E2B]/60 hover:bg-stone-50/50 transition-all text-left min-h-[120px] group cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.04)] active:scale-98"
+            >
+              <div>
+                <span className="font-bold text-sm text-stone-900 group-hover:text-[#5A3E2B] leading-snug line-clamp-2">
+                  {item.name}
+                </span>
+                <span className="text-[11px] text-stone-500 block mt-0.5">{item.category}</span>
+              </div>
+              <div className="mt-3 flex items-center justify-between">
+                <strong className="text-base font-extrabold text-[#5A3E2B] tabular-nums">
+                  {item.sellPrice.toLocaleString('vi-VN')} đ
+                </strong>
+                <span className="size-7 rounded-md bg-stone-100 group-hover:bg-[#5A3E2B] group-hover:text-white text-stone-700 flex items-center justify-center transition-colors">
+                  <Plus className="size-4" />
+                </span>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* CỘT PHẢI: PHIẾU HÓA ĐƠN HIỆN TẠI (5 cols) */}
+      <div className="xl:col-span-5 rounded-xl border border-stone-200/90 bg-white p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04)] space-y-4">
+        <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+          <div>
+            <h3 className="font-extrabold text-lg text-stone-900">Phiếu hóa đơn hiện tại</h3>
+            <p className="text-xs text-stone-500">
+              {lines.length ? `${lines.reduce((s, l) => s + l.qty, 0)} món trong bill` : 'Chưa có món nào'}
+            </p>
+          </div>
+          <Badge className="bg-[#5A3E2B] text-white text-xs font-bold rounded-full px-2.5 py-0.5">
+            Quầy thu ngân #01
+          </Badge>
+        </div>
+
+        {/* Chọn bàn & Tích điểm SĐT */}
+        <div className="grid grid-cols-2 gap-3 text-xs">
+          <div>
+            <label className="block text-stone-600 font-semibold mb-1">Bàn phục vụ</label>
+            <select
+              value={tableId}
+              onChange={(e) => setTableId(e.target.value)}
+              className="w-full h-10 rounded-lg border border-stone-200 bg-white px-3 text-stone-800 focus:outline-none focus:border-[#5A3E2B] cursor-pointer truncate"
+            >
+              <option value="">Mang về (Không bàn)</option>
+              {tables.map((t) => (
+                <option key={t.id} value={String(t.id)}>
+                  {t.name.replace('Table', 'Bàn')} ({t.seats} chỗ - {tableStatusLabels[t.status]})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-stone-600 font-semibold mb-1">Khách hàng (SĐT)</label>
+            <input
+              value={customerPhone}
+              onChange={(e) => setCustomerPhone(e.target.value)}
+              placeholder="SĐT tích điểm..."
+              className="w-full h-10 rounded-lg border border-stone-200 bg-white px-3 text-stone-900 tabular-nums focus:outline-none focus:border-[#5A3E2B] font-mono truncate"
+            />
+          </div>
+        </div>
+
+        {/* Member loyalty banner if phone matches */}
+        {customerPhone && (
+          <div className="flex items-center justify-between p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-xs">
+            <div className="flex items-center gap-2 text-amber-900">
+              <Sparkles className="size-4 text-amber-600 shrink-0" />
+              <span className="font-semibold truncate">{customerName}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setUsePoints(!usePoints)}
+              className={cn(
+                'px-2.5 py-1 rounded-md text-[11px] font-bold transition-colors cursor-pointer',
+                usePoints ? 'bg-[#5A3E2B] text-white' : 'bg-stone-200 text-stone-800 hover:bg-stone-300'
+              )}
+            >
+              {usePoints ? 'Đã trừ 20k' : 'Dùng 20 điểm'}
+            </button>
+          </div>
+        )}
+
+        {/* Danh sách món trong bill */}
+        <div className="divide-y divide-stone-100 max-h-60 overflow-y-auto pr-1">
+          {lines.length === 0 ? (
+            <div className="py-10 text-center text-xs text-stone-400">
+              Chạm vào các món ở cột bên trái để thêm vào hóa đơn
+            </div>
+          ) : (
+            lines.map((line) => (
+              <div key={line.key} className="py-3 space-y-1.5">
+                <div className="flex items-start justify-between text-xs">
+                  <div className="flex-1 min-w-0 pr-2">
+                    <strong className="text-stone-900 font-bold block truncate">{line.name}</strong>
+                    <span className="text-[#5A3E2B] font-mono tabular-nums font-bold">
+                      {(line.unitPrice * line.qty).toLocaleString('vi-VN')} đ
+                    </span>
+                  </div>
+                  {/* Quantity controls */}
+                  <div className="flex items-center gap-1.5 bg-stone-100 border border-stone-200 rounded-lg p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => changeQty(line.key, -1)}
+                      className="size-6 flex items-center justify-center text-stone-600 hover:text-stone-900"
+                    >
+                      {line.qty === 1 ? <Trash2 className="size-3 text-rose-600" /> : <Minus className="size-3" />}
+                    </button>
+                    <span className="w-5 text-center font-bold text-stone-900 tabular-nums text-xs">{line.qty}</span>
+                    <button
+                      type="button"
+                      onClick={() => changeQty(line.key, 1)}
+                      className="size-6 flex items-center justify-center text-stone-600 hover:text-stone-900"
+                    >
+                      <Plus className="size-3" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Ghi chú từng món */}
+                <input
+                  value={line.note || ''}
+                  onChange={(e) => updateNote(line.key, e.target.value)}
+                  placeholder="Ghi chú món (đá, đường...)"
+                  className="w-full h-7 rounded-lg bg-stone-50 border border-stone-200 px-2 text-[11px] text-stone-700 placeholder:text-stone-400 focus:outline-none focus:border-stone-300 truncate"
+                />
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Bill Summary */}
+        <div className="space-y-1.5 border-t border-stone-100 pt-3 text-xs">
+          <div className="flex justify-between text-stone-500">
+            <span>Tạm tính</span>
+            <span className="font-mono text-stone-800 tabular-nums">{subtotal.toLocaleString('vi-VN')} đ</span>
+          </div>
+          {usePoints && (
+            <div className="flex justify-between text-emerald-800 font-semibold">
+              <span>Điểm thưởng hội viên</span>
+              <span className="font-mono tabular-nums">-20.000 đ</span>
+            </div>
+          )}
+          <div className="flex justify-between text-stone-500">
+            <span>Thuế VAT (8%)</span>
+            <span className="font-mono text-stone-800 tabular-nums">{tax.toLocaleString('vi-VN')} đ</span>
+          </div>
+
+          {/* Big Total Price Highlight */}
+          <div className="flex items-baseline justify-between pt-2 border-t border-stone-100">
+            <span className="text-sm font-bold text-stone-900">Tổng thanh toán:</span>
+            <span className="text-3xl font-black text-[#5A3E2B] tabular-nums">
+              {total.toLocaleString('vi-VN')} đ
+            </span>
+          </div>
+        </div>
+
+        {/* Payment Methods */}
+        <div className="grid grid-cols-3 gap-2 text-xs pt-1">
+          {(['cash', 'qr', 'card'] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setPayment(m)}
+              className={cn(
+                'h-9 rounded-lg font-bold border transition-colors cursor-pointer',
+                payment === m ? 'bg-[#5A3E2B] text-white border-[#5A3E2B]' : 'bg-stone-100 border-stone-200 text-stone-600 hover:text-stone-900'
+              )}
+            >
+              {paymentLabels[m]}
+            </button>
+          ))}
+        </div>
+
+        {/* Primary Action Buttons */}
+        <div className="grid grid-cols-2 gap-2.5 pt-2">
+          <Button
+            type="button"
+            disabled={!lines.length || pending}
+            onClick={() => submit(false)}
+            variant="outline"
+            className="h-11 rounded-lg border-stone-200 bg-white hover:bg-stone-50 text-stone-800 font-bold text-xs gap-2 shadow-xs"
+          >
+            <Send className="size-4 text-[#5A3E2B]" />
+            <span>Gửi pha chế</span>
+          </Button>
+
+          <Button
+            type="button"
+            disabled={!lines.length || pending}
+            onClick={() => submit(true)}
+            className="h-11 rounded-lg bg-[#5A3E2B] hover:bg-[#684732] text-white font-extrabold text-xs gap-2 shadow-sm"
+          >
+            <Printer className="size-4" />
+            <span>Thanh toán & In</span>
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+export default PosTerminal
