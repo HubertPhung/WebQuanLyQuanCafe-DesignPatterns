@@ -129,7 +129,7 @@ graph TB
     subgraph Backend_Pure_Java ["Tầng Nghiệp vụ Lõi: Backend Java thuần (Pure Java SE OOP)"]
         JavaServer["Java SE HTTP Dispatcher (com.sun.net.httpserver.HttpServer)"]
         
-        subgraph GoF_Patterns_Package ["⭐ Lõi 9 Design Patterns GoF (com.coffeeshop.patterns)"]
+        subgraph GoF_Patterns_Package ["⭐ Lõi 9 Design Patterns GoF (com.dalatcafe.patterns)"]
             Singleton_Pattern["Singleton: SystemConfigManager"]
             Chain_Pattern["Chain of Resp.: ReservationValidator Chain"]
             Decorator_Pattern["Decorator: IBeverage & Topping Decorators"]
@@ -263,12 +263,12 @@ frontend-nextjs/
 ```
 
 ### 1.4.2. Cấu trúc Cây Thư mục Backend Java thuần OOP Quy chuẩn (`backend-java`)
-Thư mục `backend-java` hiện đang trống trong kho mã nguồn. Dưới đây là cấu trúc gói chuẩn **Java SE thuần túy (Không dùng Spring Boot)** được thiết kế sẵn để triển khai 9 GoF Patterns:
+Dưới đây là cấu trúc gói chuẩn Maven **Java SE thuần túy (Không dùng Spring Boot)** đang được áp dụng trong dự án để triển khai 9 GoF Patterns:
 
 ```text
 backend-java/
 └── src/
-    └── com/coffeeshop/
+    └── main/java/com/dalatcafe/
         ├── Main.java                          # Điểm khởi chạy Java SE Application (Console/Server)
         ├── server/                            # Giao tiếp HTTP thuần Java SE (Không framework)
         │   ├── AppHttpServer.java             # Quản lý com.sun.net.httpserver.HttpServer (Port 8080)
@@ -463,7 +463,7 @@ classDiagram
 
 - **Mã nguồn minh họa (Pure Java):**
 ```java
-package com.coffeeshop.patterns.creational.singleton;
+package com.dalatcafe.patterns.singleton;
 
 import java.time.LocalTime;
 
@@ -564,7 +564,7 @@ classDiagram
 
 - **Mã nguồn minh họa (Pure Java):**
 ```java
-package com.coffeeshop.patterns.creational.factory;
+package com.dalatcafe.patterns.factory;
 
 public interface IPaymentProcessor {
     PaymentResult processPayment(double amount, String orderCode);
@@ -680,7 +680,7 @@ classDiagram
 
 - **Mã nguồn minh họa (Pure Java):**
 ```java
-package com.coffeeshop.patterns.creational.builder;
+package com.dalatcafe.patterns.builder;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -841,7 +841,7 @@ classDiagram
 
 - **Mã nguồn minh họa (Pure Java):**
 ```java
-package com.coffeeshop.patterns.structural.decorator;
+package com.dalatcafe.patterns.decorator;
 
 public interface IBeverage {
     double getCost();
@@ -959,7 +959,7 @@ classDiagram
 
 - **Mã nguồn minh họa (Pure Java):**
 ```java
-package com.coffeeshop.patterns.structural.adapter;
+package com.dalatcafe.patterns.adapter;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -1077,7 +1077,7 @@ classDiagram
 
 - **Mã nguồn minh họa (Pure Java):**
 ```java
-package com.coffeeshop.patterns.structural.facade;
+package com.dalatcafe.patterns.facade;
 
 public class PosCheckoutFacade {
     private final OrderEventSubject eventSubject;
@@ -1190,7 +1190,7 @@ classDiagram
 
 - **Mã nguồn minh họa (Pure Java):**
 ```java
-package com.coffeeshop.patterns.behavioral.strategy;
+package com.dalatcafe.patterns.strategy;
 
 public interface IDiscountStrategy {
     double calculateDiscount(double orderTotal);
@@ -1315,7 +1315,7 @@ classDiagram
 
 - **Mã nguồn minh họa (Pure Java):**
 ```java
-package com.coffeeshop.patterns.behavioral.chain;
+package com.dalatcafe.patterns.chain;
 
 public abstract class ReservationValidator {
     protected ReservationValidator next;
@@ -1420,7 +1420,7 @@ classDiagram
 
 - **Mã nguồn minh họa (Pure Java):**
 ```java
-package com.coffeeshop.patterns.behavioral.observer;
+package com.dalatcafe.patterns.observer;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -1502,12 +1502,12 @@ public class TableStatusObserver implements IOrderObserver {
 | :--- | :--- | :--- |
 | **Frontend Framework** | Next.js 16.4.0 (App Router), React 19, Tailwind CSS v4 | Đồng bộ chính xác 100% với mã nguồn thực tế |
 | **Giao tiếp Dữ liệu Frontend** | Server Actions (`admin/actions.ts`), Route Handlers (`/api/cart`), Zustand, SWR | Phản ánh đúng cơ chế tự chủ hiện tại và mô tả chuẩn giao tiếp REST |
-| **Thư mục Backend Java** | Thư mục `backend-java` hiện đang trống, chưa có code | Trình bày toàn bộ kiến trúc chuẩn Java SE OOP sẵn sàng để cài đặt |
-| **Khung công nghệ Backend** | Tuyệt đối không dùng Spring Boot / Security / Data JPA | Thiết kế hướng đối tượng thuần túy Java SE (Pure Java OOP) |
+| **Thư mục Backend Java** | Phase 1 (#01, #02) & #03 (Singleton) đã hoàn thành | Cấu trúc Maven Java SE OOP chuẩn mực tại `src/main/java/com/dalatcafe/` |
+| **Khung công nghệ Backend** | Tuyệt đối không dùng Spring Boot / Security / Data JPA | Thiết kế hướng đối tượng thuần túy Java SE 17+ (Pure Java OOP) |
 | **9 GoF Design Patterns** | Đã có màn hình UI/UX tương ứng trên Next.js | Đặc tả chi tiết đầy đủ 9 pattern bằng Java thuần, sơ đồ Mermaid hợp lệ |
 
 ### 5.2. Lộ trình Thực hiện Hoàn thiện Backend Java Thuần (`backend-java`)
-1. **Khởi tạo cấu trúc gói Java tiêu chuẩn:** Tạo cấu trúc thư mục `src/com/coffeeshop/` theo đúng sơ đồ cây tại Mục 1.4.2.
-2. **Cài đặt các lớp POJO & DAO:** Triển khai các lớp thực thể nghiệp vụ (`Order`, `Table`, `Reservation`, `MenuItem`, `Customer`) và tầng lưu trữ `InMemoryDatabase`.
-3. **Cài đặt 9 GoF Design Patterns:** Lần lượt hiện thực hóa 9 mẫu thiết kế trong gói `com.coffeeshop.patterns` theo đúng code minh họa đã đặc tả tại Mục 3.
-4. **Cài đặt Java HTTP Server (Tùy chọn):** Sử dụng `com.sun.net.httpserver.HttpServer` để mở cổng kết nối RESTful JSON, giúp Frontend Next.js gọi trực tiếp vào lõi Java Backend.
+1. **Khởi tạo cấu trúc gói Java tiêu chuẩn:** Tạo cấu trúc thư mục `src/main/java/com/dalatcafe/` theo chuẩn Maven.
+2. **Cài đặt các lớp POJO & DAO (Hoàn thành 🟢):** Triển khai các lớp thực thể nghiệp vụ (`Order`, `Table`, `Reservation`, `MenuItem`, `Customer`) và tầng lưu trữ `InMemoryDatabase` & `JdbcDatabase`.
+3. **Cài đặt 9 GoF Design Patterns:** Lần lượt hiện thực hóa 9 mẫu thiết kế trong gói `com.dalatcafe.patterns` theo đúng code minh họa đã đặc tả tại Mục 3.
+4. **Cài đặt Java HTTP Server & RBAC:** Sử dụng `com.sun.net.httpserver.HttpServer` trên cổng 8080 kết hợp `SimpleAuthFilter`, giúp Frontend Next.js gọi trực tiếp vào lõi Java Backend an toàn.

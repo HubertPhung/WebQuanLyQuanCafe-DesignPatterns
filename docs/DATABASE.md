@@ -239,12 +239,17 @@ erDiagram
 | :--- | :--- | :---: | :---: | :--- |
 | `id` | `SERIAL` | **PK** | - | Mã định danh nhân viên |
 | `name` | `VARCHAR(100)` | NOT NULL | - | Họ và tên nhân viên |
-| `role` | `VARCHAR(50)` | NOT NULL | `'Staff'` | Vai trò: `Admin`, `Manager`, `Staff`, `Barista` |
+| `role` | `VARCHAR(50)` | NOT NULL | `'Staff'` | Chức danh: `Admin`, `Manager`, `Staff`, `Barista` |
 | `phone` | `VARCHAR(20)` | NOT NULL | - | Số điện thoại liên lạc |
 | `email` | `VARCHAR(150)` | NULL | - | Email công việc |
 | `shift` | `VARCHAR(50)` | NOT NULL | `'Sáng'` | Ca làm việc: `Sáng`, `Chiều`, `Tối` |
 | `status` | `VARCHAR(30)` | NOT NULL | `'Đang làm'` | Trạng thái: `Đang làm`, `Nghỉ ca` |
 | `created_at` | `TIMESTAMP` | NOT NULL | `CURRENT_TIMESTAMP` | Thời điểm tạo hồ sơ |
+
+> [!NOTE]
+> **Phân định giữa Chức danh Nhân sự (`staff.role`) và Vai trò Phân quyền Hệ thống (`RBAC`):**
+> - **Chức danh nội bộ (`staff.role`):** `Admin`, `Manager`, `Staff`, `Barista`.
+> - **Vai trò phân quyền hệ thống (System RBAC):** Gồm 4 vai trò chuẩn `ADMIN`, `MANAGER`, `STAFF`, `CUSTOMER`. Cả nhân viên thu ngân (`Staff`) và nhân viên pha chế (`Barista`) đều vận hành dưới vai trò hệ thống `STAFF` khi gửi yêu cầu HTTP đến máy chủ Java SE (cổng 8080).
 
 ---
 

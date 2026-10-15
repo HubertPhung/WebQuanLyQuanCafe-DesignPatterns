@@ -36,7 +36,7 @@ graph TB
     subgraph Core_Backend_Tier ["3. Tầng Nghiệp vụ Lõi Java thuần (Core Backend - Port 8080)"]
         JavaHttpServer["Java SE HTTP Dispatcher (com.sun.net.httpserver.HttpServer)"]
         
-        subgraph Pattern_Domain ["⭐ GoF Design Patterns Domain (com.coffeeshop.patterns)"]
+        subgraph Pattern_Domain ["⭐ GoF Design Patterns Domain (com.dalatcafe.patterns)"]
             Facade["Facade: PosCheckoutFacade"]
             Chain["Chain of Resp: ReservationValidator"]
             Adapter["Adapter: ReservationToOrderAdapter"]
@@ -65,7 +65,7 @@ graph TB
     end
 
     subgraph Persistence_Tier ["4. Tầng Dữ liệu (Persistence Layer)"]
-        PostgresDB[("PostgreSQL Database (QuanLyCafe)")]
+        PostgresDB[("PostgreSQL Database (Supabase / DATABASE_URL)")]
         InMemoryDB[("Java SE In-Memory Store / Mock Data")]
         
         JavaDAO --> PostgresDB
@@ -85,7 +85,9 @@ graph TB
   - Các thao tác đọc/ghi dữ liệu của Admin sử dụng **Next.js Server Actions** (`app/admin/actions.ts`).
   - Các thao tác giỏ hàng và danh sách yêu thích sử dụng **Route Handlers** (`app/api/cart/route.ts`, `app/api/favorites/route.ts`).
   - Dữ liệu được đọc/ghi qua Drizzle ORM (nếu cấu hình `DATABASE_URL`) hoặc tự động kích hoạt **In-memory Mock Store** (`lib/db/mock-store.ts`) giúp hệ thống vận hành 100% không crash.
-- **Backend Java (`backend-java/`):** Đã được tạo sẵn cấu trúc thư mục trong repository và quy hoạch kiến trúc phân tầng thuần OOP, sẵn sàng để triển khai mã nguồn các lớp Java SE và 9 GoF Patterns theo đúng đặc tả kỹ thuật.
+- **Backend Java (`backend-java/`):**
+  - **Môi trường & Công cụ:** Xây dựng trên nền tảng **Java SE 17+ thuần túy**, quản lý build tự động bằng **Maven (`pom.xml`)**, kiểm thử đơn vị độc lập với **JUnit 5**, truy xuất CSDL PostgreSQL Supabase qua **JDBC Driver tiêu chuẩn** (`org.postgresql:postgresql:42.7.2`). Tuyệt đối KHÔNG phụ thuộc vào Spring Boot, Hibernate hay các framework cồng kềnh.
+  - **Hiện trạng thực tế:** Phase 1 (Các mô hình thực thể POJO trong `com.dalatcafe.model`, tầng DAO trong `com.dalatcafe.dao`) và Issue #03 (Singleton `SystemConfigManager` trong `com.dalatcafe.patterns.singleton`) đã được triển khai hoàn chỉnh, vượt qua 100% kịch bản kiểm thử JUnit 5 và đã merge vào nhánh `master`.
 
 ### 2.2. Luồng Tích hợp Mục tiêu (Target Integration Architecture)
 Để kết nối Frontend Next.js với Backend Java thuần SE, luồng tích hợp được thiết kế như sau:
@@ -98,7 +100,7 @@ graph TB
 3. **Cơ chế chuyển tiếp (Proxy / Adapter Pattern tại Frontend):**
    - Server Actions và Route Handlers của Next.js đóng vai trò **API Gateway / Proxy**: Nhận request từ trình duyệt, kiểm tra sơ bộ kiểu dữ liệu, sau đó gọi native `fetch()` gửi sang máy chủ Java SE `HttpServer` (cổng 8080).
    - Backend Java tiếp nhận, điều hướng qua các HttpHandler, kích hoạt các GoF Design Patterns tương ứng để xử lý nghiệp vụ, sau đó trả về kết quả JSON chuẩn.
-   - Khi Backend Java gặp sự cố hoặc chưa bật, Frontend tự động fallback về Mock Store nội bộ với cơ chế ghi log cảnh báo thân thiện (`console.warn`).
+   - **An toàn giao dịch tài chính (Financial Transaction Safety):** Đối với các truy vấn đọc dữ liệu thông thường (Menu, Bàn), nếu Backend Java chưa kết nối được, Frontend tự động fallback về Mock Store nội bộ kèm cảnh báo `console.warn`. Riêng đối với thao tác chốt đơn và thanh toán (`/api/checkout`), nếu CSDL chính bị ngắt kết nối trong chế độ JDBC, hệ thống phản hồi lỗi rõ ràng `HTTP 503 (DATABASE_UNAVAILABLE)` thay vì âm thầm ghi vào Mock Store để tránh thất thoát hoặc lệch sổ sách.
 
 ---
 
@@ -260,7 +262,7 @@ sequenceDiagram
 ┌───────────────────────────────────▼────────────────────────────────────┐
 │                        PHẠM VI BACKEND JAVA THUẦN                      │
 │ - Cài đặt Java SE HttpServer (com.sun.net.httpserver.HttpServer)       │
-│ - Cài đặt 9 GoF Design Patterns (Gói com.coffeeshop.patterns)          │
+│ - Cài đặt 9 GoF Design Patterns (Gói com.dalatcafe.patterns)           │
 │ - Định nghĩa các lớp thực thể POJO (Order, Table, Reservation...)      │
 │ - Tầng DAO truy xuất dữ liệu (InMemoryDatabase & JDBC Connection)      │
 │ - Kiểm thử đơn vị (Unit Tests JUnit) cho toàn bộ 9 mẫu thiết kế        │

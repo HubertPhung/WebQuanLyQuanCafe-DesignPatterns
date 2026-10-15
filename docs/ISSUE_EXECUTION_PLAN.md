@@ -21,8 +21,8 @@ flowchart TD
         I01 --> I02
     end
 
-    subgraph Phase_2 ["Phase 2: 7 Independent GoF Design Patterns (100% Parallel)"]
-        I03["#03: [Backend][Singleton]<br/>SystemConfigManager<br/><b>(@HubertPhung)</b>"]
+    subgraph Phase_2 ["Phase 2: 8 GoF Design Patterns"]
+        I03["#03: [Backend][Singleton]<br/>SystemConfigManager (Done)<br/><b>(@HubertPhung)</b>"]
         I04["#04: [Backend][Factory]<br/>PaymentProcessorFactory<br/><b>(@0Yaam)</b>"]
         I05["#05: [Backend][Decorator]<br/>ToppingDecorator<br/><b>(@0Yaam)</b>"]
         I06["#06: [Backend][Builder]<br/>OrderBuilder<br/><b>(@elgthinhnguyen)</b>"]
@@ -32,13 +32,13 @@ flowchart TD
         I10["#10: [Backend][Adapter]<br/>ReservationToOrderAdapter<br/><b>(@vuong123s)</b>"]
     end
 
-    subgraph Phase_3 ["Phase 3: Composite Pattern & Server Networking"]
+    subgraph Phase_3 ["Phase 3: Facade Pattern & Server Networking"]
         I11["#11: [Backend][Facade]<br/>PosCheckoutFacade orchestration<br/><b>(@HubertPhung)</b>"]
         I12["#12: [Backend][Server]<br/>Java SE HttpServer Port 8080<br/><b>(@HubertPhung & @elgthinhnguyen)</b>"]
     end
 
     subgraph Phase_4 ["Phase 4: Testing, Integration & Acceptance QA"]
-        I13["#13: [Test][JUnit5]<br/>JUnit 5 Suite for 9 GoF Patterns<br/><b>(@vuong123s & @1convitt)</b>"]
+        I13["#13: [QA][JUnit5]<br/>JUnit 5 Suite for 9 GoF Patterns<br/><b>(@vuong123s & @1convitt)</b>"]
         I14["#14: [Integration][API]<br/>Connect Next.js to Java Backend<br/><b>(@HubertPhung & @0Yaam)</b>"]
         I15["#15: [QA][E2E]<br/>End-to-End QA & Project Report<br/><b>(All 5 Members)</b>"]
     end
@@ -74,9 +74,10 @@ flowchart TD
 ```
 
 ### 3 Core Rules for Zero Conflict:
-1. **Package Isolation:** Each member only develops within their assigned GoF pattern package inside `backend-java/src/main/java/com/dalatcafe/patterns/<pattern_name>/`.
-2. **Frozen Model Rule:** Shared POJO models (`Order`, `Table`, `MenuItem`, `Reservation`, `Customer`) created in **Issue #01** are frozen. Members only access properties via getters/setters without modifying entity definitions.
-3. **Feature Branching:** Every issue is developed on a dedicated branch named `feature/issue-<number>-<short-title>` (e.g. `feature/issue-05-decorator-topping`). Code is reviewed and merged into `develop` only when tests pass.
+1. **Package Isolation:** Each member develops exclusively within their assigned package inside `backend-java/src/main/java/com/dalatcafe/patterns/<pattern_name>/` or `dao/`.
+2. **Extensible Domain Model:** Shared POJO models (`Order`, `Table`, `MenuItem`, `Reservation`, `Customer`) created in **Issue #01** serve as the common domain foundation. If a pattern requires additional fields or helper methods (e.g. `OrderLine` details, status helpers), additions must be backward-compatible (non-breaking existing constructors and getters).
+3. **Issue-Based Branching:** Every issue is developed on a dedicated branch named `feature/issue-<number>-<short-title>` (e.g. `feature/issue-04-payment-factory`). Code is reviewed and merged into `master` via Pull Request only when all CI tests pass.
+4. **Continuous Testing:** Unit tests are developed concurrently alongside each pattern implementation (e.g. `FactoryTest.java` in PR #04, `DecoratorTest.java` in PR #05), while Issue #13 consolidates the full test suite and edge-case coverage.
 
 ---
 
@@ -94,23 +95,24 @@ flowchart TD
 
 ## 3. Standardized 15 Issues Backlog (English Edition)
 
-### PHASE 1: FOUNDATION & PERSISTENCE LAYER
+### PHASE 1: FOUNDATION & PERSISTENCE LAYER (Completed 🟢)
 
-#### Issue #01: [Backend][Core] Initialize Java SE project structure and core POJO entities
+#### Issue #01: [Backend][Core] Initialize Java SE project structure and core POJO entities (Completed 🟢 - PR #17)
 - **Assignee:** Phùng Nguyễn Hoài Bo (`@HubertPhung` - Student ID: `2312585`)
 - **Labels:** `scope:backend`, `type:feature`, `priority:p0-blocker`
+- **Status:** **[COMPLETED - Merged to master via PR #17]**
 - **Body Template:**
 ```markdown
 ### 1. Context & Objective
 Initialize the Java SE pure OOP project structure and define core Plain Old Java Objects (POJO) entities and enums as the unified shared data foundation for all 9 Gang of Four (GoF) Design Patterns.
-- **Related Features:** `FEAT-AUTH-01`, `FEAT-POS-01`
+- **Related Features:** `FEAT-CORE-01`, `FEAT-POS-01`
 - **Lead Developer:** @HubertPhung (Phung Nguyen Hoai Bo - Student ID: 2312585)
 - **Source Directory:** `backend-java/src/main/java/com/dalatcafe/model/`
 
 ### 2. Technical Constraints
-- [ ] Use pure Java SE 17+ OOP. Strictly NO Spring Boot, Spring Security, Spring Data JPA, Hibernate, or third-party web frameworks.
-- [ ] Comply with architectural rules in `.agents/rules/backend-java-constraints.md`.
-- [ ] Frozen Model Rule: Freeze POJO class definitions after creation to prevent merge conflicts across team members.
+- [x] Use pure Java SE 17+ OOP. Strictly NO Spring Boot, Spring Security, Spring Data JPA, Hibernate, or third-party web frameworks.
+- [x] Comply with architectural rules in `.agents/rules/backend-java-constraints.md`.
+- [x] Extensible Domain Model: Establish core POJO models; future extensions (new fields/helpers) must maintain backward compatibility.
 
 ### 3. Design Pattern Role
 - **Core POJO Domain Models:**
@@ -121,18 +123,18 @@ Initialize the Java SE pure OOP project structure and define core Plain Old Java
   - `Customer`: Manages customer profile, phone, total spend, loyalty points, and membership rank.
 
 ### 4. Tasks Checklist
-- [ ] Create package hierarchy: `com.dalatcafe.model`, `com.dalatcafe.patterns`, `com.dalatcafe.dao`, `com.dalatcafe.server`
-- [ ] Implement POJO entity classes: `Order.java`, `Table.java`, `MenuItem.java`, `Reservation.java`, `Customer.java`
-- [ ] Implement Status Enums:
+- [x] Create package hierarchy: `com.dalatcafe.model`, `com.dalatcafe.patterns`, `com.dalatcafe.dao`, `com.dalatcafe.server`
+- [x] Implement POJO entity classes: `Order.java`, `Table.java`, `MenuItem.java`, `Reservation.java`, `Customer.java`
+- [x] Implement Status Enums:
   - `OrderStatus.java` (PENDING, BREWING, READY, COMPLETED)
   - `TableStatus.java` (AVAILABLE, OCCUPIED, RESERVED, CLEANING)
   - `PaymentMethod.java` (CASH, QR, CARD)
   - `OrderType.java` (DINE_IN, PICKUP, DELIVERY)
 
 ### 5. Definition of Done
-- [ ] Source code compiles cleanly without warnings via `mvn compile`.
-- [ ] All POJOs contain complete constructors, getters/setters, and `toString()` methods.
-- [ ] Unblocks development progress for Issues #02 through #10.
+- [x] Source code compiles cleanly without warnings via `mvn compile`.
+- [x] All POJOs contain complete constructors, getters/setters, and `toString()` methods.
+- [x] Unblocks development progress for Issues #02 through #10.
 
 ### 6. Dependencies
 - **Blocked by:** None (First issue to execute)
@@ -141,40 +143,43 @@ Initialize the Java SE pure OOP project structure and define core Plain Old Java
 
 ---
 
-#### Issue #02: [Backend][DAO] Implement DAO layer with JDBC Supabase and In-Memory Store
+#### Issue #02: [Backend][DAO] Implement DAO layer with JDBC Supabase and In-Memory Store (Completed 🟢 - PR #19)
 - **Assignee:** Phan Khánh Vương (`@vuong123s` - Student ID: `2312802`)
 - **Labels:** `scope:backend`, `type:feature`, `priority:p1-high`
+- **Status:** **[COMPLETED - Merged to master via PR #19]**
 - **Body Template:**
 ```markdown
 ### 1. Context & Objective
 Build an independent Data Access Object (DAO) persistence layer connecting to PostgreSQL on Supabase via standard JDBC, paired with an In-Memory Store (`ConcurrentHashMap`) as a zero-crash offline and testing fallback.
-- **Related Features:** `FEAT-TBL-01`, `FEAT-INV-01`
+- **Related Features:** `FEAT-TBL-01`, `FEAT-INV-01`, `FEAT-CRM-01`
 - **Lead Developer:** @vuong123s (Phan Khanh Vuong - Student ID: 2312802)
 - **Package:** `com.dalatcafe.dao`
 
 ### 2. Technical Constraints
-- [ ] Use pure `java.sql.*` (standard JDBC). Strictly NO Hibernate, Spring Data, or heavyweight ORMs.
-- [ ] Support PostgreSQL Supabase connection with SSL mode (`sslmode=require`).
-- [ ] Provide thread-safe In-Memory fallback using `ConcurrentHashMap`.
+- [x] Use pure `java.sql.*` (standard JDBC). Strictly NO Hibernate, Spring Data, or heavyweight ORMs.
+- [x] Support PostgreSQL Supabase connection with SSL mode (`sslmode=require`).
+- [x] Provide thread-safe In-Memory fallback using `ConcurrentHashMap`.
 
 ### 3. Design Pattern Role
 - **DAO Pattern:** Decouples core business domain logic from physical storage engines.
-  - Interfaces: `IOrderDao`, `ITableDao`, `IMenuDao`, `IReservationDao`
-  - Implementations: `InMemoryDatabase`, `JdbcDatabase`
+  - Interfaces: `IOrderDao`, `ITableDao`, `IMenuDao`, `IReservationDao`, `ICustomerDao`
+  - Implementations: `InMemoryDatabase`, `JdbcDatabase`, `DaoFactory`
 
 ### 4. Tasks Checklist
-- [ ] Define DAO Interfaces:
+- [x] Define DAO Interfaces:
   - `IOrderDao.java` (`save`, `findById`, `findByCode`, `findAll`, `updateStatus`)
   - `ITableDao.java` (`findAll`, `findById`, `updateStatus`)
   - `IMenuDao.java` (`findAll`, `findById`, `save`, `updateStock`)
   - `IReservationDao.java` (`findAll`, `findById`, `save`, `updateStatus`)
-- [ ] Implement `InMemoryDatabase.java` with thread-safe collections for offline unit tests.
-- [ ] Implement `JdbcDatabase.java` reading `DATABASE_URL` environment variable for Supabase connectivity.
+  - `ICustomerDao.java` (`findAll`, `findById`, `findByPhone`, `save`, `updatePoints`)
+- [x] Implement thread-safe `InMemoryDatabase.java` with mock seed data matching frontend.
+- [x] Implement `JdbcDatabase.java` reading `DATABASE_URL` environment variable for Supabase connectivity.
+- [x] Implement `DaoFactory.java` supporting runtime switching between In-Memory and JDBC modes.
 
 ### 5. Definition of Done
-- [ ] CRUD operations execute successfully in both InMemory and JDBC modes.
-- [ ] Schema aligns 100% with database specifications in `docs/DATABASE.md`.
-- [ ] Graceful fallback operates without application crash if network is unavailable.
+- [x] CRUD operations execute successfully in both InMemory and JDBC modes.
+- [x] Schema aligns 100% with database specifications in `docs/DATABASE.md`.
+- [x] Unit tests verify CRUD operations across both implementations.
 
 ### 6. Dependencies
 - **Blocked by:** #01 (POJO Models)
@@ -183,23 +188,24 @@ Build an independent Data Access Object (DAO) persistence layer connecting to Po
 
 ---
 
-### PHASE 2: 7 INDEPENDENT GOF PATTERNS (PARALLEL WORK)
+### PHASE 2: 8 GOF DESIGN PATTERNS
 
-#### Issue #03: [Backend][Singleton] Implement SystemConfigManager for global cafe parameters
+#### Issue #03: [Backend][Singleton] Implement SystemConfigManager for global cafe parameters (Completed 🟢 - PR #20)
 - **Assignee:** Phùng Nguyễn Hoài Bo (`@HubertPhung` - Student ID: `2312585`)
 - **Labels:** `scope:backend`, `type:pattern`, `priority:p1-high`
+- **Status:** **[COMPLETED - Merged to master via PR #20]**
 - **Body Template:**
 ```markdown
 ### 1. Context & Objective
 Implement the Singleton Pattern to manage global operational parameters for the cafe (store name, opening/closing hours, loyalty point earning ratios, table reservation expiration timeout).
-- **Related Features:** `FEAT-AUTH-03`, `FEAT-RES-03`
+- **Related Features:** `FEAT-AUTH-03`, `FEAT-POS-04`
 - **Lead Developer:** @HubertPhung (Phung Nguyen Hoai Bo - Student ID: 2312585)
 - **Package:** `com.dalatcafe.patterns.singleton`
 
 ### 2. Technical Constraints
-- [ ] Pure Java SE 17+ implementation.
-- [ ] Implement Double-Checked Locking with `volatile` modifier to guarantee absolute thread-safety in concurrent environments.
-- [ ] Enforce private constructor to prevent instantiation via `new`.
+- [x] Pure Java SE 17+ implementation.
+- [x] Implement Double-Checked Locking with `volatile` modifier to guarantee absolute thread-safety in concurrent environments.
+- [x] Enforce private constructor, reflection defense, and serialization defense (`readResolve`).
 
 ### 3. Design Pattern Role
 - **Design Pattern:** Singleton Pattern (GoF Creational)
@@ -209,17 +215,19 @@ Implement the Singleton Pattern to manage global operational parameters for the 
   - `public static SystemConfigManager getInstance()`
 
 ### 4. Tasks Checklist
-- [ ] Create `SystemConfigManager.java` in package `com.dalatcafe.patterns.singleton`.
-- [ ] Initialize default configuration parameters:
+- [x] Create `SystemConfigManager.java` in package `com.dalatcafe.patterns.singleton`.
+- [x] Initialize default configuration parameters:
   - Store Name: "Đà Lạt Cafe"
   - Operating Hours: `07:00` to `22:00`
   - Loyalty Point Ratio: 10,000 VND = 1 loyalty point (1 point = 1,000 VND bill redemption)
   - Max Reservation Hold Timeout: 30 minutes
-- [ ] Implement utility methods: `isWithinOperatingHours(LocalTime time)`, `calculateLoyaltyPoints(double amount)`, `calculateDiscountFromPoints(int points)`.
+- [x] Implement utility methods: `isWithinOperatingHours(LocalTime time)`, `calculateLoyaltyPoints(double amount)`, `calculateDiscountFromPoints(int points)`.
+- [x] Write JUnit 5 unit tests (`SystemConfigManagerTest.java`) verifying thread safety and singleton integrity.
 
 ### 5. Definition of Done
-- [ ] `getInstance()` consistently returns a single instance across concurrent multi-threaded calls.
-- [ ] `isWithinOperatingHours()` correctly returns `false` for times outside 07:00 - 22:00.
+- [x] `getInstance()` consistently returns a single instance across concurrent multi-threaded calls.
+- [x] `isWithinOperatingHours()` correctly returns `false` for times outside 07:00 - 22:00.
+- [x] Reflection defense prevents multiple instances.
 
 ### 6. Dependencies
 - **Blocked by:** None
@@ -539,7 +547,7 @@ Apply the Adapter Pattern to convert an approved table booking (`Reservation`) w
 
 ---
 
-### PHASE 3: COMPOSITE PATTERN & SERVER NETWORKING
+### PHASE 3: FACADE PATTERN & SERVER NETWORKING
 
 #### Issue #11: [Backend][Facade] Implement PosCheckoutFacade orchestrating POS checkout workflow
 - **Assignee:** Phùng Nguyễn Hoài Bo (`@HubertPhung` - Student ID: `2312585`)
@@ -596,8 +604,8 @@ Implement the Facade Pattern acting as the central unified API orchestrating 6 G
 - **Body Template:**
 ```markdown
 ### 1. Context & Objective
-Build an embedded HTTP server using standard Java SE `com.sun.net.httpserver.HttpServer` listening on port 8080, receiving and routing REST JSON requests from Next.js Frontend to core Java pattern domain.
-- **Related Features:** Full Backend API Suite
+Build an embedded HTTP server using standard Java SE `com.sun.net.httpserver.HttpServer` listening on port 8080, receiving and routing REST JSON requests from Next.js Frontend to core Java pattern domain, protected by RBAC auth filter.
+- **Related Features:** `FEAT-AUTH-02`, `FEAT-SF-01`, `FEAT-TBL-01`, `FEAT-RES-01`, `FEAT-POS-05`, `FEAT-CRM-01`, `FEAT-ANA-01`
 - **Lead Developers:** @HubertPhung & @elgthinhnguyen
 - **Package:** `com.dalatcafe.server`
 
@@ -605,25 +613,38 @@ Build an embedded HTTP server using standard Java SE `com.sun.net.httpserver.Htt
 - [ ] Use pure Java SE `com.sun.net.httpserver.HttpServer`. Strictly NO Spring Boot, embedded Tomcat, or Netty.
 - [ ] Configure standard CORS headers (`Access-Control-Allow-Origin: *`, `Methods`, `Headers`).
 - [ ] Enforce response MIME type: `application/json; charset=UTF-8`.
+- [ ] RBAC Security Filter (`SimpleAuthFilter`): Intercept incoming requests, validate role headers (`X-User-Role` or bearer authorization) for 4 system roles (`ADMIN`, `MANAGER`, `STAFF`, `CUSTOMER`), returning `401 UNAUTHORIZED` or `403 FORBIDDEN`.
+- [ ] POS Transactional Safety: In `CheckoutHandler`, if database operations fail in JDBC mode, return `HTTP 503 DATABASE_UNAVAILABLE` rather than silent fallback to mock store (preventing phantom/unpersisted orders).
 
 ### 3. Design Pattern Role
 - **HTTP Dispatcher & Handlers:**
   - `MainServer.java`: Boots HTTP server on port 8080.
   - `CorsHandler.java`: Manages CORS preflight OPTIONS requests.
-  - REST Handlers: `MenuHandler`, `TableHandler`, `ReservationHandler`, `CheckoutHandler`.
+  - `SimpleAuthFilter.java`: Pure Java SE HttpFilter enforcing RBAC rules.
+  - REST Handlers: `MenuHandler`, `TableHandler`, `OrderHandler`, `ReservationHandler`, `CustomerHandler`, `VoucherHandler`, `AnalyticsHandler`, `CheckoutHandler`.
 
 ### 4. Tasks Checklist
 - [ ] Create `MainServer.java` configuring socket listening on port 8080.
+- [ ] Implement `SimpleAuthFilter.java` enforcing RBAC access rights:
+  - Admin/Manager routes: `/api/analytics`, `/api/settings`
+  - Staff routes: `/api/checkout`, `/api/orders`, `/api/tables`
+  - Public routes: `/api/menu`, `/api/reservations`
 - [ ] Implement REST HttpHandlers:
-  - `GET /api/menu`: Returns coffee menu catalog from `IMenuDao`.
-  - `GET /api/tables`, `PUT /api/tables/{id}`: Fetches and updates table floor status via `ITableDao`.
-  - `POST /api/reservations`: Receives bookings and validates via `ReservationValidator`.
-  - `POST /api/checkout`: Receives POS orders and delegates to `PosCheckoutFacade`.
-- [ ] Implement lightweight JSON request parsing and JSON response generation.
+  - `MenuHandler`: `GET /api/menu`, `POST /api/menu`, `PATCH /api/menu/:id/stock`
+  - `TableHandler`: `GET /api/tables`, `PATCH /api/tables/:id/status`
+  - `OrderHandler`: `GET /api/orders`, `PATCH /api/orders/:id/status`, `POST /api/orders/:id/pay`
+  - `ReservationHandler`: `GET /api/reservations`, `POST /api/reservations`, `PATCH /api/reservations/:id/status`, `POST /api/reservations/:id/transfer-pos`
+  - `CustomerHandler`: `GET /api/customers`
+  - `VoucherHandler`: `POST /api/vouchers/validate` (delegates to `DiscountStrategy`)
+  - `AnalyticsHandler`: `GET /api/analytics/overview` (aggregates 7-day revenue and top drinks)
+  - `CheckoutHandler`: `POST /api/checkout` (delegates to `PosCheckoutFacade` with HTTP 503 safety on DB failure)
+- [ ] Implement lightweight JSON parser/builder helpers.
 
 ### 5. Definition of Done
 - [ ] Server boots up in < 1 second on port 8080.
-- [ ] Standard `curl` requests receive HTTP 200 OK with valid JSON payloads.
+- [ ] All REST endpoints return standardized JSON schemas specified in `docs/API_SPEC.md`.
+- [ ] Unauthorized requests properly receive HTTP 401 / 403.
+- [ ] Database failure during checkout returns HTTP 503 instead of corrupting state.
 
 ### 6. Dependencies
 - **Blocked by:** #02 (DAO), #09 (Chain), #10 (Adapter), #11 (Facade)
@@ -634,7 +655,7 @@ Build an embedded HTTP server using standard Java SE `com.sun.net.httpserver.Htt
 
 ### PHASE 4: TESTING, INTEGRATION & ACCEPTANCE QA
 
-#### Issue #13: [Test][JUnit5] Implement comprehensive JUnit 5 unit test suite for 9 GoF patterns
+#### Issue #13: [QA][JUnit5] Implement comprehensive JUnit 5 unit test suite for 9 GoF patterns
 - **Assignee:** Phan Khánh Vương (`@vuong123s`) & Vũ Thế Huỳnh (`@1convitt`)
 - **Labels:** `scope:test`, `type:test`, `priority:p1-high`
 - **Body Template:**

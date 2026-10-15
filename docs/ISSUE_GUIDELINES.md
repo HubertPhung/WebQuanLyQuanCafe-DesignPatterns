@@ -37,14 +37,15 @@ Tiêu đề issue phải tuân theo cấu trúc chuẩn:
 - `[Backend]`: Công việc lập trình Java SE thuần túy, POJO entities, DAO, 9 GoF Design Patterns.
 - `[Integration]`: Công việc kết nối mạng giữa Next.js và Backend Java, DTO, proxy, error fallback.
 - `[Docs]`: Cập nhật tài liệu kỹ thuật, báo cáo, đặc tả kiến trúc.
-- `[Test]`: Viết unit test JUnit, kiểm thử tự động UI/UX, test hiệu năng.
+- `[Test]` / `[QA]`: Viết unit test JUnit 5, kiểm thử tự động UI/UX, kiểm thử tích hợp E2E.
 
 ### Ví dụ Tiêu đề Chuẩn:
-- `[Backend][POS] Cài đặt PosCheckoutFacade kết hợp Builder và Factory`
-- `[Backend][Reservation] Triển khai chuỗi kiểm định Chain of Responsibility`
+- `[Backend][Facade] Cài đặt PosCheckoutFacade kết hợp Builder và Factory`
+- `[Backend][Chain] Triển khai chuỗi kiểm định Chain of Responsibility`
 - `[Frontend][KDS] Hoàn thiện hiệu ứng cảnh báo đổi màu viền khi đơn trễ quá 10 phút`
 - `[Integration][API] Kết nối Server Action createOrder với Java Backend qua cổng 8080`
 - `[Docs][API] Cập nhật bảng mã lỗi chi tiết cho nhóm API Đặt bàn`
+- `[QA][E2E] Thực thi kiểm thử toàn trình E2E và hoàn thiện báo cáo đề tài`
 
 ---
 
@@ -59,6 +60,7 @@ Mỗi issue bắt buộc phải được gắn ít nhất **3 loại nhãn**: `s
 | `scope:backend` | Toàn bộ mã nguồn trong thư mục `backend-java/` |
 | `scope:integration`| Giao tiếp HTTP REST, DTO và kết nối hai phân hệ |
 | `scope:docs` | Toàn bộ tài liệu trong thư mục `docs/` và `README.md` |
+| `scope:test` | Bộ kiểm thử đơn vị JUnit 5, kịch bản test UI/UX và báo cáo QA |
 
 ### 3.2. Nhãn Loại công việc (`type:*`)
 | Nhãn | Ý nghĩa |
@@ -140,73 +142,88 @@ flowchart TD
 
 ---
 
-## 6. Danh mục 15 Issue Chuẩn hóa Triển khai (Standardized English Backlog)
+## 6. Danh mục 15 Issue Chuẩn hóa Triển khai (Standardized Backlog)
 
-Dưới đây là 15 Issue được chuẩn hóa bằng tiếng Anh theo quy chuẩn rút gọn `[Scope][Pattern] Action Verb + Class Name - Specific Business Feature`, phân tầng 4 giai đoạn và phân bổ đồng đều cho 5 thành viên trong nhóm:
+Dưới đây là 15 Issue được chuẩn hóa theo quy chuẩn rút gọn `[Scope][Pattern] Action Verb + Class Name - Specific Business Feature`, phân tầng 4 giai đoạn logic và phân bổ cho 5 thành viên trong nhóm:
 
-### [PHASE 1: FOUNDATION & PERSISTENCE LAYER]
-1. `[Backend][Core] Initialize Java SE project structure and core POJO entities` — `@HubertPhung` (`scope:backend`, `type:feature`, `priority:p0-blocker`)
-2. `[Backend][DAO] Implement DAO layer with JDBC Supabase and In-Memory Store` — `@vuong123s` (`scope:backend`, `type:feature`, `priority:p1-high`)
+### [PHASE 1: FOUNDATION & PERSISTENCE LAYER] (Đã hoàn thành 🟢)
+1. `[Backend][Core] Initialize Java SE project structure and core POJO entities` — `@HubertPhung` (`scope:backend`, `type:feature`, `priority:p0-blocker`) — **[COMPLETED - PR #17]**
+2. `[Backend][DAO] Implement DAO layer with JDBC Supabase and In-Memory Store` — `@vuong123s` (`scope:backend`, `type:feature`, `priority:p1-high`) — **[COMPLETED - PR #19]**
 
-### [PHASE 2: 7 INDEPENDENT GOF PATTERNS (PARALLEL WORK)]
-3. `[Backend][Singleton] Implement SystemConfigManager for global cafe parameters` — `@HubertPhung` (`scope:backend`, `type:pattern`, `priority:p1-high`)
+### [PHASE 2: 8 GOF DESIGN PATTERNS]
+> [!NOTE]
+> 6 mẫu thiết kế (#04, #05, #06, #07, #09, #10) có thể triển khai song song. Hai mẫu có phụ thuộc nhẹ: #08 (Observer) cần DAO từ #02; #09 (Chain) cần SystemConfigManager từ #03.
+3. `[Backend][Singleton] Implement SystemConfigManager for global cafe parameters` — `@HubertPhung` (`scope:backend`, `type:pattern`, `priority:p1-high`) — **[COMPLETED - PR #20]**
 4. `[Backend][Factory] Implement PaymentProcessorFactory for multi-channel checkout` — `@0Yaam` (`scope:backend`, `type:pattern`, `priority:p1-high`)
 5. `[Backend][Decorator] Implement ToppingDecorator for beverage customization and Size L` — `@0Yaam` (`scope:backend`, `type:pattern`, `priority:p1-high`)
 6. `[Backend][Builder] Implement OrderBuilder for flexible POS order assembly` — `@elgthinhnguyen` (`scope:backend`, `type:pattern`, `priority:p1-high`)
 7. `[Backend][Strategy] Implement DiscountStrategy for voucher calculation algorithms` — `@1convitt` (`scope:backend`, `type:pattern`, `priority:p1-high`)
-8. `[Backend][Observer] Implement OrderEventSubject for CRM points and table sync` — `@elgthinhnguyen` (`scope:backend`, `type:pattern`, `priority:p1-high`)
-9. `[Backend][Chain] Implement ReservationValidator for 3-step booking validation` — `@1convitt` (`scope:backend`, `type:pattern`, `priority:p1-high`)
+8. `[Backend][Observer] Implement OrderEventSubject for CRM points and table sync` (cần #02) — `@elgthinhnguyen` (`scope:backend`, `type:pattern`, `priority:p1-high`)
+9. `[Backend][Chain] Implement ReservationValidator for 3-step booking validation` (cần #03) — `@1convitt` (`scope:backend`, `type:pattern`, `priority:p1-high`)
 10. `[Backend][Adapter] Implement ReservationToOrderAdapter to map bookings to POS orders` — `@vuong123s` (`scope:backend`, `type:pattern`, `priority:p1-high`)
 
-### [PHASE 3: COMPOSITE PATTERN & SERVER NETWORKING]
-11. `[Backend][Facade] Implement PosCheckoutFacade orchestrating POS checkout workflow` — `@HubertPhung` (`scope:backend`, `type:pattern`, `priority:p0-blocker`)
+### [PHASE 3: FACADE PATTERN & SERVER NETWORKING]
+11. `[Backend][Facade] Implement PosCheckoutFacade orchestrating POS checkout workflow` (cần #04, #05, #06, #07) — `@HubertPhung` (`scope:backend`, `type:pattern`, `priority:p0-blocker`)
 12. `[Backend][Server] Implement Java SE HttpServer on port 8080 with REST handlers` — `@HubertPhung` & `@elgthinhnguyen` (`scope:backend`, `type:feature`, `priority:p1-high`)
 
 ### [PHASE 4: TESTING, INTEGRATION & ACCEPTANCE QA]
-13. `[Test][JUnit5] Implement comprehensive JUnit 5 unit test suite for 9 GoF patterns` — `@vuong123s` & `@1convitt` (`scope:test`, `type:test`, `priority:p1-high`)
+13. `[QA][JUnit5] Implement comprehensive JUnit 5 unit test suite for 9 GoF patterns` — `@vuong123s` & `@1convitt` (`scope:test`, `type:test`, `priority:p1-high`)
 14. `[Integration][API] Connect Next.js Server Actions to Java Backend on port 8080` — `@HubertPhung` & `@0Yaam` (`scope:integration`, `type:feature`, `priority:p1-high`)
-15. `[QA][E2E] Execute End-to-End integration testing and complete project report` — All 5 team members (`scope:test`, `scope:docs`, `type:test`, `priority:p1-high`)
+15. `[QA][E2E] Execute End-to-End integration testing and complete project report` — Cả 5 thành viên (`scope:test`, `scope:docs`, `type:test`, `priority:p1-high`)
 
 ---
 
 ## 7. Quy chuẩn Phân nhánh Git & Quy trình Pull Request (Git Workflow)
 
-Để bảo đảm tính toàn vẹn của mã nguồn và tránh xung đột (no-conflict), nhóm áp dụng nghiêm ngặt quy trình làm việc thông qua Pull Request:
+Để bảo đảm tính toàn vẹn của mã nguồn, hỗ trợ CI/CD tự động và cơ chế đóng issue tự động (`Closes #<id>`), nhóm áp dụng quy trình phân nhánh theo từng issue (**Issue-based Branching**) kết hợp Pull Request:
 
-### 7.1. Quy ước Đặt tên Nhánh (Branch Naming Convention)
+### 7.1. Danh sách Thành viên & Phân nhiệm
+1. **Phùng Nguyễn Hoài Bo** (`@HubertPhung`, MSSV: `2312585`) — Trưởng nhóm, Core Architecture, Singleton, Facade, Network Server.
+2. **Nguyễn Ngọc Trường Dân** (`@0Yaam`, MSSV: `2312590`) — Factory Method, Decorator, Frontend-Backend Integration.
+3. **Nguyễn Hưng Thịnh** (`@elgthinhnguyen`, MSSV: `2312756`) — Builder, Observer, REST API Endpoints.
+4. **Vũ Thế Huỳnh** (`@1convitt`, MSSV: `2312639`) — Strategy, Chain of Responsibility, JUnit 5 Testing.
+5. **Phan Khánh Vương** (`@vuong123s`, MSSV: `2312802`) — DAO Layer, Adapter, JUnit 5 Testing.
+
+### 7.2. Quy ước Đặt tên Nhánh theo Issue (Issue-based Branching Convention)
 - **Nhánh chính (`master`):** Là nhánh ổn định (production-ready). **NGHIÊM CẤM push trực tiếp vào `master`**.
-- **Nhánh tính năng theo thành viên:** Sử dụng tiền tố `feature/<ten-thanh-vien>` hoặc `feature/<ten-thanh-vien>-issue-<so-issue>`.
-  - Phùng Nguyễn Hoài Bo: `feature/hoai-bo`
-  - Phan Khánh Vương: `feature/vuong`
-  - Nguyễn Thị Hoàng Yến: `feature/yam`
-  - Nguyễn Quốc Thịnh: `feature/thinh`
-  - Trần Tiến Đạt: `feature/dat`
+- **Nhánh tính năng theo Issue:** Mỗi issue khi làm được tạo một nhánh riêng xuất phát từ `master` mới nhất theo cú pháp:
+  `feature/issue-<so-issue>-<ten-ngan-gon>`
+  
+  *Ví dụ:*
+  - `feature/issue-04-payment-factory`
+  - `feature/issue-05-topping-decorator`
+  - `feature/issue-06-order-builder`
+  - `feature/issue-07-discount-strategy`
+  - `feature/issue-08-order-observer`
+  - `feature/issue-09-reservation-chain`
+  - `feature/issue-10-reservation-adapter`
 
-### 7.2. Chu trình Làm việc 6 Bước Chuẩn (Standard 6-Step Workflow)
+### 7.3. Chu trình Làm việc 6 Bước Chuẩn (Standard 6-Step Workflow)
 ```mermaid
 flowchart LR
-    A["1. git checkout -b feature/hoai-bo"] --> B["2. Code & Unit Test"]
-    B --> C["3. git push origin feature/hoai-bo"]
-    C --> D["4. Tạo Pull Request vào master"]
-    D --> E["5. CI/CD Tự động Kiểm thử (Frontend & Backend)"]
+    A["1. git checkout -b feature/issue-04-..."] --> B["2. Code & Unit Test song song"]
+    B --> C["3. git push origin feature/issue-04-..."]
+    C --> D["4. Tạo PR vào master có Closes #4"]
+    D --> E["5. CI/CD Tự động Kiểm thử (Next.js & Java)"]
     E --> F["6. Review & Merge PR vào master"]
 ```
 
-1. **Tạo nhánh cá nhân từ `master` mới nhất:**
+1. **Tạo nhánh issue từ `master` mới nhất:**
    ```bash
    git checkout master
    git pull origin master
-   git checkout -b feature/hoai-bo
+   git checkout -b feature/issue-04-payment-factory
    ```
-2. **Triển khai code và viết Unit Test (JUnit 5 / Next.js test).**
+2. **Triển khai code và viết Unit Test đồng thời (JUnit 5 / Next.js test):**
+   - Viết unit test song song với việc hiện thực pattern (không dồn toàn bộ test về cuối dự án).
 3. **Commit theo chuẩn Conventional Commits và push lên GitHub:**
    ```bash
    git add .
-   git commit -m "feat(backend): implement SystemConfigManager Singleton pattern (#3)"
-   git push -u origin feature/hoai-bo
+   git commit -m "feat(backend): implement PaymentProcessorFactory with MoMo and Cash (#4)"
+   git push -u origin feature/issue-04-payment-factory
    ```
 4. **Tạo Pull Request trên GitHub hướng về nhánh `master`:**
-   - Tiêu đề PR bám sát tiêu đề Issue.
-   - Thêm `Closes #<so-issue>` vào nội dung PR để GitHub tự động đóng issue khi merge.
+   - Tiêu đề PR bám sát tiêu đề Issue: `[Backend][Factory] Implement PaymentProcessorFactory for multi-channel checkout (#4)`.
+   - Thêm `Closes #4` vào nội dung PR để GitHub tự động đóng issue khi merge.
 5. **Đợi GitHub Actions CI/CD chạy xong:** Đảm bảo cả hai job `Frontend CI` và `Backend CI` đều đạt trạng thái màu xanh (PASS 100%).
-6. **Thực hiện Merge PR vào `master`:** Sau khi merge, đồng bộ lại nhánh `master` cục bộ.
+6. **Thực hiện Merge PR vào `master`:** Sau khi merge, đóng nhánh feature cục bộ và remote, đồng bộ lại nhánh `master` cục bộ.
