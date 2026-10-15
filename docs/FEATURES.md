@@ -87,7 +87,7 @@
 | Mã Tính năng | Tên Tính năng | Mô tả Nghiệp vụ | Design Pattern | Trạng thái Frontend | Trạng thái Backend Java | Gợi ý Issue Liên quan |
 | :---: | :--- | :--- | :---: | :---: | :---: | :--- |
 | `FEAT-RES-01` | Tiếp nhận Đơn Đặt bàn | Form nhập thông tin khách, khung giờ, số khách và danh sách món đặt trước | - | 🟢 Đã có giao diện | 🟢 Đã có `IReservationDao` | `[Backend][DAO] Issue #02` |
-| `FEAT-RES-02` | Kiểm định Chuỗi Nghiệp vụ| Kiểm tra Tên/SĐT ➔ Khung giờ mở cửa (07:00-22:00) ➔ Số khách (1-20 người) | **Chain of Resp.** | 🟢 Đã có validate sơ bộ | ⚪ Chưa bắt đầu | `[Backend][Chain] Issue #09` |
+| `FEAT-RES-02` | Kiểm định Chuỗi Nghiệp vụ| Giờ mở cửa ➔ Số khách/số ghế ➔ Lịch bàn không giao nhau (2 giờ) | **Chain of Resp.** | 🟢 Đã có validate sơ bộ | 🟢 Đã triển khai Chain (local) | `[Backend][Chain] Issue #09` |
 | `FEAT-RES-03` | Chuyển Đơn sang POS | Nút "Chuyển đơn sang POS" ánh xạ thông tin phiếu đặt bàn sang đơn POS | **Adapter** | 🟢 Đã có (`handleTransferToPOS`)| ⚪ Chưa bắt đầu | `[Backend][Adapter] Issue #10` |
 | `FEAT-RES-04` | Xuất Báo cáo CSV Đặt bàn| Nút "Xuất file CSV" kết xuất danh sách đặt bàn thành file bảng tính Excel | 🔷 *Template Method (Mở rộng)* | 🟢 Đã có (`handleExportCSV`) | ⚪ Dành cho báo cáo học thuật | `[Frontend] Bổ sung UTF-8 BOM cho CSV` |
 
@@ -127,9 +127,9 @@ Toàn bộ khối lượng công việc được hợp nhất thành **15 Issue 
 | **#04** | `[Backend][Factory] Implement PaymentProcessorFactory for multi-channel checkout` | Factory Method (`FEAT-POS-05`) | `@0Yaam` | ⚪ Sẵn sàng làm |
 | **#05** | `[Backend][Decorator] Implement ToppingDecorator for beverage customization and Size L` | Decorator (`FEAT-SF-03`) | `@0Yaam` | ⚪ Sẵn sàng làm |
 | **#06** | `[Backend][Builder] Implement OrderBuilder for flexible POS order assembly` | Builder (`FEAT-POS-01`, `FEAT-POS-03`) | `@elgthinhnguyen` | ⚪ Sẵn sàng làm |
-| **#07** | `[Backend][Strategy] Implement DiscountStrategy for voucher calculation algorithms` | Strategy (`FEAT-SF-06`) | `@1convitt` | ⚪ Sẵn sàng làm |
+| **#07** | `[Backend][Strategy] Implement DiscountStrategy for voucher calculation algorithms` | Strategy (`FEAT-SF-06`) | `@1convitt` | 🟢 Đã triển khai và test (local) |
 | **#08** | `[Backend][Observer] Implement OrderEventSubject for CRM points and table sync` | Observer (`FEAT-TBL-03`, `FEAT-CRM-02`) | `@elgthinhnguyen` | ⚪ Cần #02 |
-| **#09** | `[Backend][Chain] Implement ReservationValidator for 3-step booking validation` | Chain of Resp. (`FEAT-RES-02`) | `@1convitt` | ⚪ Cần #03 |
+| **#09** | `[Backend][Chain] Implement ReservationValidator for 3-step booking validation` | Chain of Resp. (`FEAT-RES-02`) | `@1convitt` | 🟢 Đã triển khai và test (local) |
 | **#10** | `[Backend][Adapter] Implement ReservationToOrderAdapter to map bookings to POS orders` | Adapter (`FEAT-RES-03`) | `@vuong123s` | ⚪ Sẵn sàng làm |
 | **#11** | `[Backend][Facade] Implement PosCheckoutFacade orchestrating POS checkout workflow` | Facade (`FEAT-POS-05`) | `@HubertPhung` | ⚪ Cần #04-#08, #10 |
 | **#12** | `[Backend][Server] Implement Java SE HttpServer on port 8080 with REST handlers` | Server & RBAC (`FEAT-AUTH-02`, Full API) | `@HubertPhung` & `@elgthinhnguyen` | ⚪ Cần #02, #09-#11 |
