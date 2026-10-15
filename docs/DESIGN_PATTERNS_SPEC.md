@@ -1133,132 +1133,19 @@ public class PosCheckoutFacade {
 
 ---
 
-### 3.7. Strategy Pattern - Đa chiến lược Tính Chiết khấu Mã giảm giá Voucher (`DiscountStrategy`)
-- **Bài toán thực tế trong nghiệp vụ:**  
-  Quán cà phê triển khai nhiều chương trình khuyến mãi linh hoạt:
-  - Giảm theo phần trăm (ví dụ mã `WELCOME10` giảm 10% tổng đơn hàng trong `cart-store.ts`).
-  - Giảm số tiền cố định (ví dụ voucher giảm trực tiếp 20.000 VNĐ cho đơn từ 60.000 VNĐ).
-  - Giảm theo bậc thang giá trị (đơn từ 100.000đ giảm 15.000đ; đơn từ 200.000đ giảm 35.000đ).
-  Nếu cài đặt bằng một chuỗi `switch-case` hoặc `if-else` trong hàm tính tiền, code sẽ phình to và mỗi khi có chính sách khuyến mãi mới sẽ phải sửa lại mã nguồn cũ, vi phạm nguyên tắc Open/Closed Principle.
-- **Giải pháp kỹ thuật (Pure Java OOP):**  
-  Áp dụng **Strategy Pattern**. Khai báo giao diện `IDiscountStrategy` với phương thức `calculateDiscount(double orderTotal)`. Mỗi chương trình khuyến mãi là một Concrete Strategy độc lập (`PercentageDiscountStrategy`, `FixedAmountDiscountStrategy`, `TieredDiscountStrategy`). Lớp ngữ cảnh `DiscountContext` có thể hoán đổi chiến lược tính giảm giá tại thời điểm chạy (Runtime) theo mã voucher khách hàng cung cấp.
-- **Bảng ánh xạ thành phần (Participants Mapping):**
-  | Vai trò GoF | Class / Interface Java | Trách nhiệm cụ thể |
-  | :--- | :--- | :--- |
-  | **Strategy Interface** | `IDiscountStrategy` | Định nghĩa giao diện chung cho mọi thuật toán tính chiết khấu |
-  | **Concrete Strategy 1**| `PercentageDiscountStrategy` | Tính chiết khấu theo tỷ lệ phần trăm (kèm mức giảm tối đa nếu có) |
-  | **Concrete Strategy 2**| `FixedAmountDiscountStrategy` | Trừ thẳng một khoản tiền cố định nếu đơn đạt giá trị tối thiểu |
-  | **Concrete Strategy 3**| `TieredDiscountStrategy` | Tính chiết khấu theo các bậc giá trị đơn hàng lũy tiến |
-  | **Context** | `DiscountContext` | Nắm giữ tham chiếu tới chiến lược hiện tại và thực thi tính toán |
+### 3.7. Strategy Pattern - Tính giảm giá (Issue #7)
 
-- **Sơ đồ lớp (Class Diagram):**
-```mermaid
-classDiagram
-    class IDiscountStrategy {
-        <<interface>>
-        +calculateDiscount(double orderTotal) double
-    }
-
-    class PercentageDiscountStrategy {
-        -double percentage
-        -double maxDiscount
-        +calculateDiscount(double orderTotal) double
-    }
-
-    class FixedAmountDiscountStrategy {
-        -double fixedAmount
-        -double minOrderValue
-        +calculateDiscount(double orderTotal) double
-    }
-
-    class TieredDiscountStrategy {
-        +calculateDiscount(double orderTotal) double
-    }
-
-    class DiscountContext {
-        -IDiscountStrategy strategy
-        +DiscountContext(IDiscountStrategy strategy)
-        +setStrategy(IDiscountStrategy strategy) void
-        +executeDiscount(double orderTotal) double
-    }
-
-    IDiscountStrategy <|.. PercentageDiscountStrategy
-    IDiscountStrategy <|.. FixedAmountDiscountStrategy
-    IDiscountStrategy <|.. TieredDiscountStrategy
-    DiscountContext o--> IDiscountStrategy : executes
-```
-
-- **Mã nguồn minh họa (Pure Java):**
-```java
-package com.dalatcafe.patterns.strategy;
-
-public interface IDiscountStrategy {
-    double calculateDiscount(double orderTotal);
-}
-
-public class PercentageDiscountStrategy implements IDiscountStrategy {
-    private final double percentage;   // Vd: 0.10 cho 10%
-    private final double maxDiscount;  // Mức giảm trần
-
-    public PercentageDiscountStrategy(double percentage, double maxDiscount) {
-        this.percentage = percentage;
-        this.maxDiscount = maxDiscount;
-    }
-
-    @Override
-    public double calculateDiscount(double orderTotal) {
-        double discount = orderTotal * percentage;
-        return Math.min(discount, maxDiscount);
-    }
-}
-
-public class FixedAmountDiscountStrategy implements IDiscountStrategy {
-    private final double fixedAmount;
-    private final double minOrderValue;
-
-    public FixedAmountDiscountStrategy(double fixedAmount, double minOrderValue) {
-        this.fixedAmount = fixedAmount;
-        this.minOrderValue = minOrderValue;
-    }
-
-    @Override
-    public double calculateDiscount(double orderTotal) {
-        if (orderTotal >= minOrderValue) {
-            return fixedAmount;
-        }
-        return 0;
-    }
-}
-
-public class TieredDiscountStrategy implements IDiscountStrategy {
-    @Override
-    public double calculateDiscount(double orderTotal) {
-        if (orderTotal >= 200000) return 35000;
-        if (orderTotal >= 100000) return 15000;
-        return 0;
-    }
-}
-
-public class DiscountContext {
-    private IDiscountStrategy strategy;
-
-    public DiscountContext(IDiscountStrategy strategy) {
-        this.strategy = strategy;
-    }
-
-    public void setStrategy(IDiscountStrategy strategy) {
-        this.strategy = strategy;
-    }
-
-    public double executeDiscount(double orderTotal) {
-        if (strategy == null || orderTotal <= 0) return 0;
-        return strategy.calculateDiscount(orderTotal);
-    }
-}
-```
+- Package: `com.dalatcafe.patterns.strategy`, Java SE 17.
+- `IDiscountStrategy`: `double calculateDiscount(double subtotal, Customer customer)` và `String getDiscountDescription()`.
+- `PercentageDiscountStrategy(rate, maxCap)`: tỷ lệ từ 0 đến 1, giới hạn mức giảm tối đa.
+- `FixedAmountDiscountStrategy(amount)`: giảm số tiền cố định, không vượt subtotal.
+- `LoyaltyTierDiscountStrategy`: dùng `CustomerRank.getDiscountRate()` (Đồng 0%, Bạc 5%, Vàng 10%, VIP 15%); khách/hạng null giảm 0.
+- `NoDiscountStrategy`: không giảm giá.
+- `DiscountContext`: mặc định không giảm; constructor nhận strategy, `setStrategy`, `executeDiscount(subtotal, customer)`, `getDiscountDescription`. Có thể đổi strategy lúc chạy mà không dựng lại Order.
+- Số tiền phải hữu hạn, không âm; sai đầu vào gây `IllegalArgumentException`. Strategy null bị từ chối. Context kiểm tra kết quả strategy và giới hạn trong `[0, subtotal]`.
+- Chưa bao gồm tra cứu mã voucher, HTTP API hoặc Facade. Kiểm thử: `StrategyTest`.
 
 ---
-
 ### 3.8. Chain of Responsibility - Kiểm định đặt bàn (Issue #9)
 
 - Package: `com.dalatcafe.patterns.chain`, Java SE 17.

@@ -383,8 +383,8 @@ Implement the Strategy Pattern to dynamically swap promotional discount algorith
 - **Package:** `com.dalatcafe.patterns.strategy`
 
 ### 2. Technical Constraints
-- [ ] Pure Java SE 17+, eliminating nested `if-else` conditionals for promotions.
-- [ ] Guarantee that discount deduction never exceeds the order subtotal (final total >= 0).
+- [x] Pure Java SE 17+, eliminating nested `if-else` conditionals for promotions.
+- [x] Guarantee that discount deduction never exceeds the order subtotal (final total >= 0).
 
 ### 3. Design Pattern Role
 - **Design Pattern:** Strategy Pattern (GoF Behavioral)
@@ -394,19 +394,19 @@ Implement the Strategy Pattern to dynamically swap promotional discount algorith
   - Context: `DiscountContext`
 
 ### 4. Tasks Checklist
-- [ ] Create Interface `IDiscountStrategy.java`:
+- [x] Create Interface `IDiscountStrategy.java`:
   - `double calculateDiscount(double subtotal, Customer customer);`
   - `String getDiscountDescription();`
-- [ ] Implement 4 Concrete Strategies:
+- [x] Implement 4 Concrete Strategies:
   - `PercentageDiscountStrategy.java`: Deducts X% (with configurable `maxCap` limit).
   - `FixedAmountDiscountStrategy.java`: Deducts fixed monetary amount (e.g., 30,000 VND).
   - `LoyaltyTierDiscountStrategy.java`: Discount based on membership rank (Bronze: 0%, Silver: 5%, Gold: 10%, VIP: 15%).
   - `NoDiscountStrategy.java`: Applies 0 discount.
-- [ ] Implement `DiscountContext.java` managing active strategy execution.
+- [x] Implement `DiscountContext.java` managing active strategy execution.
 
 ### 5. Definition of Done
-- [ ] Runtime strategy swapping executes cleanly without reconstructing the order.
-- [ ] Final order cost is guaranteed to be non-negative.
+- [x] Runtime strategy swapping executes cleanly without reconstructing the order.
+- [x] Final order cost is guaranteed to be non-negative.
 
 ### 6. Dependencies
 - **Blocked by:** #01 (POJO Models)
