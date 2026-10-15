@@ -27,7 +27,7 @@
 }
 ```
 
-#### Khi có lỗi (`HTTP 400`, `401`, `403`, `404`, `409`, `500`):
+#### Khi có lỗi (`HTTP 400`, `401`, `403`, `404`, `409`, `500`, `503`):
 ```json
 {
   "ok": false,
@@ -42,11 +42,20 @@
 | `400` | `INVALID_INPUT` | Tham số gửi lên không đúng định dạng hoặc thiếu trường bắt buộc |
 | `400` | `CHAIN_VALIDATION_FAILED` | Đơn đặt bàn vi phạm chuỗi kiểm định (Chain of Responsibility) |
 | `400` | `INVALID_VOUCHER` | Mã giảm giá không hợp lệ hoặc không đạt giá trị đơn tối thiểu |
-| `401` | `UNAUTHORIZED` | Yêu cầu xác thực tài khoản nhân viên / quản lý |
-| `403` | `FORBIDDEN` | Tài khoản không có đủ quyền thực hiện thao tác này |
+| `401` | `UNAUTHORIZED` | Yêu cầu xác thực tài khoản (Thiếu header `Authorization` hoặc `X-User-Role`) |
+| `403` | `FORBIDDEN` | Tài khoản không có đủ quyền thực hiện thao tác này (RBAC: `ADMIN`, `MANAGER`, `STAFF`, `CUSTOMER`) |
 | `404` | `NOT_FOUND` | Không tìm thấy tài nguyên (Bàn, Món, Đơn hàng) |
 | `409` | `RESOURCE_CONFLICT` | Xung đột trạng thái (Bàn đã có khách ngồi, mã đơn bị trùng) |
 | `500` | `INTERNAL_SERVER_ERROR` | Lỗi phát sinh trong quá trình xử lý tại máy chủ |
+| `503` | `DATABASE_UNAVAILABLE` | Cơ sở dữ liệu chính bị gián đoạn kết nối trong giao dịch POS, từ chối chốt đơn an toàn |
+
+### 1.4. Quy chuẩn Xác thực & Phân quyền RBAC (Auth Headers)
+Máy chủ Java SE áp dụng bộ lọc `SimpleAuthFilter` kiểm tra vai trò người dùng qua HTTP Headers:
+- `X-User-Role: ADMIN | MANAGER | STAFF | CUSTOMER` (hoặc `Authorization: Bearer <token>`)
+- Các endpoint phân quyền rõ ràng:
+  - **Quản trị (`ADMIN` / `MANAGER`):** Quản lý cấu hình `/api/settings`, xem báo cáo `/api/analytics/*`.
+  - **Nhân viên quầy/bếp (`STAFF`):** Chốt đơn `/api/checkout`, chuyển trạng thái bàn `/api/tables/*`, cập nhật bếp KDS `/api/orders/:id/status`.
+  - **Công khai (`CUSTOMER` / Khách vãng lai):** Xem thực đơn `/api/menu`, gửi đặt bàn `/api/reservations`.
 
 ---
 
@@ -322,6 +331,14 @@
       "pointsEarned": 8
     },
     "message": "Thanh toán & in hóa đơn POS thành công!"
+  }
+  ```
+- **Response 503 Service Unavailable (Khi CSDL JDBC gián đoạn - An toàn tài chính, không silent fallback):**
+  ```json
+  {
+    "ok": false,
+    "error": "Cơ sở dữ liệu chính đang gián đoạn kết nối, không thể hoàn tất thanh toán. Vui lòng thử lại!",
+    "code": "DATABASE_UNAVAILABLE"
   }
   ```
 
