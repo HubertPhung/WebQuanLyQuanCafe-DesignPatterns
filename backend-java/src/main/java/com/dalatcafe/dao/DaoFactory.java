@@ -82,3 +82,4 @@ public class DaoFactory {
         return (mode == DaoMode.JDBC && JdbcDatabase.isAvailable()) ? jdbcCustomerDao : inMemoryCustomerDao;
     }
 }
+

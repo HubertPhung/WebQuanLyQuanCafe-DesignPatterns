@@ -349,9 +349,10 @@ class DaoLayerTest {
         void testJdbcAvailabilitySafety() {
             assertDoesNotThrow(() -> {
                 boolean available = JdbcDatabase.isAvailable();
-                // Should return false in offline/test environment without crashing
-                assertFalse(available || true);
+                // In CI / test environment without live PostgreSQL, it should safely return false without exception
+                assertFalse(available);
             });
         }
     }
 }
+

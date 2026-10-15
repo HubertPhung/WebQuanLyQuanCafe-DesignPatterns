@@ -19,3 +19,4 @@ public interface ICustomerDao {
     boolean redeemPoints(int id, int points);
     boolean deleteById(int id);
 }
+

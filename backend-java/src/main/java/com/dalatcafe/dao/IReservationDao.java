@@ -18,3 +18,4 @@ public interface IReservationDao {
     boolean updateStatus(int id, ReservationStatus status);
     boolean deleteById(int id);
 }
+

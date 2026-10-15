@@ -7,3 +7,4 @@ public enum DaoMode {
     IN_MEMORY,
     JDBC
 }
+

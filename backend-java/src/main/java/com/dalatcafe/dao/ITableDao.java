@@ -18,3 +18,4 @@ public interface ITableDao {
     boolean updateStatus(int id, TableStatus status, int guestCount);
     boolean deleteById(int id);
 }
+

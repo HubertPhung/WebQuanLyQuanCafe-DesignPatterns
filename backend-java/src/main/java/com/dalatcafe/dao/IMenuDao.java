@@ -18,3 +18,4 @@ public interface IMenuDao {
     boolean toggleInStock(int id, boolean inStock);
     boolean deleteById(int id);
 }
+
