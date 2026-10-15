@@ -383,8 +383,8 @@ Implement the Strategy Pattern to dynamically swap promotional discount algorith
 - **Package:** `com.dalatcafe.patterns.strategy`
 
 ### 2. Technical Constraints
-- [ ] Pure Java SE 17+, eliminating nested `if-else` conditionals for promotions.
-- [ ] Guarantee that discount deduction never exceeds the order subtotal (final total >= 0).
+- [x] Pure Java SE 17+, eliminating nested `if-else` conditionals for promotions.
+- [x] Guarantee that discount deduction never exceeds the order subtotal (final total >= 0).
 
 ### 3. Design Pattern Role
 - **Design Pattern:** Strategy Pattern (GoF Behavioral)
@@ -394,19 +394,19 @@ Implement the Strategy Pattern to dynamically swap promotional discount algorith
   - Context: `DiscountContext`
 
 ### 4. Tasks Checklist
-- [ ] Create Interface `IDiscountStrategy.java`:
+- [x] Create Interface `IDiscountStrategy.java`:
   - `double calculateDiscount(double subtotal, Customer customer);`
   - `String getDiscountDescription();`
-- [ ] Implement 4 Concrete Strategies:
+- [x] Implement 4 Concrete Strategies:
   - `PercentageDiscountStrategy.java`: Deducts X% (with configurable `maxCap` limit).
   - `FixedAmountDiscountStrategy.java`: Deducts fixed monetary amount (e.g., 30,000 VND).
   - `LoyaltyTierDiscountStrategy.java`: Discount based on membership rank (Bronze: 0%, Silver: 5%, Gold: 10%, VIP: 15%).
   - `NoDiscountStrategy.java`: Applies 0 discount.
-- [ ] Implement `DiscountContext.java` managing active strategy execution.
+- [x] Implement `DiscountContext.java` managing active strategy execution.
 
 ### 5. Definition of Done
-- [ ] Runtime strategy swapping executes cleanly without reconstructing the order.
-- [ ] Final order cost is guaranteed to be non-negative.
+- [x] Runtime strategy swapping executes cleanly without reconstructing the order.
+- [x] Final order cost is guaranteed to be non-negative.
 
 ### 6. Dependencies
 - **Blocked by:** #01 (POJO Models)
@@ -473,8 +473,8 @@ Apply the Chain of Responsibility Pattern to construct a 3-step validation pipel
 - **Package:** `com.dalatcafe.patterns.chain`
 
 ### 2. Technical Constraints
-- [ ] Fail-fast processing: terminate pipeline immediately upon encountering the first invalid validation rule.
-- [ ] Integrate with `SystemConfigManager` Singleton to retrieve authoritative operating hours.
+- [x] Fail-fast processing: terminate pipeline immediately upon encountering the first invalid validation rule.
+- [x] Integrate with `SystemConfigManager` Singleton to retrieve authoritative operating hours.
 
 ### 3. Design Pattern Role
 - **Design Pattern:** Chain of Responsibility Pattern (GoF Behavioral)
@@ -483,18 +483,18 @@ Apply the Chain of Responsibility Pattern to construct a 3-step validation pipel
   - Concrete Handlers: `OperatingHoursValidator`, `CapacityGuestValidator`, `TableAvailabilityValidator`
 
 ### 4. Tasks Checklist
-- [ ] Create abstract class `ReservationValidatorHandler.java`:
+- [x] Create abstract class `ReservationValidatorHandler.java`:
   - `protected ReservationValidatorHandler nextHandler;`
   - `public void setNext(ReservationValidatorHandler next)`
   - `public abstract ValidationResult validate(Reservation reservation);`
-- [ ] Implement 3 Validation Links:
+- [x] Implement 3 Validation Links:
   - `OperatingHoursValidator.java`: Verifies booking time falls within `07:00 - 22:00`.
   - `CapacityGuestValidator.java`: Verifies guest count fits table capacity (1 - 20 guests).
   - `TableAvailabilityValidator.java`: Verifies selected table is not already reserved in the desired time slot.
 
 ### 5. Definition of Done
-- [ ] Booking requests violating any rule are immediately rejected with descriptive error reason.
-- [ ] Bookings satisfying all 3 validation checks return `ValidationResult.valid()`.
+- [x] Booking requests violating any rule are immediately rejected with descriptive error reason.
+- [x] Bookings satisfying all 3 validation checks return `ValidationResult.valid()`.
 
 ### 6. Dependencies
 - **Blocked by:** #01 (POJO Models), #03 (Singleton)
