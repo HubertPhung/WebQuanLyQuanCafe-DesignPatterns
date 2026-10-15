@@ -473,8 +473,8 @@ Apply the Chain of Responsibility Pattern to construct a 3-step validation pipel
 - **Package:** `com.dalatcafe.patterns.chain`
 
 ### 2. Technical Constraints
-- [ ] Fail-fast processing: terminate pipeline immediately upon encountering the first invalid validation rule.
-- [ ] Integrate with `SystemConfigManager` Singleton to retrieve authoritative operating hours.
+- [x] Fail-fast processing: terminate pipeline immediately upon encountering the first invalid validation rule.
+- [x] Integrate with `SystemConfigManager` Singleton to retrieve authoritative operating hours.
 
 ### 3. Design Pattern Role
 - **Design Pattern:** Chain of Responsibility Pattern (GoF Behavioral)
@@ -483,18 +483,18 @@ Apply the Chain of Responsibility Pattern to construct a 3-step validation pipel
   - Concrete Handlers: `OperatingHoursValidator`, `CapacityGuestValidator`, `TableAvailabilityValidator`
 
 ### 4. Tasks Checklist
-- [ ] Create abstract class `ReservationValidatorHandler.java`:
+- [x] Create abstract class `ReservationValidatorHandler.java`:
   - `protected ReservationValidatorHandler nextHandler;`
   - `public void setNext(ReservationValidatorHandler next)`
   - `public abstract ValidationResult validate(Reservation reservation);`
-- [ ] Implement 3 Validation Links:
+- [x] Implement 3 Validation Links:
   - `OperatingHoursValidator.java`: Verifies booking time falls within `07:00 - 22:00`.
   - `CapacityGuestValidator.java`: Verifies guest count fits table capacity (1 - 20 guests).
   - `TableAvailabilityValidator.java`: Verifies selected table is not already reserved in the desired time slot.
 
 ### 5. Definition of Done
-- [ ] Booking requests violating any rule are immediately rejected with descriptive error reason.
-- [ ] Bookings satisfying all 3 validation checks return `ValidationResult.valid()`.
+- [x] Booking requests violating any rule are immediately rejected with descriptive error reason.
+- [x] Bookings satisfying all 3 validation checks return `ValidationResult.valid()`.
 
 ### 6. Dependencies
 - **Blocked by:** #01 (POJO Models), #03 (Singleton)

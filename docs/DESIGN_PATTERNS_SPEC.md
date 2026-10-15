@@ -1259,120 +1259,21 @@ public class DiscountContext {
 
 ---
 
-### 3.8. Chain of Responsibility Pattern - Chuỗi Kiểm định Tính hợp lệ Đặt bàn (`ReservationValidator`)
-- **Bài toán thực tế trong nghiệp vụ:**  
-  Khi khách gửi yêu cầu đặt bàn trực tuyến, hệ thống phải thực hiện nhiều bước kiểm tra tính hợp lệ tuần tự:
-  1. Kiểm tra thông tin liên hệ: Tên khách hàng không được rỗng, số điện thoại phải đủ 10 số hợp lệ.
-  2. Kiểm tra thời gian đặt chỗ: Phải nằm trong khung giờ mở cửa của quán (07:00 - 22:00) và phải đặt trước ít nhất 60 phút.
-  3. Kiểm tra số lượng khách: Số khách phải từ 1 đến tối đa 20 người (theo giới hạn `SystemConfigManager`).
-  Nếu dồn tất cả các điều kiện này vào một phương thức dài, mã nguồn sẽ khó kiểm thử đơn vị và không thể tái sử dụng hoặc thêm bớt các bước kiểm định mới (ví dụ: kiểm tra bàn trống, kiểm tra danh sách đen).
-- **Giải pháp kỹ thuật (Pure Java OOP):**  
-  Áp dụng **Chain of Responsibility Pattern**. Xây dựng lớp trừu tượng `ReservationValidator` chứa con trỏ `next`. Mỗi validator cụ thể (`CustomerInfoValidator`, `ReservationTimeValidator`, `GuestCountValidator`) tập trung vào một quy tắc duy nhất. Nếu hợp lệ, yêu cầu được chuyển tiếp cho mắt xích tiếp theo; nếu thất bại, chuỗi lập tức ngắt và trả về thông báo lỗi cụ thể.
-- **Bảng ánh xạ thành phần (Participants Mapping):**
-  | Vai trò GoF | Class Java | Trách nhiệm cụ thể |
-  | :--- | :--- | :--- |
-  | **Handler** | `ReservationValidator` | Lớp trừu tượng quản lý liên kết `next` và định nghĩa phương thức `validate()` |
-  | **Concrete Handler 1**| `CustomerInfoValidator` | Kiểm tra tên và định dạng số điện thoại của người đặt |
-  | **Concrete Handler 2**| `ReservationTimeValidator` | Kiểm tra giờ hẹn trong khung giờ 07:00 - 22:00 và trước 1 tiếng |
-  | **Concrete Handler 3**| `GuestCountValidator` | Kiểm tra số lượng khách đi cùng (từ 1 đến 20 khách) |
-  | **Client** | `ReservationHandler` | Thiết lập chuỗi mắt xích và truyền phiếu đặt bàn vào đầu chuỗi |
+### 3.8. Chain of Responsibility - Kiểm định đặt bàn (Issue #9)
 
-- **Sơ đồ lớp (Class Diagram):**
-```mermaid
-classDiagram
-    class ReservationValidator {
-        <<abstract>>
-        #ReservationValidator next
-        +setNext(ReservationValidator next) ReservationValidator
-        +validate(ReservationRequest req) ValidationResult
-    }
-
-    class CustomerInfoValidator {
-        +validate(ReservationRequest req) ValidationResult
-    }
-
-    class ReservationTimeValidator {
-        +validate(ReservationRequest req) ValidationResult
-    }
-
-    class GuestCountValidator {
-        +validate(ReservationRequest req) ValidationResult
-    }
-
-    class ValidationResult {
-        -boolean valid
-        -String errorMessage
-        +isValid() boolean
-        +getErrorMessage() String
-    }
-
-    ReservationValidator <|-- CustomerInfoValidator
-    ReservationValidator <|-- ReservationTimeValidator
-    ReservationValidator <|-- GuestCountValidator
-    ReservationValidator o--> ReservationValidator : next
-    ReservationValidator ..> ValidationResult : returns
-```
-
-- **Mã nguồn minh họa (Pure Java):**
-```java
-package com.dalatcafe.patterns.chain;
-
-public abstract class ReservationValidator {
-    protected ReservationValidator next;
-
-    public ReservationValidator setNext(ReservationValidator next) {
-        this.next = next;
-        return next;
-    }
-
-    public abstract ValidationResult validate(ReservationRequest req);
-
-    protected ValidationResult checkNext(ReservationRequest req) {
-        if (next == null) {
-            return new ValidationResult(true, "Hợp lệ");
-        }
-        return next.validate(req);
-    }
-}
-
-public class CustomerInfoValidator extends ReservationValidator {
-    @Override
-    public ValidationResult validate(ReservationRequest req) {
-        if (req.getCustomerName() == null || req.getCustomerName().trim().isEmpty()) {
-            return new ValidationResult(false, "Tên khách hàng không được để trống!");
-        }
-        if (req.getPhone() == null || !req.getPhone().matches("^0[0-9]{9}$")) {
-            return new ValidationResult(false, "Số điện thoại không hợp lệ (phải bắt đầu bằng 0 và đủ 10 số)!");
-        }
-        return checkNext(req);
-    }
-}
-
-public class ReservationTimeValidator extends ReservationValidator {
-    @Override
-    public ValidationResult validate(ReservationRequest req) {
-        int hour = req.getBookingTime().getHour();
-        if (hour < 7 || hour >= 22) {
-            return new ValidationResult(false, "Quán chỉ nhận đặt bàn trong khung giờ mở cửa (07:00 - 22:00)!");
-        }
-        return checkNext(req);
-    }
-}
-
-public class GuestCountValidator extends ReservationValidator {
-    @Override
-    public ValidationResult validate(ReservationRequest req) {
-        int guests = req.getGuestCount();
-        if (guests < 1 || guests > 20) {
-            return new ValidationResult(false, "Số lượng khách phải từ 1 đến tối đa 20 người!");
-        }
-        return checkNext(req);
-    }
-}
-```
+- Package: `com.dalatcafe.patterns.chain`, Java SE 17.
+- `ReservationValidatorHandler`: `setNext(ReservationValidatorHandler)`, `validate(Reservation)` và `checkNext(Reservation)`; dừng ngay tại lỗi đầu tiên.
+- `ValidationResult` bất biến: `valid()`, `invalid(String)`, `isValid()`, `getErrorMessage()`; kết quả hợp lệ có errorMessage null.
+- `OperatingHoursValidator`: đổi Instant sang `Asia/Ho_Chi_Minh`, đọc giờ từ `SystemConfigManager`; mặc định chấp nhận thời điểm bắt đầu từ 07:00 đến 22:00 (bao gồm hai biên).
+- `CapacityGuestValidator(ITableDao)`: bàn phải tồn tại; số khách từ 1 đến giới hạn cấu hình (mặc định 20), không vượt số ghế.
+- `TableAvailabilityValidator(IReservationDao[, Duration])`: thời lượng mặc định 2 giờ, áp dụng chung cho mọi lịch. Khoảng `[start, end)` giao nhau trên cùng bàn bị từ chối; lịch nối tiếp được phép.
+- PENDING, CONFIRMED, SEATED chiếm lịch; CANCELLED không chiếm lịch. Khi chỉnh sửa, chỉ bỏ qua bản ghi có cùng ID khác null; không dùng Reservation.equals().
+- `ReservationValidationChainFactory.create(tableDao, reservationDao[, duration])` lắp chuỗi giờ hoạt động → sức chứa → lịch bàn.
+- Lỗi dữ liệu trả thông báo tiếng Việt. Validator chỉ đọc DAO; lỗi truy cập DAO được truyền lên. Không cấm lịch tương lai dựa trên trạng thái bàn hiện tại.
+- Không thêm điều kiện đặt trước 60 phút hoặc bắt buộc kết thúc trước giờ đóng cửa. Giữ tương thích Reservation.setGuests() tự chuyển số dưới 1 thành 1.
+- Kiểm tra và lưu lịch chưa nguyên tử; lớp tích hợp lưu đặt bàn phải xử lý yêu cầu đồng thời. Kiểm thử: `ChainTest`.
 
 ---
-
 ### 3.9. Observer Pattern - Tự động Tích điểm Loyalty & Đồng bộ Trạng thái Bàn (`OrderEventSubject`)
 - **Bài toán thực tế trong nghiệp vụ:**  
   Khi đơn hàng được thanh toán hoàn tất tại quầy POS, hệ thống cần kích hoạt đồng thời nhiều tác vụ phụ thuộc:

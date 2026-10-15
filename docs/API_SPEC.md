@@ -225,7 +225,7 @@ Máy chủ Java SE áp dụng bộ lọc `SimpleAuthFilter` kiểm tra vai trò 
 ### 3.3. Phân hệ Đặt bàn trước (Reservations)
 
 #### 3.3.1. `POST /api/reservations`
-- **Mục đích:** Tiếp nhận đơn đặt bàn từ khách hàng. Toàn bộ thông tin sẽ được chuyển qua **Chain of Responsibility** (`CustomerInfoValidator` ➔ `ReservationTimeValidator` ➔ `GuestCountValidator`).
+- **Mục đích:** Tiếp nhận đơn đặt bàn từ khách hàng. Toàn bộ thông tin sẽ được chuyển qua **Chain of Responsibility** (`OperatingHoursValidator` ➔ `CapacityGuestValidator` ➔ `TableAvailabilityValidator`), theo issue #9; lịch cùng bàn không được giao nhau trong khoảng 2 giờ.
 - **Request Body:**
   ```json
   {
