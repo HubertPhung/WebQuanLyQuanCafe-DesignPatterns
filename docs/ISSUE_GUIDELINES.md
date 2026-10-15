@@ -177,7 +177,7 @@ Dưới đây là 15 Issue được chuẩn hóa bằng tiếng Anh theo quy chu
 - **Nhánh chính (`master`):** Là nhánh ổn định (production-ready). **NGHIÊM CẤM push trực tiếp vào `master`**.
 - **Nhánh tính năng theo thành viên:** Sử dụng tiền tố `feature/<ten-thanh-vien>` hoặc `feature/<ten-thanh-vien>-issue-<so-issue>`.
   - Phùng Nguyễn Hoài Bo: `feature/hoai-bo`
-  - Nguyễn Trí Vương: `feature/vuong`
+  - Phan Khánh Vương: `feature/vuong`
   - Nguyễn Thị Hoàng Yến: `feature/yam`
   - Nguyễn Quốc Thịnh: `feature/thinh`
   - Trần Tiến Đạt: `feature/dat`
