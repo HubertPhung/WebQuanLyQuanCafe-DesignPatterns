@@ -66,15 +66,15 @@ public class PosCheckoutFacade {
 
         Map<Integer, MenuItem> menu = new LinkedHashMap<>();
         Map<Integer, Integer> demand = new LinkedHashMap<>();
-        String problem = resolveMenu(request, menu, demand);
+        CheckoutResult problem = resolveMenu(request, menu, demand);
         if (problem != null) {
-            return CheckoutResult.failure(problem, null);
+            return problem;
         }
 
         // Steps 1-3: decorate drinks, build the order, apply the discount.
         Order order = buildOrder(request, menu);
         if (!reserveStock(demand)) {
-            return CheckoutResult.failure("Could not reserve inventory", null);
+            return CheckoutResult.failure(CheckoutResult.FailureType.OUT_OF_STOCK, "Could not reserve inventory", null);
         }
 
         // Step 4: payment.
@@ -89,11 +89,11 @@ public class PosCheckoutFacade {
             }
         } catch (RuntimeException e) {
             releaseStock(demand);
-            return CheckoutResult.failure("Payment error: " + e.getMessage(), null);
+            return CheckoutResult.failure(CheckoutResult.FailureType.PAYMENT_FAILED, "Payment error: " + e.getMessage(), null);
         }
         if (payment == null || !payment.isSuccess()) {
             releaseStock(demand);
-            return CheckoutResult.failure(
+            return CheckoutResult.failure(CheckoutResult.FailureType.PAYMENT_FAILED,
                     payment == null ? "Payment declined" : "Payment declined: " + payment.getMessage(), payment);
         }
 
@@ -109,7 +109,7 @@ public class PosCheckoutFacade {
         }
         if (!saved) {
             releaseStock(demand);
-            return CheckoutResult.failure("Order could not be saved (payment "
+            return CheckoutResult.failure(CheckoutResult.FailureType.PERSISTENCE_FAILED, "Order could not be saved (payment "
                     + payment.getTransactionId() + " must be voided)", payment);
         }
 
@@ -124,25 +124,25 @@ public class PosCheckoutFacade {
         return CheckoutResult.success(order, payment, warnings);
     }
 
-    private String resolveMenu(CheckoutRequest request, Map<Integer, MenuItem> menu, Map<Integer, Integer> demand) {
+    private CheckoutResult resolveMenu(CheckoutRequest request, Map<Integer, MenuItem> menu, Map<Integer, Integer> demand) {
         for (CheckoutLine line : request.getLines()) {
             MenuItem item = menu.get(line.getMenuItemId());
             if (item == null) {
                 item = menuDao.findById(line.getMenuItemId()).orElse(null);
                 if (item == null) {
-                    return "Menu item not found: " + line.getMenuItemId();
+                    return CheckoutResult.failure(CheckoutResult.FailureType.NOT_FOUND, "Menu item not found: " + line.getMenuItemId(), null);
                 }
                 menu.put(line.getMenuItemId(), item);
             }
             if (!item.isInStock()) {
-                return "Menu item out of stock: " + item.getName();
+                return CheckoutResult.failure(CheckoutResult.FailureType.OUT_OF_STOCK, "Menu item out of stock: " + item.getName(), null);
             }
             demand.merge(line.getMenuItemId(), line.getQuantity(), Integer::sum);
         }
         for (Map.Entry<Integer, Integer> entry : demand.entrySet()) {
             MenuItem item = menu.get(entry.getKey());
             if (item.getStockQty() < entry.getValue()) {
-                return "Insufficient stock for " + item.getName();
+                return CheckoutResult.failure(CheckoutResult.FailureType.OUT_OF_STOCK, "Insufficient stock for " + item.getName(), null);
             }
         }
         return null;
