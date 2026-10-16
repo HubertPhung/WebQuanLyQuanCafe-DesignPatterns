@@ -15,10 +15,15 @@ public final class CheckoutResult {
     private final Order order;
     private final PaymentResult paymentResult;
     private final String message;
+    private final FailureType failureType;
     private final List<String> warnings;
 
+    /** Why a checkout failed; null on success. */
+    public enum FailureType { NOT_FOUND, OUT_OF_STOCK, PAYMENT_FAILED, PERSISTENCE_FAILED }
+
     private CheckoutResult(boolean success, Order order, PaymentResult paymentResult,
-                           String message, List<String> warnings) {
+                           String message, FailureType failureType, List<String> warnings) {
+        this.failureType = failureType;
         this.success = success;
         this.order = order;
         this.paymentResult = paymentResult;
@@ -27,11 +32,11 @@ public final class CheckoutResult {
     }
 
     static CheckoutResult success(Order order, PaymentResult payment, List<String> warnings) {
-        return new CheckoutResult(true, order, payment, "Checkout completed", warnings);
+        return new CheckoutResult(true, order, payment, "Checkout completed", null, warnings);
     }
 
-    static CheckoutResult failure(String message, PaymentResult payment) {
-        return new CheckoutResult(false, null, payment, message, List.of());
+    static CheckoutResult failure(FailureType type, String message, PaymentResult payment) {
+        return new CheckoutResult(false, null, payment, message, type, List.of());
     }
 
     public boolean isSuccess() {
@@ -44,6 +49,10 @@ public final class CheckoutResult {
 
     public PaymentResult getPaymentResult() {
         return paymentResult;
+    }
+
+    public FailureType getFailureType() {
+        return failureType;
     }
 
     public String getMessage() {
