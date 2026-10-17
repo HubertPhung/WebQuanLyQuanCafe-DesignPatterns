@@ -511,10 +511,11 @@ async function runAuthTests() {
       },
     },
     {
-      id: 'TC-AUTH-05', name: 'Sign-in Page With Password Form and Google Option',
+      id: 'TC-AUTH-05', name: 'Sign-in Page With Password Toggle, Mode Switch and Brand Logo',
       run: async () => {
         const res = await fetchPage(`${BASE_URL}/login`)
-        const ok = res.status === 200 && res.body.includes('Sign in') && res.body.includes('name="password"') && res.body.includes('Google')
+        const ok = res.status === 200 && res.body.includes('Sign in') && res.body.includes('name="password"') &&
+          res.body.includes('Hiện mật khẩu') && res.body.includes('href="/register"') && res.body.includes('Cà phê cao nguyên')
         return [ok, `Status ${res.status}`]
       },
     },
@@ -522,7 +523,8 @@ async function runAuthTests() {
       id: 'TC-AUTH-06', name: 'Sign-up Page Creates Customer Accounts',
       run: async () => {
         const res = await fetchPage(`${BASE_URL}/register`)
-        const ok = res.status === 200 && res.body.includes('Create account') && res.body.includes('name="confirm"')
+        const ok = res.status === 200 && res.body.includes('Create account') && res.body.includes('name="confirm"') &&
+          res.body.includes('aria-current="page"')
         return [ok, `Status ${res.status}`]
       },
     },

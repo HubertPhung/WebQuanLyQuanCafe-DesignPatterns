@@ -45,7 +45,6 @@ export function UsersManagement({ users, currentUserId }: { users: JavaUser[]; c
           <TableHeader className="bg-stone-50/60">
             <TableRow>
               <TableHead className="text-xs font-semibold uppercase text-stone-500">Tài khoản</TableHead>
-              <TableHead className="text-xs font-semibold uppercase text-stone-500">Đăng nhập bằng</TableHead>
               <TableHead className="text-xs font-semibold uppercase text-stone-500">Vai trò</TableHead>
               <TableHead className="text-xs font-semibold uppercase text-stone-500 text-right">Trạng thái</TableHead>
             </TableRow>
@@ -60,9 +59,6 @@ export function UsersManagement({ users, currentUserId }: { users: JavaUser[]; c
                       {user.name} {self && <span className="text-xs font-normal text-stone-500">(bạn)</span>}
                     </div>
                     <div className="text-xs text-stone-500 break-all">{user.email}</div>
-                  </TableCell>
-                  <TableCell className="text-xs text-stone-600">
-                    {user.providers.map((provider) => (provider === 'google' ? 'Google' : 'Mật khẩu')).join(' + ') || '—'}
                   </TableCell>
                   <TableCell>
                     <select
@@ -136,8 +132,7 @@ export function UsersManagement({ users, currentUserId }: { users: JavaUser[]; c
           </select>
         </div>
         <p className="text-xs text-stone-500">
-          Mật khẩu ít nhất 8 ký tự, có chữ và số. Nhân viên có thể đổi mật khẩu sau khi đăng nhập, hoặc đăng nhập bằng
-          Google nếu email trùng với Gmail của họ.
+          Mật khẩu ít nhất 8 ký tự, có chữ và số. Nhân viên đổi mật khẩu của mình sau khi đăng nhập.
         </p>
         <Button type="submit" disabled={pending} className="bg-[#5A3E2B] text-white hover:bg-[#4a3223]">
           {pending ? 'Đang lưu...' : 'Tạo tài khoản'}

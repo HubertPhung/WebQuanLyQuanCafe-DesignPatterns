@@ -16,22 +16,9 @@ export const metadata: Metadata = {
   title: 'Đà Lạt Cafe | A little craft. A lot of soul.',
   description: 'Khám phá cà phê thủ công, bánh tươi và hạt nguyên chất. Find your daily ritual at Đà Lạt Cafe.',
   generator: 'v0.app',
+  // The brand mark (components/brand/logo.tsx) works on light and dark tabs as it is.
   icons: {
-    icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
-    ],
-    apple: '/apple-icon.png',
+    icon: [{ url: '/logo-mark.svg', type: 'image/svg+xml' }],
   },
 }
 

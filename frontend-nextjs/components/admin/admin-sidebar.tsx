@@ -32,6 +32,7 @@ import {
   SidebarRail,
 } from '@/components/ui/sidebar'
 import { cn } from '@/lib/utils'
+import { LogoMark } from '@/components/brand/logo'
 import { atLeast, requiredRoleForPath, type Role } from '@/lib/auth/roles'
 
 export const overviewNav = [
@@ -132,11 +133,11 @@ export function AdminSidebar({ badges = { orders: 0, stock: 0 }, role = 'STAFF' 
               className="h-14 rounded-lg px-2.5 gap-2.5 hover:bg-stone-100"
               render={<Link href="/admin" />}
             >
-              <div className="flex aspect-square size-9 items-center justify-center rounded-md bg-[#5A3E2B] text-white shadow-xs">
-                <Coffee className="size-5 text-amber-300" strokeWidth={2.2} />
-              </div>
+              <LogoMark className="size-9 shadow-xs" />
               <div className="flex flex-col gap-0.5 leading-none min-w-0">
-                <span className="text-sm font-extrabold tracking-tight text-stone-900 truncate">Coffee Shop</span>
+                <span className="text-sm font-extrabold tracking-tight text-stone-900 truncate">
+                  Đà Lạt <span className="text-[#B45309]">Cafe</span>
+                </span>
                 <span className="text-[10px] text-[#5A3E2B] font-bold tracking-wide uppercase">Admin Console</span>
               </div>
             </SidebarMenuButton>
