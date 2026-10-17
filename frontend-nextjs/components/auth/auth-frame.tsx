@@ -45,7 +45,7 @@ function BrandPanel() {
       <div className="absolute inset-0 bg-gradient-to-br from-[#2B1B14]/95 via-[#3E2723]/80 to-[#5A3E2B]/70" aria-hidden="true" />
 
       <Link href="/" aria-label="Đà Lạt Cafe – trang chủ" className="relative w-fit rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300">
-        <Logo tone="light" markClassName="size-11 ring-1 ring-amber-50/20" />
+        <Logo tone="light" markClassName="size-11 shadow-[0_6px_18px_rgba(0,0,0,0.35)]" />
       </Link>
 
       <div className="relative max-w-md">

@@ -5,13 +5,15 @@ import java.util.Locale;
 import java.util.Objects;
 
 /**
- * A sign-in account. Only a PBKDF2 hash of the password is stored, never the password.
+ * A sign-in account. Password accounts store a PBKDF2 hash (never the password); Google
+ * accounts store the stable Google subject id. One account may have both.
  */
 public class UserAccount {
     private Integer id;
     private String email;
     private String name;
     private String passwordHash;
+    private String googleSubject;
     private UserRole role;
     private boolean active;
     private Instant createdAt;
@@ -68,6 +70,14 @@ public class UserAccount {
         this.passwordHash = passwordHash;
     }
 
+    public String getGoogleSubject() {
+        return googleSubject;
+    }
+
+    public void setGoogleSubject(String googleSubject) {
+        this.googleSubject = googleSubject;
+    }
+
     public UserRole getRole() {
         return role;
     }
@@ -107,6 +117,7 @@ public class UserAccount {
         copy.email = email;
         copy.name = name;
         copy.passwordHash = passwordHash;
+        copy.googleSubject = googleSubject;
         copy.role = role;
         copy.active = active;
         copy.createdAt = createdAt;
