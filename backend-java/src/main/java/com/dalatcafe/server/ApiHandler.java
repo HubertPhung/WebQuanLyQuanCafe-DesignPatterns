@@ -1,5 +1,6 @@
 package com.dalatcafe.server;
 
+import com.dalatcafe.util.Json;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 
@@ -7,6 +8,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -98,6 +100,23 @@ public abstract class ApiHandler implements HttpHandler {
     protected static List<String> segments(HttpExchange exchange) {
         String path = exchange.getRequestURI().getPath();
         return List.of(path.replaceAll("^/+|/+$", "").split("/"));
+    }
+
+    /** First value of a query-string parameter (URL-decoded), or null when absent or blank. */
+    protected static String queryParam(HttpExchange exchange, String name) {
+        String query = exchange.getRequestURI().getRawQuery();
+        if (query == null) {
+            return null;
+        }
+        for (String pair : query.split("&")) {
+            int eq = pair.indexOf('=');
+            String key = URLDecoder.decode(eq < 0 ? pair : pair.substring(0, eq), StandardCharsets.UTF_8);
+            if (key.equals(name)) {
+                String value = eq < 0 ? "" : URLDecoder.decode(pair.substring(eq + 1), StandardCharsets.UTF_8);
+                return value.isBlank() ? null : value;
+            }
+        }
+        return null;
     }
 
     protected static ApiException methodNotAllowed(HttpExchange exchange) {

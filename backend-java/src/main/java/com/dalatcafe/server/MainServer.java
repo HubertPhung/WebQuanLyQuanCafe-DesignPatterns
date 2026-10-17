@@ -33,6 +33,10 @@ public class MainServer {
 
         server = HttpServer.create(new InetSocketAddress(port), 0);
         register("/api/menu", new MenuHandler(daos.getMenuDao()));
+        register("/api/orders", new OrderHandler(daos.getOrderDao(), daos.getCustomerDao(), subject, databaseHealthy));
+        register("/api/customers", new CustomerHandler(daos.getCustomerDao()));
+        register("/api/analytics", new AnalyticsHandler(daos.getOrderDao(), daos.getMenuDao(), daos.getTableDao()));
+        register("/api/vouchers", new VoucherHandler());
         register("/api/tables", new TableHandler(daos.getTableDao()));
         register("/api/reservations", new ReservationHandler(daos.getReservationDao(), daos.getTableDao(), daos.getOrderDao()));
         register("/api/checkout", new CheckoutHandler(facade, daos.getCustomerDao(), databaseHealthy));

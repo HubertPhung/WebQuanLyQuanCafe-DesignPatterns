@@ -2,10 +2,12 @@ package com.dalatcafe.server;
 
 import com.dalatcafe.dao.DaoFactory;
 import com.dalatcafe.dao.InMemoryDatabase;
+import com.dalatcafe.model.Customer;
 import com.dalatcafe.model.MenuItem;
 import com.dalatcafe.model.ReservationStatus;
 import com.dalatcafe.model.Table;
 import com.dalatcafe.model.TableStatus;
+import com.dalatcafe.util.Json;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -209,6 +211,221 @@ class ServerTest {
         assertEquals(503, response.statusCode());
         assertEquals("DATABASE_UNAVAILABLE", json(response).get("code"));
         assertEquals(10.0, DaoFactory.getInstance().getMenuDao().findById(DRINK_ID).orElseThrow().getStockQty());
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> data(HttpResponse<String> response) {
+        return (Map<String, Object>) json(response).get("data");
+    }
+
+    private static double number(Map<String, Object> map, String key) {
+        return ((Number) map.get(key)).doubleValue();
+    }
+
+    private String checkoutAtTable(int tableId, String extra) throws Exception {
+        String body = "{\"tableId\":" + tableId + ",\"paymentMethod\":\"cash\",\"tenderedAmount\":200000,"
+                + "\"lines\":[{\"menuItemId\":" + DRINK_ID + ",\"qty\":1,\"size\":\"L\"}]" + extra + "}";
+        HttpResponse<String> response = call("POST", "/api/checkout", "STAFF", body);
+        assertEquals(200, response.statusCode(), response.body());
+        return (String) data(response).get("orderCode");
+    }
+
+    private HttpResponse<String> setOrderStatus(String code, String status) throws Exception {
+        return call("PATCH", "/api/orders/" + code + "/status", "STAFF", "{\"status\":\"" + status + "\"}");
+    }
+
+    @Test
+    void managerCreatesMenuItemAndStaffAdjustsStock() throws Exception {
+        String item = "{\"name\":\"Tra atiso\",\"category\":\"Tea\",\"sellPrice\":39000,\"costPrice\":12000,"
+                + "\"stockQty\":20,\"variations\":[{\"name\":\"It ngot\",\"price\":0}]}";
+        assertEquals(401, call("POST", "/api/menu", null, item).statusCode());
+        assertEquals(403, call("POST", "/api/menu", "STAFF", item).statusCode());
+        HttpResponse<String> created = call("POST", "/api/menu", "MANAGER", item);
+        assertEquals(201, created.statusCode(), created.body());
+        int id = ((Number) data(created).get("id")).intValue();
+        assertEquals(1, ((List<?>) data(created).get("variations")).size());
+        assertEquals(409, call("POST", "/api/menu", "ADMIN", item).statusCode());
+        assertEquals(400, call("POST", "/api/menu", "MANAGER", "{\"name\":\"X\",\"category\":\"Tea\"}").statusCode());
+        assertTrue(call("GET", "/api/menu", null, null).body().contains("Tra atiso"));
+
+        String stock = "/api/menu/" + id + "/stock";
+        assertEquals(401, call("PATCH", stock, null, "{\"change\":-1}").statusCode());
+        HttpResponse<String> used = call("PATCH", stock, "STAFF", "{\"change\":-3}");
+        assertEquals(200, used.statusCode(), used.body());
+        assertEquals(17.0, number(data(used), "stockQty"));
+        assertEquals(409, call("PATCH", stock, "STAFF", "{\"change\":-100}").statusCode());
+        HttpResponse<String> off = call("PATCH", stock, "STAFF", "{\"inStock\":false,\"stockQty\":5}");
+        assertEquals(Boolean.FALSE, data(off).get("inStock"));
+        assertEquals(5.0, number(data(off), "stockQty"));
+        assertEquals(400, call("PATCH", stock, "STAFF", "{}").statusCode());
+        assertEquals(400, call("PATCH", stock, "STAFF", "{\"change\":1,\"stockQty\":2}").statusCode());
+        assertEquals(404, call("PATCH", "/api/menu/99999/stock", "STAFF", "{\"change\":1}").statusCode());
+        assertEquals(405, call("DELETE", "/api/menu", "ADMIN", null).statusCode());
+    }
+
+    @Test
+    void paidOrderSeatsTableAndKdsCompletionSendsItToCleaning() throws Exception {
+        DaoFactory daos = DaoFactory.getInstance();
+        String code = checkoutAtTable(3, "");
+        assertEquals(TableStatus.OCCUPIED, daos.getTableDao().findById(3).orElseThrow().getStatus());
+
+        HttpResponse<String> list = call("GET", "/api/orders?status=pending", "STAFF", null);
+        assertEquals(200, list.statusCode(), list.body());
+        assertTrue(list.body().contains(code));
+        assertEquals(401, call("GET", "/api/orders", null, null).statusCode());
+        assertEquals(400, call("GET", "/api/orders?status=lost", "STAFF", null).statusCode());
+
+        assertEquals("brewing", data(setOrderStatus(code, "brewing")).get("status"));
+        assertEquals("ready", data(setOrderStatus(code, "ready")).get("status"));
+        assertEquals(TableStatus.OCCUPIED, daos.getTableDao().findById(3).orElseThrow().getStatus());
+        HttpResponse<String> done = setOrderStatus(code, "completed");
+        assertEquals(200, done.statusCode(), done.body());
+        assertNotNull(data(done).get("completedAt"));
+        Table table = daos.getTableDao().findById(3).orElseThrow();
+        assertEquals(TableStatus.CLEANING, table.getStatus());
+        assertEquals(0, table.getGuestCount());
+
+        assertEquals(409, setOrderStatus(code, "brewing").statusCode());
+        assertEquals(400, setOrderStatus(code, "lost").statusCode());
+        assertEquals(404, setOrderStatus("AC-NOPE", "ready").statusCode());
+    }
+
+    @Test
+    void ordersCannotMoveBackwardsAndCancellingPaidOrderRefundsIt() throws Exception {
+        String code = checkoutAtTable(5, "");
+        assertEquals(200, setOrderStatus(code, "ready").statusCode());
+        HttpResponse<String> back = setOrderStatus(code, "brewing");
+        assertEquals(409, back.statusCode());
+        assertEquals("RESOURCE_CONFLICT", json(back).get("code"));
+        HttpResponse<String> cancelled = setOrderStatus(code, "cancelled");
+        assertEquals("cancelled", data(cancelled).get("status"));
+        assertEquals("refunded", data(cancelled).get("paymentStatus"));
+    }
+
+    @Test
+    void transferredOrderMustBePaidBeforeCompletion() throws Exception {
+        String code = createReservation(10, 2);
+        assertEquals(200, call("POST", "/api/reservations/" + code + "/transfer-pos", "STAFF", null).statusCode());
+
+        assertEquals(409, setOrderStatus(code, "completed").statusCode());
+        String pay = "/api/orders/" + code + "/pay";
+        assertEquals(400, call("POST", pay, "STAFF", "{\"paymentMethod\":\"gold\"}").statusCode());
+        dbUp.set(false);
+        assertEquals(503, call("POST", pay, "STAFF", "{\"paymentMethod\":\"cash\"}").statusCode());
+        dbUp.set(true);
+        HttpResponse<String> paid = call("POST", pay, "STAFF", "{\"paymentMethod\":\"cash\"}");
+        assertEquals(200, paid.statusCode(), paid.body());
+        assertEquals("paid", data(paid).get("paymentStatus"));
+        assertNotNull(data(paid).get("transactionId"));
+        assertEquals(409, call("POST", pay, "STAFF", "{\"paymentMethod\":\"cash\"}").statusCode());
+        assertEquals(404, call("POST", "/api/orders/AC-NOPE/pay", "STAFF", "{\"paymentMethod\":\"cash\"}").statusCode());
+        assertEquals(200, setOrderStatus(code, "completed").statusCode());
+        assertEquals(TableStatus.CLEANING, DaoFactory.getInstance().getTableDao().findById(10).orElseThrow().getStatus());
+    }
+
+    @Test
+    void reservationStatusFollowsTheBookingLifecycle() throws Exception {
+        String code = createReservation(6, 2);
+        String path = "/api/reservations/" + code + "/status";
+        assertEquals(401, call("PATCH", path, null, "{\"status\":\"confirmed\"}").statusCode());
+        assertEquals(200, call("PATCH", path, "STAFF", "{\"status\":\"confirmed\"}").statusCode());
+        assertEquals(ReservationStatus.CONFIRMED,
+                DaoFactory.getInstance().getReservationDao().findByReservationCode(code).orElseThrow().getStatus());
+        assertEquals(400, call("PATCH", path, "STAFF", "{\"status\":\"seated\"}").statusCode());
+        assertEquals(200, call("PATCH", path, "STAFF", "{\"status\":\"cancelled\"}").statusCode());
+        assertEquals(409, call("PATCH", path, "STAFF", "{\"status\":\"confirmed\"}").statusCode());
+        assertEquals(409, call("POST", "/api/reservations/" + code + "/transfer-pos", "STAFF", null).statusCode());
+        assertEquals(404, call("PATCH", "/api/reservations/RES-NOPE/status", "STAFF", "{\"status\":\"confirmed\"}").statusCode());
+    }
+
+    @Test
+    void memberRedeemsLoyaltyPointsAtCheckout() throws Exception {
+        Customer member = new Customer(null, "Tran Thu", "0988000111", "thu@example.com");
+        member.setLoyaltyPoints(50);
+        DaoFactory.getInstance().getCustomerDao().save(member);
+
+        HttpResponse<String> lookup = call("GET", "/api/customers?phone=0988000111", "STAFF", null);
+        assertEquals(200, lookup.statusCode(), lookup.body());
+        List<?> found = (List<?>) json(lookup).get("data");
+        assertEquals(1, found.size());
+        assertEquals(401, call("GET", "/api/customers", null, null).statusCode());
+
+        HttpResponse<String> response = call("POST", "/api/checkout", "STAFF",
+                checkoutBody(1, ",\"customerPhone\":\"0988000111\",\"useLoyaltyPoints\":20"));
+        assertEquals(200, response.statusCode(), response.body());
+        Map<String, Object> receipt = data(response);
+        assertEquals(20, ((Number) receipt.get("pointsRedeemed")).intValue());
+        assertEquals(20_000.0, number(receipt, "pointsDiscountVnd"));
+        assertEquals(20_000.0, number(receipt, "discountAmount"));
+        assertEquals(37_800.0, number(receipt, "finalTotal"));
+        int earned = ((Number) receipt.get("pointsEarned")).intValue();
+        Customer after = DaoFactory.getInstance().getCustomerDao().findByPhone("0988000111").orElseThrow();
+        assertEquals(50 - 20 + earned, after.getLoyaltyPoints());
+
+        HttpResponse<String> tooMany = call("POST", "/api/checkout", "STAFF",
+                checkoutBody(1, ",\"customerPhone\":\"0988000111\",\"useLoyaltyPoints\":999"));
+        assertEquals(400, tooMany.statusCode());
+        assertEquals("INSUFFICIENT_POINTS", json(tooMany).get("code"));
+        assertEquals(400, call("POST", "/api/checkout", "STAFF", checkoutBody(1, ",\"useLoyaltyPoints\":5")).statusCode());
+        assertEquals(400, call("POST", "/api/checkout", "STAFF",
+                checkoutBody(1, ",\"customerPhone\":\"0988000111\",\"useLoyaltyPoints\":1.5")).statusCode());
+    }
+
+    @Test
+    void redemptionNeverDiscountsMoreThanTheBill() throws Exception {
+        Customer member = new Customer(null, "Vo Lan", "0988000222", null);
+        member.setLoyaltyPoints(500);
+        DaoFactory.getInstance().getCustomerDao().save(member);
+
+        HttpResponse<String> response = call("POST", "/api/checkout", "STAFF",
+                checkoutBody(1, ",\"customerPhone\":\"0988000222\",\"useLoyaltyPoints\":500"));
+        assertEquals(200, response.statusCode(), response.body());
+        Map<String, Object> receipt = data(response);
+        assertEquals(55, ((Number) receipt.get("pointsRedeemed")).intValue());
+        assertEquals(0.0, number(receipt, "finalTotal"));
+        assertEquals(445, DaoFactory.getInstance().getCustomerDao().findByPhone("0988000222").orElseThrow().getLoyaltyPoints());
+    }
+
+    @Test
+    void analyticsOverviewIsManagerOnly() throws Exception {
+        checkoutAtTable(3, "");
+        assertEquals(401, call("GET", "/api/analytics/overview", null, null).statusCode());
+        assertEquals(403, call("GET", "/api/analytics/overview", "STAFF", null).statusCode());
+        HttpResponse<String> response = call("GET", "/api/analytics/overview", "MANAGER", null);
+        assertEquals(200, response.statusCode(), response.body());
+        Map<String, Object> overview = data(response);
+        assertTrue(number(overview, "totalRevenue") > 0);
+        assertTrue(number(overview, "paidOrdersToday") >= 1);
+        assertTrue(((List<?>) overview.get("topItems")).toString().contains("Ca phe muoi"));
+        assertNotNull(overview.get("tables"));
+        assertEquals(404, call("GET", "/api/analytics/other", "ADMIN", null).statusCode());
+    }
+
+    @Test
+    void voucherValidationIsPublicAndMatchesCheckout() throws Exception {
+        HttpResponse<String> ok = call("POST", "/api/vouchers/validate", null, "{\"code\":\"welcome10\",\"subtotal\":100000}");
+        assertEquals(200, ok.statusCode(), ok.body());
+        assertEquals(Boolean.TRUE, data(ok).get("valid"));
+        assertEquals(10_000.0, number(data(ok), "discountAmount"));
+        HttpResponse<String> capped = call("POST", "/api/vouchers/validate", null, "{\"code\":\"WELCOME10\",\"subtotal\":900000}");
+        assertEquals(50_000.0, number(data(capped), "discountAmount"));
+        HttpResponse<String> bad = call("POST", "/api/vouchers/validate", null, "{\"code\":\"NOPE\",\"subtotal\":100000}");
+        assertEquals(Boolean.FALSE, data(bad).get("valid"));
+        assertEquals(400, call("POST", "/api/vouchers/validate", null, "{\"code\":\"WELCOME10\"}").statusCode());
+        // Only POST is public; any other method falls back to the staff gate first.
+        assertEquals(401, call("GET", "/api/vouchers/validate", null, null).statusCode());
+        assertEquals(405, call("GET", "/api/vouchers/validate", "STAFF", null).statusCode());
+    }
+
+    @Test
+    void unknownEndpointsAreNotPublicByDefault() {
+        assertNull(SimpleAuthFilter.requiredRoles("GET", "/api/menu"));
+        assertNull(SimpleAuthFilter.requiredRoles("GET", "/api/menu/"));
+        assertNull(SimpleAuthFilter.requiredRoles("POST", "/api/reservations"));
+        assertNull(SimpleAuthFilter.requiredRoles("POST", "/api/vouchers/validate"));
+        assertNotNull(SimpleAuthFilter.requiredRoles("GET", "/api/anything-new"));
+        assertFalse(SimpleAuthFilter.requiredRoles("POST", "/api/menu").contains(SimpleAuthFilter.Role.STAFF));
+        assertTrue(SimpleAuthFilter.requiredRoles("PATCH", "/api/menu/1/stock").contains(SimpleAuthFilter.Role.STAFF));
     }
 
     @Test
