@@ -19,6 +19,7 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <junit.jupiter.version>5.10.2</junit.jupiter.version>
         <postgresql.version>42.7.14</postgresql.version>
+        <embedded-postgres.version>2.0.7</embedded-postgres.version>
     </properties>
 
     <dependencies>
@@ -46,6 +47,14 @@
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-params</artifactId>
             <version>${junit.jupiter.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Real PostgreSQL started inside the test JVM for the JDBC DAO integration tests -->
+        <dependency>
+            <groupId>io.zonky.test</groupId>
+            <artifactId>embedded-postgres</artifactId>
+            <version>${embedded-postgres.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
