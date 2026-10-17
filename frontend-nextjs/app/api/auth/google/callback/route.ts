@@ -43,7 +43,11 @@ export async function GET(request: NextRequest) {
   if (!identity.emailVerified) return back(request, 'google_unverified')
 
   const result = await signInWithGoogle(identity, config.serviceKey)
-  if (!result.ok) return back(request, result.unreachable ? 'backend_down' : result.code === 'ACCOUNT_DISABLED' ? 'disabled' : 'google_failed')
+  if (!result.ok) {
+    if (result.unreachable) return back(request, 'backend_down')
+    const reasons: Record<string, string> = { ACCOUNT_DISABLED: 'disabled', STAFF_PASSWORD_ONLY: 'google_staff' }
+    return back(request, reasons[result.code] ?? 'google_failed')
+  }
   if (!jwtSecret()) return back(request, 'not_configured')
 
   const role = isRole(result.data.user.role) ? result.data.user.role : 'CUSTOMER'
