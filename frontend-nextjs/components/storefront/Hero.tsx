@@ -30,10 +30,10 @@ export function Hero({ onBrowseBeans }: HeroProps) {
           Thủ công từ tâm · TẬN TÂM TỪNG MẺ RANG
         </p>
 
-        <h1 className="my-5 text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold text-stone-900 leading-[1.25] tracking-normal">
+        <h1 className="font-display my-5 text-4xl sm:text-5xl md:text-6xl lg:text-[4.25rem] font-semibold text-stone-900 leading-[1.22] text-balance">
           Cà phê thủ công,<br />
           chế tác cho<br />
-          <em className="text-[#C88A58] italic font-sans">tâm hồn bạn.</em>
+          <em className="font-display text-[#B4703F] italic font-medium">tâm hồn bạn.</em>
           <span className="sr-only">Artisan coffee</span>
         </h1>
 
