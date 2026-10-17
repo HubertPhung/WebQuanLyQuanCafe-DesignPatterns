@@ -19,8 +19,8 @@ erDiagram
     admin_tables ||--o{ admin_orders : "table_id (không có FK)"
     admin_menu_items }o--o{ admin_orders : "items JSONB (theo tên món)"
 
-    tables ||--o{ orders : "table_id (không có FK)"
-    tables ||--o{ reservations : "table_id (không có FK)"
+    tables ||--o{ orders : "fk_orders_table (ON DELETE SET NULL)"
+    tables ||--o{ reservations : "fk_reservations_table (ON DELETE SET NULL)"
     customers ||--o{ orders : "tích điểm qua LoyaltyPointObserver"
 
     admin_tables {
@@ -88,6 +88,7 @@ erDiagram
         text recipe
         text image_url
         timestamptz created_at
+        jsonb variations
     }
     orders {
         serial id PK
@@ -105,6 +106,7 @@ erDiagram
         text note
         timestamptz created_at
         timestamptz completed_at
+        jsonb items
     }
     reservations {
         serial id PK
@@ -119,6 +121,7 @@ erDiagram
         varchar status
         text note
         timestamptz created_at
+        jsonb pre_orders
     }
     customers {
         serial id PK
@@ -152,18 +155,26 @@ Dữ liệu mẫu của mock store gồm 15 bàn, 13 món bán, 5 nguyên liệu
 | Bảng | Cột đáng chú ý | Giá trị lưu trong cột trạng thái |
 | :--- | :--- | :--- |
 | `tables` | `zone` mặc định `'Main Floor'` | `AVAILABLE`, `OCCUPIED`, `RESERVED`, `CLEANING` |
-| `menu_items` | `unit` mặc định `'ly'`, **không có `variations`** | — |
-| `orders` | `vat_amount`, `discount_amount`, `note`, **không có `items`** | `order_type`: `DINE_IN`, `PICKUP`, `DELIVERY`; `payment_method`: `CASH`, `QR`, `CARD`; `payment_status`: `PAID`, `UNPAID`, …; `status`: `PENDING`, `BREWING`, `READY`, `COMPLETED`, `CANCELLED` |
-| `reservations` | `id` SERIAL + `reservation_code` duy nhất (`RES-xxxx`), `table_id`, `table_name`, **không có `pre_orders`** | `PENDING` (Chờ xác nhận), `CONFIRMED` (Đã xác nhận đặt bàn), `SEATED` (Khách đã nhận bàn), `CANCELLED` (Đã hủy) |
+| `menu_items` | `unit` mặc định `'ly'`, `variations` JSONB `[{ name, price }]` | — |
+| `orders` | `vat_amount`, `discount_amount`, `note`, `items` JSONB `[{ menuItemId, name, qty, price, variation, notes }]`, `table_id` → `tables(id)` | `order_type`: `DINE_IN`, `PICKUP`, `DELIVERY`; `payment_method`: `CASH`, `QR`, `CARD`; `payment_status`: `PAID`, `UNPAID`, …; `status`: `PENDING`, `BREWING`, `READY`, `COMPLETED`, `CANCELLED` |
+| `reservations` | `id` SERIAL + `reservation_code` duy nhất (`RES-0001` theo id), `table_id` → `tables(id)`, `table_name`, `pre_orders` JSONB `[{ name, qty, price }]` | `PENDING` (Chờ xác nhận), `CONFIRMED` (Đã xác nhận đặt bàn), `SEATED` (Khách đã nhận bàn), `CANCELLED` (Đã hủy) |
 | `customers` | `phone` duy nhất, `loyalty_points`, `total_spent` | `rank`: `BRONZE` (Đồng, 0%), `SILVER` (Bạc, 5%), `GOLD` (Vàng, 10%), `VIP` (Kim Cương, 15%) |
 
-DAO ghi trạng thái bằng **tên enum in hoa**. Khi đọc thì so khớp không phân biệt hoa thường, nên các giá trị mặc định chữ thường trong DDL vẫn đọc được.
+DAO ghi trạng thái bằng **tên enum in hoa** (giá trị mặc định trong DDL cũng in hoa). Khi đọc thì so khớp không phân biệt hoa thường, nên dữ liệu cũ ghi chữ thường vẫn đọc được.
+
+**Khởi tạo và nâng cấp.** Khi `DaoFactory` kết nối được PostgreSQL, nó gọi `JdbcDatabase.initializeSchema` trước khi chọn chế độ JDBC. Mọi lệnh đều chạy lại được nhiều lần:
+- `CREATE TABLE IF NOT EXISTS` cho 5 bảng, rồi `ALTER TABLE … ADD COLUMN IF NOT EXISTS` cho 3 cột JSONB (mặc định `'[]'`), nên database cũ được nâng cấp tại chỗ.
+- Khoá ngoại `fk_orders_table` và `fk_reservations_table` được thêm trong khối `DO` có kiểm tra tồn tại, với `NOT VALID`: dòng cũ được giữ nguyên, dòng mới phải trỏ tới bàn có thật. Kèm chỉ mục cho `table_id`, `orders.status`, `reservations.date_time`.
+- Nếu `tables` hoặc `menu_items` còn trống, 15 bàn và thực đơn mẫu của `InMemoryDatabase` được ghi vào (đơn tại bàn cần bàn tồn tại vì có khoá ngoại). Sau đó `syncSequences` đưa các sequence SERIAL vượt id lớn nhất.
+- Nếu không chuẩn bị được schema (ví dụ thiếu quyền), server ở lại chế độ In-Memory và ghi log lỗi.
+
+**Kết nối.** `JdbcDatabase` giữ một pool nhỏ (tối đa 8 kết nối rảnh): `close()` trả kết nối về pool sau khi rollback giao dịch dở và bật lại auto-commit. `isAvailable()` lưu kết quả kiểm tra 5 giây, nên kiểm tra sức khoẻ trên đường xử lý request không mở kết nối mới mỗi lần.
 
 ---
 
 ## 4. Giới hạn đã biết
 
-1. **Chế độ JDBC chưa lưu dữ liệu dạng danh sách.** DDL và DAO không có cột cho món trong đơn (`items`), tuỳ chọn món (`variations`) hay món đặt trước (`pre_orders`), nên các dữ liệu này chỉ tồn tại ở chế độ In-Memory.
-2. **`initializeSchema` chưa được gọi tự động.** Muốn dùng chế độ JDBC trên một database mới, phải chạy DDL trước.
-3. **Không có ràng buộc khoá ngoại** (`table_id`) ở cả hai schema.
-4. **Chưa triển khai:** bảng `vouchers` (mã giảm giá đang cố định trong code, xem [API_SPEC](API_SPEC.md)) và bảng `staff` (giao diện nhân sự dùng dữ liệu mẫu).
+1. **Hai bộ bảng vẫn tách rời.** Bảng `admin_*` của frontend không có khoá ngoại; quan hệ giữa đơn và bàn chỉ được kiểm ở tầng ứng dụng.
+2. **Khoá ngoại `NOT VALID`** không kiểm các dòng ghi trước khi nâng cấp. Muốn kiểm cả dữ liệu cũ, chạy `ALTER TABLE orders VALIDATE CONSTRAINT fk_orders_table;` (và tương tự cho `reservations`) sau khi đã dọn các dòng trỏ tới bàn không tồn tại.
+3. **Chưa triển khai:** bảng `vouchers` (mã giảm giá nằm trong `VoucherCatalog`, xem [API_SPEC §3.16](API_SPEC.md)) và bảng `staff` (giao diện nhân sự dùng dữ liệu mẫu).
+4. **Kiểm thử:** `JdbcIntegrationTest` chạy DAO JDBC và Facade trên một PostgreSQL nhúng (zonky `embedded-postgres`) ngay trong JVM test, không cần Docker và không đụng tới Supabase dùng chung.

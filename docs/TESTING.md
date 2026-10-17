@@ -9,13 +9,14 @@ Tài liệu gom toàn bộ thông tin kiểm thử: cách chạy, danh mục tes
 
 | Bộ kiểm thử | Lệnh | Số ca | Chạy trên CI |
 | :--- | :--- | :---: | :---: |
-| JUnit 5 Backend | `cd backend-java && mvn clean test` | 168 | ✅ Job *Backend CI* |
-| UI/UX & Admin Actions | `cd frontend-nextjs && npm test` | 25 | ✅ Job *Frontend CI* |
+| JUnit 5 Backend | `cd backend-java && mvn clean test` | 188 | ✅ Job *Backend CI* |
+| UI/UX & Admin Actions | `cd frontend-nextjs && npm test` | 27 | ✅ Job *Frontend CI* |
 | Kiểu TypeScript | `cd frontend-nextjs && npx tsc --noEmit` | — | ✅ |
 | Build production | `cd frontend-nextjs && npm run build` | — | ✅ |
 
 - `npm test` chạy `tsx scripts/test-ui-ux.mjs`. Script tự khởi động `next dev` nếu chưa có server ở `TEST_BASE_URL` (mặc định `http://localhost:3000`). Đặt `TEST_BASE_URL` để kiểm thử một server đang chạy sẵn.
-- Bộ JUnit chạy hoàn toàn trong bộ nhớ (`InMemoryDatabase`), không cần mạng hay cơ sở dữ liệu.
+- Bộ JUnit chạy trong bộ nhớ (`InMemoryDatabase`), trừ `JdbcIntegrationTest`: lớp này tự khởi động một PostgreSQL nhúng (zonky `embedded-postgres`) trong JVM test, không cần Docker và không chạm tới Supabase dùng chung. Lần chạy đầu Maven tải bản PostgreSQL nhúng về.
+- Mọi bộ test chạy trên GitHub Actions (`.github/workflows/ci.yml`) mỗi lần push hoặc mở PR; kết quả xem ở tab *Actions*.
 
 ---
 
@@ -28,16 +29,17 @@ Tài liệu gom toàn bộ thông tin kiểm thử: cách chạy, danh mục tes
 | `patterns/BuilderTest` | Dựng đơn và VAT, giá trị mặc định cho khách vãng lai, đối số sai, tái sử dụng builder |
 | `patterns/DecoratorTest` | Cộng dồn giá và mô tả, phụ thu từng topping, bọc lặp, thứ tự bọc, `null` |
 | `patterns/AdapterTest` | Chuyển phiếu đặt bàn thành đơn POS, sao chép món độc lập, thiếu dữ liệu tuỳ chọn |
-| `patterns/FacadeTest` | Toàn quy trình checkout, thiếu tồn kho, hoàn kho khi lưu lỗi, lỗi observer |
+| `patterns/FacadeTest` | Toàn quy trình checkout (đơn đã thu tiền ở trạng thái `PENDING`, chỉ phát sự kiện *paid*), thiếu tồn kho, hoàn kho khi lưu lỗi, lỗi observer |
 | `patterns/StrategyTest` | Phần trăm có trần, số tiền cố định, hạng thành viên, kẹp kết quả |
 | `patterns/ChainTest` | Giờ mở cửa, sức chứa, trùng lịch bàn, thứ tự mắt xích |
-| `patterns/ObserverTest` | Ba observer, đăng ký trùng, đơn chưa trả tiền, đơn mang đi, khách/bàn không tồn tại |
+| `patterns/ObserverTest` | Sự kiện *paid* (cộng điểm, bàn → `OCCUPIED`, phiếu KDS) và *completed* (bàn → `CLEANING`, không cộng điểm lần hai), đăng ký trùng, đơn chưa trả tiền, đơn mang đi, khách/bàn không tồn tại |
 | `dao/DaoLayerTest`, `model/ModelEntitiesTest` | Tầng DAO In-Memory và các thực thể |
-| `server/ServerTest` | Định tuyến REST, mã lỗi, RBAC theo `X-User-Role`, 503 khi mất CSDL, `transfer-pos` qua Adapter (thành công, 409 khi chuyển lại, 404, 401, 405) |
+| `dao/JdbcIntegrationTest` | DAO JDBC trên PostgreSQL thật: nâng cấp schema chạy lại được, khoá ngoại chặn bàn không tồn tại, cột JSONB (`items`, `variations`, `pre_orders`), seed và sequence, mã `AC-0001` / `RES-0001`, pool kết nối, checkout qua Facade |
+| `server/ServerTest` | Định tuyến REST, mã lỗi, RBAC theo `X-User-Role` (mặc định từ chối, MANAGER cho tạo món và thống kê), 503 khi mất CSDL, `transfer-pos` qua Adapter, vòng đời đơn trên KDS và đồng bộ bàn, thanh toán đơn chuyển từ đặt bàn, đổi trạng thái phiếu, tạo món và chỉnh tồn kho, đổi điểm thành viên (kể cả không giảm quá hoá đơn), thống kê, xem trước voucher |
 
 ---
 
-## 3. Bộ test UI/UX & Admin Actions (25 ca)
+## 3. Bộ test UI/UX & Admin Actions (27 ca)
 
 Các mã dưới đây khớp chính xác với `frontend-nextjs/scripts/test-ui-ux.mjs`.
 
@@ -68,6 +70,8 @@ Các mã dưới đây khớp chính xác với `frontend-nextjs/scripts/test-ui
 | | `TC-ACT-03` | Đổi trạng thái bàn & số khách |
 | | `TC-ACT-04` | Bật/tắt bán món |
 | | `TC-ACT-05` | Thêm món mới vào catalog |
+| | `TC-ACT-06` | Đơn tại bàn đã thu tiền làm bàn `occupied`; hoàn tất trên KDS chuyển bàn sang `cleaning` |
+| | `TC-ACT-07` | Đơn do Java định giá (giảm hạng, đổi điểm) giữ đúng tổng tiền của Java ở kho frontend |
 
 > Bộ UI chỉ kiểm tra phản hồi HTTP và nội dung trang, cộng với các hàm của mock store. Các luồng có giao tiếp với Java được kiểm ở mục 4.
 
@@ -89,8 +93,8 @@ Các mã dưới đây khớp chính xác với `frontend-nextjs/scripts/test-ui
 
 | Hạng mục | Kết quả |
 | :--- | :--- |
-| JUnit 5 (`mvn clean test`) | **168 / 168 PASS** |
-| UI/UX (`npm test`, Java đang chạy) | **25 / 25 PASS** |
+| JUnit 5 (`mvn clean test`) | **168 / 168 PASS** (bộ test lúc chạy E2E; hiện là 188, xem mục 1) |
+| UI/UX (`npm test`, Java đang chạy) | **25 / 25 PASS** (hiện là 27, xem mục 3) |
 | TypeScript, build production | Không lỗi |
 | Cú pháp sơ đồ Mermaid (`mermaid.parse`, Mermaid 11) | Tất cả sơ đồ trong `docs/` hợp lệ |
 | API proxy `lib/api-client.ts` với Java thật (menu, checkout, bàn, đặt bàn, backend tắt, `JAVA_BACKEND_URL=off`) | **9 / 9 PASS** |
@@ -139,7 +143,7 @@ Luồng Storefront xử lý hoàn toàn trong Next.js (`/api/cart`), không gọ
 | # | Thao tác | Kết quả mong đợi | Kết quả thực tế |
 | :---: | :--- | :--- | :--- |
 | 1 | POS: "Cà phê Muối Đặc Biệt" + chip **Size L** + **Kem cheese**, Bàn 6, Tiền mặt, "Thanh toán & In" | Giá 45.000 + 10.000 + 15.000; Java tính bằng Decorator | Đạt: hoá đơn 70.000 + VAT 5.600 = **75.600 đ**; Java cấp `AC-6C4C-236`; KDS hiện "Cà phê Muối Đặc Biệt (Size L + Kem cheese) · 75.600 đ". Gọi thẳng Java với `customizations: [SIZE_L, CHEESE_FOAM]` cũng ra 70.000 / 5.600 / 75.600 |
-| 2 | Nút đổi điểm trên POS | Không trừ tiền khi chưa được hỗ trợ | Đạt: nút bị vô hiệu, tổng hiển thị bằng tổng được lưu |
+| 2 | Nút đổi điểm trên POS | Không trừ tiền khi chưa được hỗ trợ | Đạt ở thời điểm chạy: nút bị vô hiệu. *Từ bản sau, POS tra cứu thành viên và đổi điểm thật; xem mục 5.* |
 | 3 | `/admin/reservations` → "Tạo phiếu đặt bàn" (Bàn 9, 3 khách, 11:30 hôm sau) | Phiếu đi qua chuỗi Java | Đạt: Java lưu `RES-0010` "Chờ xác nhận"; danh sách hiện phiếu kèm nhãn "Java" |
 | 4 | "Sang POS" phiếu Java `RES-20261015-001` | Adapter tạo đơn, phiếu → nhận bàn, bàn → có khách | Đạt: KDS hiện `RES-20261015-001 · Bàn 4 · 2× Cà phê Muối Đặc Biệt · 97.200 đ`; Java: "Khách đã nhận bàn", bàn 4 `occupied` (2 khách); nút "Sang POS" bị vô hiệu |
 | 5 | "Sang POS" phiếu cục bộ `RES-001` | Bản sao Adapter phía frontend | Đạt: KDS hiện `RES-001 · 2× Latte, 2× Croissant · 216.000 đ` |
@@ -152,9 +156,15 @@ Luồng Storefront xử lý hoàn toàn trong Next.js (`/api/cart`), không gọ
 
 ## 5. Giới hạn đã biết
 
-1. **Đổi điểm thành viên khi thanh toán chưa được hỗ trợ** (`FEAT-POS-04`). Nút trên POS bị vô hiệu, và Java từ chối `useLoyaltyPoints`.
-2. **POS chưa gửi SĐT khách sang Java.** Vì vậy Java không áp giảm giá theo hạng và không cộng điểm cho đơn từ POS. Nếu gửi SĐT, Java sẽ giảm giá theo hạng trong khi bản sao ở frontend không giảm, làm hai tổng tiền lệch nhau.
-3. **Đổi trạng thái phiếu đặt bàn** (danh sách thả xuống ở `/admin/reservations`) chỉ lưu trên trình duyệt. Java chưa có `PATCH /api/reservations/{id}/status`.
-4. **Trạng thái bàn sau checkout khác nhau.** Java chuyển bàn sang `cleaning` (coi đơn là đã hoàn tất), frontend để `occupied` (đơn mới gửi bếp). Sơ đồ bàn trên giao diện đọc từ kho của frontend.
-5. **Hai kho menu đánh số độc lập.** Món được ghép theo tên; món chỉ có ở frontend, hoặc biến thể có phụ thu, sẽ được lưu cục bộ.
-6. **Chế độ JDBC** chưa lưu các cột JSONB (`items`, `variations`, `pre_orders`), xem [DATABASE.md §4](DATABASE.md#4-giới-hạn-đã-biết).
+Báo cáo E2E ở mục 4 ghi lại một lần chạy trước khi bổ sung các endpoint dưới đây; những thay đổi sau đó được kiểm bằng test tự động trên CI (mục 2 và 3) thay vì chạy tay lại.
+
+Đã khắc phục so với lần chạy E2E:
+- Đổi điểm thành viên khi thanh toán (`FEAT-POS-04`): POS tra cứu khách qua `GET /api/customers?phone=`, gửi `customerPhone` và `useLoyaltyPoints`; bản sao ở frontend lưu đúng tổng tiền Java trả về, nên không còn lệch khi có giảm theo hạng.
+- Đổi trạng thái phiếu đặt bàn được lưu qua `PATCH /api/reservations/{code}/status`.
+- Trạng thái bàn thống nhất: thanh toán xong bàn là `occupied`; KDS báo hoàn tất thì bàn chuyển `cleaning`, ở cả Java lẫn frontend.
+- Chế độ JDBC lưu đủ `items`, `variations`, `pre_orders`, có khoá ngoại và tự khởi tạo schema.
+
+Còn lại:
+1. **Hai kho menu đánh số độc lập.** Món được ghép theo tên; món chỉ có ở frontend, hoặc biến thể có phụ thu, sẽ được lưu cục bộ. Đơn như vậy không đổi điểm được (POS báo lỗi thay vì thu đủ tiền).
+2. **Mất kết nối Java:** đơn, trạng thái KDS và thanh toán được ghi cục bộ như trước; khi Java trở lại, các đơn đó không tự đồng bộ ngược sang Java.
+3. **Khoá ngoại `NOT VALID`** không kiểm dữ liệu ghi trước khi nâng cấp, xem [DATABASE.md §4](DATABASE.md#4-giới-hạn-đã-biết).
