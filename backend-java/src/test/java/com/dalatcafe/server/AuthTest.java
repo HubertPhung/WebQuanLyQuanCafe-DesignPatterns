@@ -190,7 +190,7 @@ class AuthTest {
     }
 
     @Test
-    void googleSignInNeedsTheServiceKeyAndLinksAccountsByVerifiedEmail() throws Exception {
+    void googleSignInIsForCustomersAndNeedsTheServiceKey() throws Exception {
         String google = "{\"googleSubject\":\"1234567890\",\"email\":\"lan@gmail.com\",\"name\":\"Lan\",\"emailVerified\":true}";
         assertEquals(401, call("POST", "/api/auth/google", null, google).statusCode());
         assertEquals(401, call("POST", "/api/auth/google", null, google, "X-Service-Key", "guess").statusCode());
@@ -204,14 +204,23 @@ class AuthTest {
                 ((Map<?, ?>) data(again).get("user")).get("lastLoginAt").toString(),
                 ((Map<?, ?>) data(first).get("user")).get("lastLoginAt").toString()));
 
-        // A staff password account is linked to Google by its verified email and keeps its role.
-        String admin = login(ADMIN_EMAIL, ADMIN_PASSWORD);
-        createUser(admin, "thu.ngan@gmail.com", "staff");
+        // A customer who signed up with a password is linked to Google by the verified email.
+        assertEquals(201, call("POST", "/api/auth/register", null,
+                "{\"email\":\"mai@gmail.com\",\"name\":\"Mai\",\"password\":\"Coffee2026\"}").statusCode());
         HttpResponse<String> linked = call("POST", "/api/auth/google", null,
-                "{\"googleSubject\":\"999\",\"email\":\"thu.ngan@gmail.com\",\"name\":\"Thu Ngan\",\"emailVerified\":true}",
+                "{\"googleSubject\":\"777\",\"email\":\"mai@gmail.com\",\"name\":\"Mai\",\"emailVerified\":true}",
                 "X-Service-Key", SERVICE_KEY);
         assertEquals(200, linked.statusCode(), linked.body());
-        assertEquals(UserRole.STAFF.name(), role(linked));
+        assertEquals(UserRole.CUSTOMER.name(), role(linked));
+
+        // Staff accounts are password-only: Google may not sign them in, nor create a second account.
+        String admin = login(ADMIN_EMAIL, ADMIN_PASSWORD);
+        createUser(admin, "thu.ngan@gmail.com", "staff");
+        HttpResponse<String> staff = call("POST", "/api/auth/google", null,
+                "{\"googleSubject\":\"999\",\"email\":\"thu.ngan@gmail.com\",\"name\":\"Thu Ngan\",\"emailVerified\":true}",
+                "X-Service-Key", SERVICE_KEY);
+        assertEquals(403, staff.statusCode());
+        assertEquals("STAFF_PASSWORD_ONLY", code(staff));
 
         assertEquals(400, call("POST", "/api/auth/google", null,
                 "{\"googleSubject\":\"5\",\"email\":\"x@gmail.com\",\"name\":\"X\",\"emailVerified\":false}",

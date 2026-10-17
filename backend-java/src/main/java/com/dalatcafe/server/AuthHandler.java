@@ -123,7 +123,10 @@ public class AuthHandler extends ApiHandler {
     /**
      * The frontend verified the Google ID token (signature, audience, issuer, nonce) and reports
      * the result here with the shared service key. Matches by Google id, then links an existing
-     * account with the same verified email, otherwise creates a CUSTOMER.
+     * customer account with the same verified email, otherwise creates a CUSTOMER.
+     *
+     * Google sign-in is for customers only: staff, manager and admin accounts keep signing in with
+     * their password, so the lockout and the admin's control over those accounts always apply.
      */
     private void google(HttpExchange exchange) throws IOException {
         String presented = exchange.getRequestHeaders().getFirst("X-Service-Key");
@@ -144,6 +147,9 @@ public class AuthHandler extends ApiHandler {
             user = new UserAccount(null, email, name(body), UserRole.CUSTOMER);
         } else if (user.getGoogleSubject() != null && !user.getGoogleSubject().equals(subject)) {
             throw new ApiException(409, "RESOURCE_CONFLICT", "This email is linked to a different Google account");
+        }
+        if (user.getRole() != UserRole.CUSTOMER) {
+            throw new ApiException(403, "STAFF_PASSWORD_ONLY", "Staff accounts sign in with their email and password");
         }
         if (!user.isActive()) {
             throw new ApiException(403, "ACCOUNT_DISABLED", "This account has been disabled; contact an administrator");
