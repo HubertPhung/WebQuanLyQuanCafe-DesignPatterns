@@ -474,8 +474,7 @@ async function runAdminMutationTests() {
 }
 
 async function runAuthTests() {
-  console.log('
---- 5. TESTING SIGN-IN & ROLE-BASED ACCESS ---')
+  console.log('\n--- 5. TESTING SIGN-IN & ROLE-BASED ACCESS ---')
   const manual = (cookie) => ({ redirect: 'manual', headers: cookie ? { Cookie: cookie } : {} })
   const target = (res) => res.headers.get('location') ?? ''
 
