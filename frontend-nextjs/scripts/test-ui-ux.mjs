@@ -431,6 +431,27 @@ async function runAdminMutationTests() {
       recordTest('TC-ACT-07', 'Mirror Java Receipt Totals After Point Redemption', 'Admin Actions', 'FAIL', `total=${priced?.total}`)
     }
 
+    // TC-ACT-08: Offline sync loads queued orders back by their code
+    const { getMockOrdersByCode } = await import('../lib/db/mock-store.ts')
+    const queued = getMockOrdersByCode(['AC-9001', 'AC-NOT-THERE'])
+    if (queued.length === 1 && queued[0].orderCode === 'AC-9001' && queued[0].items.length === 1) {
+      recordTest('TC-ACT-08', 'Load Offline Orders by Code for Java Sync', 'Admin Actions', 'PASS', 'Unknown codes are skipped')
+    } else {
+      recordTest('TC-ACT-08', 'Load Offline Orders by Code for Java Sync', 'Admin Actions', 'FAIL', `found=${queued.length}`)
+    }
+
+    // TC-ACT-09: A new menu item reports its id so it can be linked to the Java menu item
+    const linked = createMockMenuItem({
+      name: 'Atiso Cold Tea', category: 'Tea', kind: 'menu', stockQty: 12, unit: 'cups', lowStockThreshold: 3,
+      costPrice: 1, sellPrice: 3.5, recipe: '', imageUrl: '', variations: [],
+    })
+    const linkedItem = getMockMenuItems().find(m => m.id === linked.id)
+    if (linked.ok && linkedItem?.name === 'Atiso Cold Tea') {
+      recordTest('TC-ACT-09', 'New Menu Item Returns Its Id for the Java Link', 'Admin Actions', 'PASS', `id ${linked.id}`)
+    } else {
+      recordTest('TC-ACT-09', 'New Menu Item Returns Its Id for the Java Link', 'Admin Actions', 'FAIL', linked.error ?? 'id missing')
+    }
+
   } catch (err) {
     recordTest('TC-ACT-01', 'Admin Server Actions & Mock Store Operations', 'Admin Actions', 'FAIL', err.message)
   }

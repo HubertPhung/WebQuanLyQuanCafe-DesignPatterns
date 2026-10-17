@@ -30,7 +30,6 @@ import {
   checkout,
   createJavaMenuItem,
   createReservation as createJavaReservation,
-  fetchMenu,
   findCustomerByPhone,
   payJavaOrder,
   transferReservation as transferJavaReservation,
@@ -38,10 +37,14 @@ import {
   updateJavaReservationStatus,
   updateJavaStock,
   updateTable,
+  syncJavaOrders,
   type CheckoutPayload,
   type CheckoutReceipt,
   type JavaResult,
+  type SyncOrderPayload,
 } from '@/lib/api-client'
+import { dequeueSync, enqueueSync, listSyncQueue } from '@/lib/admin/local-links'
+import { linkMenuItem, normalizeMenuName, resolveJavaMenuIds } from '@/lib/admin/menu-link'
 import {
   updateMockOrderStatus,
   markMockOrderPaid,
@@ -53,6 +56,7 @@ import {
   createMockReservation,
   createMockOrderFromItems,
   getMockOrder,
+  getMockOrdersByCode,
   updateMockReservationStatus,
   reservationStatuses,
   type ReservationStatusLabel,
@@ -210,7 +214,8 @@ type LocalMenuItem = Pick<MenuItem, 'id' | 'name' | 'kind' | 'inStock' | 'variat
 
 type CheckoutOutcome =
   | { kind: 'accepted'; receipt: CheckoutReceipt }
-  | { kind: 'local' }
+  // javaDown: Java did not answer, so pushing the local copy right away is pointless.
+  | { kind: 'local'; javaDown: boolean }
   | { kind: 'rejected'; error: string }
 
 async function loadLocalMenu(ids: number[]): Promise<LocalMenuItem[]> {
@@ -224,27 +229,25 @@ async function loadLocalMenu(ids: number[]): Promise<LocalMenuItem[]> {
   return getMockMenuItems().filter((item) => ids.includes(item.id))
 }
 
-function normalizeName(name: string) {
-  return name.normalize('NFC').trim().toLowerCase()
-}
-
-// The two stores number their menus independently, so lines are matched by name.
+// The two stores number their menus independently; menu-link keeps the id pairs.
 // A line the backend cannot price (unknown item, paid variation) keeps the order local.
 // Size L and toppings are sent as Java customizations, priced there by the Decorators.
-async function toJavaLines(lines: LocalOrderInput['lines'], localMenu: LocalMenuItem[]) {
-  const javaMenu = await fetchMenu()
-  if (!javaMenu.ok) return null
-  const javaIdByName = new Map(javaMenu.data.map((item) => [normalizeName(item.name), item.id]))
+async function toJavaLines(
+  lines: LocalOrderInput['lines'],
+  localMenu: LocalMenuItem[],
+): Promise<CheckoutPayload['lines'] | 'unreachable' | 'unmapped'> {
+  const javaIds = await resolveJavaMenuIds(localMenu)
+  if (!javaIds) return 'unreachable'
   const localById = new Map(localMenu.map((item) => [item.id, item]))
 
   const javaLines: CheckoutPayload['lines'] = []
   for (const line of lines) {
     const local = localById.get(line.menuItemId)
-    if (!local) return null
+    if (!local) return 'unmapped'
     const variation = line.variation ? local.variations.find((option) => option.name === line.variation) : undefined
-    if (variation && variation.price > 0) return null
-    const javaId = javaIdByName.get(normalizeName(local.name))
-    if (javaId === undefined) return null
+    if (variation && variation.price > 0) return 'unmapped'
+    const javaId = javaIds.get(local.id)
+    if (javaId === undefined) return 'unmapped'
     javaLines.push({ menuItemId: javaId, qty: line.qty, customizations: line.customizations ?? [] })
   }
   return javaLines
@@ -259,10 +262,11 @@ async function forwardCheckout(
   localMenu: LocalMenuItem[],
   member: MemberCheckout,
 ): Promise<CheckoutOutcome> {
-  // POST /api/checkout always takes payment, so open tabs stay on the local store.
-  if (!order.paid) return { kind: 'local' }
+  // POST /api/checkout always takes payment, so open tabs are recorded locally and synced.
+  if (!order.paid) return { kind: 'local', javaDown: false }
   const lines = await toJavaLines(order.lines, localMenu)
-  if (!lines) return { kind: 'local' }
+  if (lines === 'unreachable') return { kind: 'local', javaDown: true }
+  if (lines === 'unmapped') return { kind: 'local', javaDown: false }
 
   const receipt = await checkout({
     lines,
@@ -273,7 +277,14 @@ async function forwardCheckout(
     ...member,
   })
   if (receipt.ok) return { kind: 'accepted', receipt: receipt.data }
-  return receipt.unreachable ? { kind: 'local' } : { kind: 'rejected', error: receipt.error }
+  return receipt.unreachable ? { kind: 'local', javaDown: true } : { kind: 'rejected', error: receipt.error }
+}
+
+// Order codes the frontend issues itself; Java-priced orders keep the code Java returned.
+function newLocalOrderCode() {
+  const stamp = Date.now().toString(36).toUpperCase().slice(-6)
+  const random = Math.floor(Math.random() * 36 ** 3).toString(36).toUpperCase().padStart(3, '0')
+  return `AC-${stamp}-${random}`
 }
 
 async function recordOrderLocally(input: LocalOrderInput, quantities: Map<number, number>): Promise<ActionResult> {
@@ -397,16 +408,26 @@ export async function createOrder(input: NewOrderInput): Promise<ActionResult> {
     }
 
     const receipt = outcome.kind === 'accepted' ? outcome.receipt : undefined
+    const orderCode = receipt?.orderCode ?? newLocalOrderCode()
     const res = await recordOrderLocally(
       {
         ...order,
-        orderCode: receipt?.orderCode,
+        orderCode,
         totals: receipt ? { subtotal: receipt.subtotal, total: receipt.finalTotal } : undefined,
       },
       quantities,
     )
     refresh()
-    if (!res.ok || !receipt) return res
+    if (!res.ok) return res
+    if (!receipt) {
+      // Java has not seen this order: queue it, and push it at once unless Java just failed to answer.
+      await enqueueSync(orderCode)
+      if (outcome.kind === 'local' && outcome.javaDown) {
+        return { ok: true, message: `${res.message} Saved offline; it will be sent to the Java backend when it is back.` }
+      }
+      const pushed = await pushQueuedOrders([orderCode])
+      return pushed.sent > 0 ? { ok: true, message: `${res.message} Order ${orderCode} synced to the Java backend.` } : res
+    }
     const redeemed = receipt.pointsRedeemed > 0 ? ` Redeemed ${receipt.pointsRedeemed} points.` : ''
     const earned = receipt.pointsEarned > 0 ? ` Earned ${receipt.pointsEarned} points.` : ''
     return {
@@ -578,9 +599,7 @@ export async function transferReservationToPos(code: string, source: 'java' | 'l
 async function javaMenuIdFor(itemId: number): Promise<number | undefined> {
   const [local] = await loadLocalMenu([itemId])
   if (!local) return undefined
-  const javaMenu = await fetchMenu()
-  if (!javaMenu.ok) return undefined
-  return javaMenu.data.find((item) => normalizeName(item.name) === normalizeName(local.name))?.id
+  return (await resolveJavaMenuIds([local]))?.get(local.id)
 }
 
 const javaReservationStatus = {
@@ -693,56 +712,145 @@ export async function createMenuItem(input: NewItemInput): Promise<ActionResult>
     })
     if (!remote.ok && !remote.unreachable && remote.status !== 409) return { ok: false, error: remote.error }
 
-    if (!isDbConfigured || !db) {
-      const res = createMockMenuItem({
-        name,
-        category,
-        kind: input.kind === 'ingredient' ? 'ingredient' : 'menu',
-        stockQty: money(input.stockQty, 'Stock'),
-        unit: input.unit.trim().slice(0, 12) || 'pcs',
-        lowStockThreshold: money(input.lowStockThreshold, 'Low-stock threshold'),
-        costPrice: money(input.costPrice, 'Cost price'),
-        sellPrice: money(input.sellPrice, 'Selling price'),
-        recipe: input.recipe.trim().slice(0, 1000) || '',
-        imageUrl,
-        variations,
-      })
-      refresh()
-      return res.ok ? { ok: true, message: res.message } : { ok: false, error: res.error ?? 'Failed' }
+    const localInput = {
+      name,
+      category,
+      kind: input.kind === 'ingredient' ? ('ingredient' as const) : ('menu' as const),
+      stockQty: money(input.stockQty, 'Stock'),
+      unit: input.unit.trim().slice(0, 12) || 'pcs',
+      lowStockThreshold: money(input.lowStockThreshold, 'Low-stock threshold'),
+      costPrice: money(input.costPrice, 'Cost price'),
+      sellPrice: money(input.sellPrice, 'Selling price'),
+      recipe: input.recipe.trim().slice(0, 1000) || '',
+      imageUrl,
+      variations,
     }
 
-    try {
-      await db.insert(adminMenuItems).values({
-        name,
-        category,
-        kind: input.kind === 'ingredient' ? 'ingredient' : 'menu',
-        stockQty: money(input.stockQty, 'Stock'),
-        unit: input.unit.trim().slice(0, 12) || 'pcs',
-        lowStockThreshold: money(input.lowStockThreshold, 'Low-stock threshold'),
-        costPrice: money(input.costPrice, 'Cost price'),
-        sellPrice: money(input.sellPrice, 'Selling price'),
-        inStock: input.stockQty > 0,
-        recipe: input.recipe.trim().slice(0, 1000) || null,
-        imageUrl: imageUrl || null,
-        variations,
-      })
-    } catch {
-      createMockMenuItem({
-        name,
-        category,
-        kind: input.kind === 'ingredient' ? 'ingredient' : 'menu',
-        stockQty: money(input.stockQty, 'Stock'),
-        unit: input.unit.trim().slice(0, 12) || 'pcs',
-        lowStockThreshold: money(input.lowStockThreshold, 'Low-stock threshold'),
-        costPrice: money(input.costPrice, 'Cost price'),
-        sellPrice: money(input.sellPrice, 'Selling price'),
-        recipe: input.recipe.trim().slice(0, 1000) || '',
-        imageUrl,
-        variations,
-      })
+    let localId: number | undefined
+    if (!isDbConfigured || !db) {
+      const res = createMockMenuItem(localInput)
+      if (!res.ok) return { ok: false, error: res.error ?? 'Failed' }
+      localId = res.id
+    } else {
+      try {
+        const [row] = await db
+          .insert(adminMenuItems)
+          .values({
+            ...localInput,
+            inStock: input.stockQty > 0,
+            recipe: localInput.recipe || null,
+            imageUrl: imageUrl || null,
+          })
+          .returning({ id: adminMenuItems.id })
+        localId = row?.id
+      } catch {
+        localId = createMockMenuItem(localInput).id
+      }
     }
+    // Created on both sides: keep the id pair so stock changes and checkouts never rely on the name.
+    if (remote.ok && localId !== undefined) await linkMenuItem(localId, remote.data.id)
     refresh()
     return { ok: true, message: `${name} added.` }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+// Local copies of the given orders: the database first, then the mock store for the rest
+// (an order lands in the mock store when a database write failed).
+async function loadOrdersByCode(codes: string[]): Promise<Order[]> {
+  let found: Order[] = []
+  if (isDbConfigured && db) {
+    try {
+      found = await db.select().from(adminOrders).where(inArray(adminOrders.orderCode, codes))
+    } catch {
+      // Fall through to the mock store.
+    }
+  }
+  const missing = codes.filter((code) => !found.some((order) => order.orderCode === code))
+  return missing.length > 0 ? [...found, ...getMockOrdersByCode(missing)] : found
+}
+
+async function loadWholeLocalMenu(): Promise<LocalMenuItem[]> {
+  if (isDbConfigured && db) {
+    try {
+      return await db.select().from(adminMenuItems)
+    } catch {
+      // Fall through to the mock store.
+    }
+  }
+  return getMockMenuItems()
+}
+
+type PushSummary = { sent: number; failed: string[]; unreachable: boolean }
+
+// Sends queued local orders to POST /api/orders/sync (idempotent by order code) and removes
+// the ones Java now has. Orders that Java refuses stay queued with the reason reported.
+async function pushQueuedOrders(codes: string[]): Promise<PushSummary> {
+  const summary: PushSummary = { sent: 0, failed: [], unreachable: false }
+  if (codes.length === 0) return summary
+  const orders = await loadOrdersByCode(codes)
+  const gone = codes.filter((code) => !orders.some((order) => order.orderCode === code))
+  await dequeueSync(gone) // nothing left locally to send
+
+  const menu = await loadWholeLocalMenu()
+  const javaIds = await resolveJavaMenuIds(menu)
+  if (!javaIds) return { ...summary, unreachable: true }
+  const localIdByName = new Map(menu.map((item) => [normalizeMenuName(item.name), item.id]))
+
+  const payload: SyncOrderPayload[] = orders.map((order) => ({
+    orderCode: order.orderCode,
+    customer: order.customer,
+    tableId: order.tableId,
+    orderType: order.orderType,
+    paymentMethod: order.paymentMethod,
+    paid: order.paymentStatus === 'paid',
+    status: order.status,
+    createdAt: order.createdAt.toISOString(),
+    total: order.total,
+    lines: order.items.map((item) => {
+      const localId = localIdByName.get(normalizeMenuName(item.name))
+      return {
+        menuItemId: localId === undefined ? undefined : javaIds.get(localId),
+        name: item.name,
+        qty: item.qty,
+        price: item.price,
+        variation: item.variation,
+      }
+    }),
+  }))
+
+  for (let start = 0; start < payload.length; start += 200) {
+    const result = await syncJavaOrders(payload.slice(start, start + 200))
+    if (!result.ok) {
+      if (result.unreachable) return { ...summary, unreachable: true }
+      summary.failed.push(result.error)
+      continue
+    }
+    const done = result.data.results
+      .filter((row) => row.result !== 'failed' && row.orderCode)
+      .map((row) => row.orderCode as string)
+    await dequeueSync(done)
+    summary.sent += done.length
+    for (const row of result.data.results) {
+      if (row.result === 'failed') summary.failed.push(`${row.orderCode ?? '?'}: ${row.error ?? 'rejected'}`)
+    }
+  }
+  return summary
+}
+
+export async function syncOfflineOrders(): Promise<ActionResult> {
+  try {
+    assertAdminAccess()
+    const queued = await listSyncQueue()
+    if (queued.length === 0) return { ok: true, message: 'Nothing to sync: the Java backend has every order.' }
+    const summary = await pushQueuedOrders(queued)
+    refresh()
+    if (summary.unreachable) return { ok: false, error: 'Java backend is unreachable; the orders stay queued.' }
+    if (summary.failed.length > 0) {
+      return { ok: false, error: `Synced ${summary.sent}, ${summary.failed.length} refused: ${summary.failed.slice(0, 3).join('; ')}` }
+    }
+    return { ok: true, message: `Synced ${summary.sent} offline order(s) to the Java backend.` }
   } catch (error) {
     return fail(error)
   }

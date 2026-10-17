@@ -692,6 +692,11 @@ export function getMockOrder(orderId: number): Order | undefined {
   return getStore().orders.find((o) => o.id === orderId)
 }
 
+export function getMockOrdersByCode(codes: string[]): Order[] {
+  const wanted = new Set(codes)
+  return getStore().orders.filter((o) => wanted.has(o.orderCode))
+}
+
 export function updateMockOrderStatus(orderId: number, status: OrderStatus): { ok: boolean; error?: string } {
   const store = getStore()
   const order = store.orders.find((o) => o.id === orderId)
@@ -907,7 +912,7 @@ export type NewMockItemInput = {
   variations: Variation[]
 }
 
-export function createMockMenuItem(input: NewMockItemInput): { ok: boolean; message?: string; error?: string } {
+export function createMockMenuItem(input: NewMockItemInput): { ok: boolean; id?: number; message?: string; error?: string } {
   const store = getStore()
   const nextId = store.menuItems.reduce((max, m) => Math.max(max, m.id), 0) + 1
   const newItem: MenuItem = {
@@ -927,6 +932,6 @@ export function createMockMenuItem(input: NewMockItemInput): { ok: boolean; mess
     createdAt: new Date(),
   }
   store.menuItems.push(newItem)
-  return { ok: true, message: `${newItem.name} added.` }
+  return { ok: true, id: newItem.id, message: `${newItem.name} added.` }
 }
 

@@ -214,3 +214,53 @@ export type NewJavaMenuItem = {
 export function createJavaMenuItem(payload: NewJavaMenuItem): Promise<JavaResult<JavaMenuItem>> {
   return request<JavaMenuItem>('/api/menu', { method: 'POST', body: payload, role: 'MANAGER' })
 }
+
+export type SyncOrderPayload = {
+  orderCode: string
+  customer: string
+  tableId: number | null
+  orderType: string
+  paymentMethod: string
+  paid: boolean
+  status: string
+  createdAt: string
+  total: number
+  lines: { menuItemId?: number; name: string; qty: number; price: number; variation?: string }[]
+}
+
+export type SyncResult = {
+  created: number
+  existing: number
+  failed: number
+  results: { orderCode: string | null; result: 'created' | 'exists' | 'failed'; error?: string; warnings?: string[] }[]
+}
+
+// POST /api/orders/sync: imports orders recorded locally while Java was down (no payment is taken).
+export function syncJavaOrders(orders: SyncOrderPayload[]): Promise<JavaResult<SyncResult>> {
+  return request<SyncResult>('/api/orders/sync', { method: 'POST', body: { orders } })
+}
+
+export type JavaAnalytics = {
+  revenueToday: number
+  revenueYesterday: number
+  ordersToday: number
+  ordersYesterday: number
+  fulfillmentMinutesToday: number
+  fulfillmentMinutesYesterday: number
+  revenueByDay: { date: string; revenue: number; orders: number }[]
+  paymentMix: { cash: number; qr: number; card: number }
+  topItems: { name: string; qty: number; revenue: number }[]
+  tables: { total: number; occupied: number }
+}
+
+// GET /api/analytics/overview (MANAGER)
+export function fetchAnalytics(days: number): Promise<JavaResult<JavaAnalytics>> {
+  return request<JavaAnalytics>(`/api/analytics/overview?days=${days}`, { method: 'GET', role: 'MANAGER' })
+}
+
+export type JavaCustomerSummary = JavaCustomer & { lastVisit: string | null }
+
+// GET /api/customers
+export function fetchCustomers(): Promise<JavaResult<JavaCustomerSummary[]>> {
+  return request<JavaCustomerSummary[]>('/api/customers', { method: 'GET' })
+}
