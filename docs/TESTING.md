@@ -9,7 +9,7 @@ Tài liệu gom toàn bộ thông tin kiểm thử: cách chạy, danh mục tes
 
 | Bộ kiểm thử | Lệnh | Số ca | Chạy trên CI |
 | :--- | :--- | :---: | :---: |
-| JUnit 5 Backend | `cd backend-java && mvn clean test` | 204 | ✅ Job *Backend CI* |
+| JUnit 5 Backend | `cd backend-java && mvn clean test` | 205 | ✅ Job *Backend CI* |
 | UI/UX & Admin Actions | `cd frontend-nextjs && npm test` | 36 | ✅ Job *Frontend CI* |
 | Kiểu TypeScript | `cd frontend-nextjs && npx tsc --noEmit` | — | ✅ |
 | Build production | `cd frontend-nextjs && npm run build` | — | ✅ |
@@ -34,9 +34,9 @@ Tài liệu gom toàn bộ thông tin kiểm thử: cách chạy, danh mục tes
 | `patterns/ChainTest` | Giờ mở cửa, sức chứa, trùng lịch bàn, thứ tự mắt xích |
 | `patterns/ObserverTest` | Sự kiện *paid* (cộng điểm, bàn → `OCCUPIED`, phiếu KDS) và *completed* (bàn → `CLEANING`, không cộng điểm lần hai), đăng ký trùng, đơn chưa trả tiền, đơn mang đi, khách/bàn không tồn tại |
 | `dao/DaoLayerTest`, `model/ModelEntitiesTest` | Tầng DAO In-Memory và các thực thể |
-| `dao/JdbcIntegrationTest` | DAO JDBC trên PostgreSQL thật: nâng cấp schema chạy lại được, khoá ngoại chặn bàn không tồn tại, cột JSONB (`items`, `variations`, `pre_orders`), seed và sequence, mã `AC-0001` / `RES-0001`, pool kết nối, checkout qua Facade, bảng `users` (email duy nhất, đổi vai trò và khoá) |
-| `security/SecurityTest` | Băm PBKDF2 có salt và xác minh, token HS256 hết hạn và sai khoá, khoá sau nhiều lần sai, tạo admin đầu tiên, cấu hình từ biến môi trường (từ chối khoá dev khi `APP_ENV=production`), DAO tài khoản giữ email duy nhất |
-| `server/AuthTest` | Server chạy như production (không nhận `X-User-Role`): đăng ký thành `CUSTOMER`, token giả / `alg: none` / khoá khác bị từ chối, sai mật khẩu và email lạ trả cùng một lỗi, khoá sau 5 lần sai, ADMIN cấp tài khoản STAFF, đổi vai trò và khoá có hiệu lực với token cũ, quản trị viên cuối cùng được bảo vệ, đổi mật khẩu |
+| `dao/JdbcIntegrationTest` | DAO JDBC trên PostgreSQL thật: nâng cấp schema chạy lại được, khoá ngoại chặn bàn không tồn tại, cột JSONB (`items`, `variations`, `pre_orders`), seed và sequence, mã `AC-0001` / `RES-0001`, pool kết nối, checkout qua Facade, bảng `users` (email và Google id duy nhất) |
+| `security/SecurityTest` | Băm PBKDF2 có salt và xác minh, token HS256 hết hạn và sai khoá, khoá sau nhiều lần sai, tạo admin đầu tiên, cấu hình từ biến môi trường (từ chối khoá dev khi `APP_ENV=production`), DAO tài khoản giữ email và Google id duy nhất |
+| `server/AuthTest` | Server chạy như production (không nhận `X-User-Role`): đăng ký thành `CUSTOMER`, token giả / `alg: none` / khoá khác bị từ chối, sai mật khẩu và email lạ trả cùng một lỗi, khoá sau 5 lần sai, ADMIN cấp tài khoản STAFF, đổi vai trò và khoá có hiệu lực với token cũ, quản trị viên cuối cùng được bảo vệ, Google cần service key, liên kết khách hàng theo email đã xác minh và từ chối tài khoản nhân viên, đổi mật khẩu |
 | `server/ServerTest` | Định tuyến REST, mã lỗi, RBAC (chạy với `X-User-Role` cho gọn; mặc định từ chối, MANAGER cho tạo món và thống kê), 503 khi mất CSDL, `transfer-pos` qua Adapter, vòng đời đơn trên KDS và đồng bộ bàn, thanh toán đơn chuyển từ đặt bàn, đổi trạng thái phiếu, tạo món và chỉnh tồn kho, đổi điểm thành viên (kể cả không giảm quá hoá đơn), thống kê (chuỗi theo ngày, cơ cấu thanh toán, `days` sai), xem trước voucher, nhập đơn offline (idempotent, không trừ kho hai lần, dòng sai chỉ làm hỏng đơn đó), cài đặt `/api/config` (chỉ ADMIN, chuỗi đặt bàn đọc giá trị mới, cập nhật sai không đổi gì) |
 
 ---
@@ -104,7 +104,7 @@ Các mã dưới đây khớp chính xác với `frontend-nextjs/scripts/test-ui
 
 | Hạng mục | Kết quả |
 | :--- | :--- |
-| JUnit 5 (`mvn clean test`) | **168 / 168 PASS** (bộ test lúc chạy E2E; hiện là 204, xem mục 1) |
+| JUnit 5 (`mvn clean test`) | **168 / 168 PASS** (bộ test lúc chạy E2E; hiện là 205, xem mục 1) |
 | UI/UX (`npm test`, Java đang chạy) | **25 / 25 PASS** (hiện là 36, xem mục 3) |
 | TypeScript, build production | Không lỗi |
 | Cú pháp sơ đồ Mermaid (`mermaid.parse`, Mermaid 11) | Tất cả sơ đồ trong `docs/` hợp lệ |
@@ -181,5 +181,5 @@ Còn lại:
 1. **Món chỉ có ở frontend** hoặc biến thể có phụ thu vẫn được lưu cục bộ trước rồi mới đồng bộ (không qua Facade), nên không đổi điểm được (POS báo lỗi thay vì thu đủ tiền). Lần ghép đầu tiên của một món vẫn dựa vào tên.
 2. **Đồng bộ offline chỉ đẩy đơn mới.** Trạng thái KDS hay thanh toán đổi lúc Java tắt trên một đơn Java đã có sẽ không được gửi lại; đơn mới tạo lúc offline thì mang theo trạng thái mới nhất khi đồng bộ.
 3. **Cài đặt trong `SystemConfigManager` không được lưu bền**: khởi động lại Java là về mặc định.
-4. **Luồng đồng bộ phía frontend** (`pushQueuedOrders`) chưa có test tự động đầu-cuối; phần Java của nó có test trong `ServerTest`.
+4. **Luồng đồng bộ phía frontend** (`pushQueuedOrders`) và **đăng nhập Google thật** (đổi code với Google) chưa có test tự động đầu-cuối; phần Java của chúng có test trong `ServerTest` và `AuthTest`.
 5. **Khoá ngoại `NOT VALID`** không kiểm dữ liệu ghi trước khi nâng cấp, xem [DATABASE.md §4](DATABASE.md#4-giới-hạn-đã-biết).
