@@ -24,11 +24,11 @@
    - 3.1. Singleton Pattern - Quản lý Cấu hình Vận hành Quán Cà phê (`SystemConfigManager`)
    - 3.2. Factory Method Pattern - Khởi tạo Bộ xử lý Thanh toán Đa kênh (`PaymentProcessorFactory`)
    - 3.3. Builder Pattern - Xây dựng Đối tượng Đơn hàng Phức tạp (`OrderBuilder`)
-   - 3.4. Decorator Pattern - Tùy biến Đồ uống, Nâng Size và Thêm Topping Động (`ToppingDecorator`)
+   - 3.4. Decorator Pattern - Tùy biến Đồ uống, Nâng Size và Thêm Topping Động (`BeverageDecorator`)
    - 3.5. Adapter Pattern - Chuyển đổi Phiếu Đặt bàn sang Đơn hàng POS (`ReservationToOrderAdapter`)
    - 3.6. Facade Pattern - Đơn giản hóa Quy trình Chốt đơn & Thanh toán POS (`PosCheckoutFacade`)
-   - 3.7. Strategy Pattern - Đa chiến lược Tính Chiết khấu Mã giảm giá Voucher (`DiscountStrategy`)
-   - 3.8. Chain of Responsibility Pattern - Chuỗi Kiểm định Tính hợp lệ Đặt bàn (`ReservationValidator`)
+   - 3.7. Strategy Pattern - Tính giảm giá (`DiscountContext`)
+   - 3.8. Chain of Responsibility - Kiểm định đặt bàn (`ReservationValidatorHandler`)
    - 3.9. Observer Pattern - Tự động Tích điểm Loyalty & Đồng bộ Trạng thái Bàn (`OrderEventSubject`)
 4. [Đánh giá & Đề xuất mở rộng nâng cao](#4-đánh-giá--đề-xuất-mở-rộng-nâng-cao)
    - 4.1. State Pattern - Quản lý Vòng đời Trạng thái Đơn hàng & Bàn
@@ -263,75 +263,45 @@ frontend-nextjs/
 ```
 
 ### 1.4.2. Cấu trúc Cây Thư mục Backend Java thuần OOP Quy chuẩn (`backend-java`)
-Dưới đây là cấu trúc gói chuẩn Maven **Java SE thuần túy (Không dùng Spring Boot)** đang được áp dụng trong dự án để triển khai 9 GoF Patterns:
+Dưới đây là cấu trúc gói Maven **Java SE thuần túy (Không dùng Spring Boot)** thực tế của dự án. Mỗi pattern nằm trong một package riêng dưới `com.dalatcafe.patterns`, kèm một lớp kiểm thử JUnit 5 cùng tên trong `src/test/java/com/dalatcafe/patterns/`:
 
 ```text
 backend-java/
+├── pom.xml                                    # Java 17, JUnit 5, PostgreSQL JDBC driver
 └── src/
-    └── main/java/com/dalatcafe/
-        ├── Main.java                          # Điểm khởi chạy Java SE Application (Console/Server)
-        ├── server/                            # Giao tiếp HTTP thuần Java SE (Không framework)
-        │   ├── AppHttpServer.java             # Quản lý com.sun.net.httpserver.HttpServer (Port 8080)
-        │   └── handlers/                      # Các HttpHandler xử lý request & trả lời lời JSON
-        │       ├── MenuHttpHandler.java       # GET /api/menu
-        │       ├── TableHttpHandler.java      # GET, PUT /api/tables
-        │       ├── ReservationHttpHandler.java# POST /api/reservations (Gắn Chain Validator)
-        │       └── CheckoutHttpHandler.java   # POST /api/checkout (Gắn Facade)
-        ├── model/                             # Đối tượng Thực thể Nghiệp vụ (POJO thuần túy)
-        │   ├── BeverageItem.java              # Thông tin món nước cơ sở
-        │   ├── Table.java                     # Bàn phục vụ (ID, tên, sức chứa, trạng thái)
-        │   ├── Reservation.java               # Phiếu đặt bàn trước
-        │   ├── Order.java                     # Đơn hàng bán ra
-        │   ├── OrderItem.java                 # Chi tiết từng dòng món trong hóa đơn
-        │   ├── Customer.java                  # Thông tin khách hàng & điểm loyalty
-        │   └── Voucher.java                   # Thông tin mã ưu đãi giảm giá
-        ├── dao/                               # Tầng Truy xuất Dữ liệu (Data Access Object)
-        │   ├── IOrderDao.java
-        │   ├── ITableDao.java
-        │   ├── IReservationDao.java
-        │   └── InMemoryDatabase.java          # Bộ nhớ RAM lưu trữ dữ liệu mô phỏng
-        └── patterns/                          # ⭐ PACKAGE CHỨA 9 MẪU THIẾT KẾ GOF JAVA THUẦN
-            ├── creational/
-            │   ├── singleton/
-            │   │   └── SystemConfigManager.java
-            │   ├── factory/
-            │   │   ├── IPaymentProcessor.java
-            │   │   ├── CashPaymentProcessor.java
-            │   │   ├── MomoPaymentProcessor.java
-            │   │   ├── VnPayPaymentProcessor.java
-            │   │   └── PaymentProcessorFactory.java
-            │   └── builder/
-            │       └── OrderBuilder.java
-            ├── structural/
-            │   ├── decorator/
-            │   │   ├── IBeverage.java
-            │   │   ├── BaseDrinkItem.java
-            │   │   ├── ToppingDecorator.java
-            │   │   ├── PearlToppingDecorator.java
-            │   │   ├── CheeseFoamDecorator.java
-            │   │   └── UpsizeLargeDecorator.java
-            │   ├── adapter/
-            │   │   ├── IOrderTarget.java
-            │   │   └── ReservationToOrderAdapter.java
-            │   └── facade/
-            │       └── PosCheckoutFacade.java
-            └── behavioral/
-                ├── strategy/
-                │   ├── IDiscountStrategy.java
-                │   ├── PercentageDiscountStrategy.java
-                │   ├── FixedAmountDiscountStrategy.java
-                │   ├── TieredDiscountStrategy.java
-                │   └── DiscountContext.java
-                ├── chain/
-                │   ├── ReservationValidator.java
-                │   ├── CustomerInfoValidator.java
-                │   ├── ReservationTimeValidator.java
-                │   └── GuestCountValidator.java
-                └── observer/
-                    ├── IOrderObserver.java
-                    ├── OrderEventSubject.java
-                    ├── LoyaltyPointObserver.java
-                    └── TableStatusObserver.java
+    ├── main/java/com/dalatcafe/
+    │   ├── server/                            # HTTP thuần Java SE (com.sun.net.httpserver)
+    │   │   ├── MainServer.java                # Điểm khởi chạy, cổng mặc định 8080, đăng ký handler
+    │   │   ├── ApiHandler.java                # Lớp cơ sở: đọc JSON, envelope {ok, data | error, code}
+    │   │   ├── MenuHandler.java               # GET /api/menu
+    │   │   ├── TableHandler.java              # GET /api/tables, PUT|PATCH /api/tables/{id}
+    │   │   ├── ReservationHandler.java        # GET|POST /api/reservations (gắn Chain of Responsibility)
+    │   │   ├── CheckoutHandler.java           # POST /api/checkout (gắn Facade, Strategy, Observer)
+    │   │   ├── SimpleAuthFilter.java          # RBAC theo header X-User-Role
+    │   │   ├── CorsHandler.java, Json.java, ApiException.java
+    │   ├── model/                             # POJO: Order, OrderItem, MenuItem, Variation, Table,
+    │   │                                      #       Reservation, Customer và các enum trạng thái
+    │   ├── dao/                               # DAO: I*Dao, InMemory*Dao, Jdbc*Dao, DaoFactory, DaoMode,
+    │   │                                      #      InMemoryDatabase, JdbcDatabase
+    │   └── patterns/
+    │       ├── singleton/   SystemConfigManager
+    │       ├── factory/     IPaymentProcessor, CashPaymentProcessor, MomoQrPaymentProcessor,
+    │       │                CardPosPaymentProcessor, PaymentProcessorFactory, PaymentResult
+    │       ├── builder/     OrderBuilder
+    │       ├── decorator/   IBeverage, BaseCoffee, BeverageDecorator, LargeSizeDecorator,
+    │       │                CheeseFoamDecorator, PearlToppingDecorator
+    │       ├── adapter/     IPosOrderTarget, ReservationToOrderAdapter
+    │       ├── facade/      PosCheckoutFacade, CheckoutRequest, CheckoutLine, CheckoutResult, Customization
+    │       ├── strategy/    IDiscountStrategy, PercentageDiscountStrategy, FixedAmountDiscountStrategy,
+    │       │                LoyaltyTierDiscountStrategy, NoDiscountStrategy, DiscountContext, DiscountAmounts
+    │       ├── chain/       ReservationValidatorHandler, OperatingHoursValidator, CapacityGuestValidator,
+    │       │                TableAvailabilityValidator, ValidationResult, ReservationValidationChainFactory
+    │       └── observer/    IOrderObserver, OrderEventSubject, LoyaltyPointObserver,
+    │                        TableStatusSyncObserver, KitchenNotificationObserver
+    └── test/java/com/dalatcafe/
+        ├── patterns/        SingletonTest, FactoryTest, BuilderTest, DecoratorTest, AdapterTest,
+        │                    FacadeTest, StrategyTest, ChainTest, ObserverTest
+        ├── dao/DaoLayerTest, model/ModelEntitiesTest, server/ServerTest, SanityTest
 ```
 
 ---
@@ -339,7 +309,7 @@ backend-java/
 ## 1.5. Cơ chế Giao tiếp Frontend – Backend & Xử lý Dữ liệu
 
 ### 1.5.1. Hiện trạng Thực tế trong Mã nguồn Frontend Next.js
-Trong mã nguồn hiện tại, Frontend Next.js đang hoạt động hoàn toàn độc lập và tự chủ (Self-contained) thông qua hai cơ chế xử lý dữ liệu:
+Frontend Next.js vẫn tự chạy được khi không có Backend Java (Self-contained) nhờ hai cơ chế xử lý dữ liệu dưới đây; khi Backend Java hoạt động, các thao tác POS được chuyển tiếp như mô tả tại mục 1.5.2:
 1. **Next.js Server Actions (`frontend-nextjs/app/admin/actions.ts`):**
    - Đảm nhận toàn bộ các thao tác ghi dữ liệu của phân hệ Admin: `createOrder` (tạo đơn hàng từ POS), `updateOrderStatus` (đổi trạng thái đơn trong KDS), `markOrderPaid` (chốt thanh toán tại bàn), `toggleItemInStock` (bật/tắt bán món), `createMenuItem` (thêm món mới).
    - Cơ chế hoạt động: Chạy trực tiếp trên Server Next.js, gọi trực tiếp vào Drizzle ORM (nếu cấu hình PostgreSQL) hoặc tự động chuyển hướng sang In-memory Mock Store (`lib/db/mock-store.ts`). Sau khi thao tác thành công, Server Action gọi `revalidatePath('/admin', 'layout')` để tự động làm mới giao diện người dùng mà không cần reload trang.
@@ -349,15 +319,15 @@ Trong mã nguồn hiện tại, Frontend Next.js đang hoạt động hoàn toà
 3. **Cơ chế chịu lỗi (Fault-Tolerance & Resilience):**
    - Nếu không có cơ sở dữ liệu bên ngoài (`process.env.DATABASE_URL` rỗng hoặc kết nối DB thất bại), toàn bộ hệ thống tự động kích hoạt `mock-store.ts` với đầy đủ dữ liệu mẫu (15 bàn phục vụ, 14 món thực đơn, lịch sử đơn hàng và khách hàng) đảm bảo tỷ lệ lỗi crash là 0%.
 
-### 1.5.2. Đặc tả Kiến trúc Giao tiếp Tích hợp với Backend Java thuần
-Khi tích hợp cùng phân hệ Backend Java SE, cơ chế giao tiếp sẽ được thiết lập theo chuẩn RESTful HTTP với các thông số kỹ thuật như sau:
-- **Giao thức trao đổi:** HTTP 1.1 / JSON (MIME type: `application/json; charset=UTF-8`).
-- **Địa chỉ máy chủ Java Backend (dự kiến):** `http://localhost:8080` (hoặc cấu hình qua biến môi trường `JAVA_BACKEND_URL`).
-- **Các Endpoint chuẩn mực do Backend Java cung cấp:**
-  - `GET /api/menu`: Trả về danh sách thực đơn đồ uống và nguyên liệu.
-  - `GET /api/tables`: Trả về danh sách bàn và trạng thái thời gian thực (`available`, `occupied`, `reserved`, `cleaning`).
-  - `POST /api/reservations`: Tiếp nhận yêu cầu đặt bàn trực tuyến, chạy qua chuỗi **Chain of Responsibility** để kiểm tra tính hợp lệ trước khi ghi nhận.
-  - `POST /api/checkout`: Tiếp nhận gói tin thanh toán đơn hàng từ quầy POS, kích hoạt **PosCheckoutFacade** để tính giá Decorator, trừ Voucher Strategy, thanh toán Factory và phát thông báo Observer.
+### 1.5.2. Kiến trúc Giao tiếp Tích hợp với Backend Java thuần (Issue #14)
+Server Actions chuyển tiếp nghiệp vụ POS sang Backend Java SE qua lớp proxy `frontend-nextjs/lib/api-client.ts` theo chuẩn RESTful HTTP:
+- **Giao thức trao đổi:** HTTP 1.1 / JSON (MIME type: `application/json; charset=UTF-8`), envelope `{ ok, data, message }` hoặc `{ ok: false, error, code }`.
+- **Địa chỉ máy chủ Java Backend:** `http://localhost:8080` mặc định, cấu hình qua biến môi trường `JAVA_BACKEND_URL` (giá trị `off` để tắt). Mỗi request gửi header `X-User-Role: STAFF` và hết hạn sau 2,5 giây.
+- **Ánh xạ Server Action → Endpoint Java:**
+  - `createOrder` → `POST /api/checkout` (chỉ đơn đã thanh toán): kích hoạt **PosCheckoutFacade** (Decorator, Builder, Strategy, Factory, Observer). Món được ghép theo **tên** qua `GET /api/menu` vì hai kho đánh số món độc lập; đơn thành công được ghi lại cục bộ với mã đơn do Java cấp để KDS và sơ đồ bàn hiển thị.
+  - `updateTableStatus` → `PUT /api/tables/{id}`: Java kiểm tra số khách theo sức chứa bàn.
+  - `createReservation` → `POST /api/reservations`: chạy chuỗi **Chain of Responsibility** trước khi ghi nhận.
+- **Quy tắc chịu lỗi (Zero-Crash):** Java trả 4xx → báo lỗi nghiệp vụ cho nhân viên, không ghi dữ liệu. Java không phản hồi (lỗi mạng, quá hạn, 5xx) → tự động ghi vào Mock Store cục bộ. Món Java không có hoặc tuỳ chọn có phụ thu → giữ đơn ở kho cục bộ thay vì gửi sang Java với giá sai.
 
 ---
 
@@ -400,15 +370,15 @@ Dự án áp dụng trọn vẹn **9 Design Patterns chuẩn Gang of Four (GoF)*
 
 | STT | Tên Pattern | Phân nhóm GoF | Bài toán thực tế trong Quán Cà phê | Các Class / Interface Java thuần chính | Ánh xạ Giao diện Frontend Next.js | Trạng thái Dự án |
 | :---: | :--- | :--- | :--- | :--- | :--- | :--- |
-| **01** | **Singleton** | Creational | Quản lý thông số vận hành toàn cục (giờ mở/đóng cửa, tỷ lệ tích điểm, thời gian tự động hủy bàn) với duy nhất 1 thể hiện trong JVM. | `SystemConfigManager.java` | Màn hình `Settings` (`/admin/settings`) và logic tính điểm POS. | Bản đặc tả thiết kế Java |
-| **02** | **Factory Method** | Creational | Khởi tạo linh hoạt đối tượng xử lý thanh toán theo phương thức khách chọn (`Tiền mặt`, ví `MoMo`, cổng `VNPay`) không dùng `if-else` cứng. | `IPaymentProcessor.java`<br>`PaymentProcessorFactory.java`<br>`CashPaymentProcessor.java`<br>`MomoPaymentProcessor.java`<br>`VnPayPaymentProcessor.java` | Nút chọn phương thức thanh toán tại quầy POS (`pos-terminal.tsx`). | Bản đặc tả thiết kế Java |
-| **03** | **Builder** | Creational | Xây dựng từng bước đối tượng Đơn hàng (`Order`) phức tạp có nhiều trường tùy chọn (bàn, khách, loại đơn, voucher, topping, ghi chú). | `OrderBuilder.java`<br>`Order.java`<br>`OrderItem.java` | Thao tác lên đơn và thanh toán trên POS (`pos-terminal.tsx`). | Bản đặc tả thiết kế Java |
-| **04** | **Decorator** | Structural | Bọc món nước cơ sở để cộng dồn giá tiền và mô tả khi khách chọn thêm Topping (Trân châu, Kem Cheese) hoặc nâng Size L. | `IBeverage.java`<br>`BaseDrinkItem.java`<br>`ToppingDecorator.java`<br>`PearlToppingDecorator.java`<br>`CheeseFoamDecorator.java`<br>`UpsizeLargeDecorator.java` | Modal tùy biến đồ uống `DrinkMenu.tsx` & chọn biến thể trên POS. | Bản đặc tả thiết kế Java |
-| **05** | **Adapter** | Structural | Chuyển đổi đối tượng Phiếu đặt bàn trước (`Reservation`) sang Đơn hàng POS (`Order`) khi khách đến nhận bàn mà không sửa code cũ. | `IOrderTarget.java`<br>`ReservationToOrderAdapter.java`<br>`Reservation.java` | Nút "Chuyển sang POS" trong `reservations-management.tsx`. | Bản đặc tả thiết kế Java |
-| **06** | **Facade** | Structural | Cung cấp giao diện mặt tiền duy nhất (`checkoutOrder`) gom toàn bộ quy trình phức tạp: tính giá, trừ voucher, thanh toán, lưu đơn, phát sự kiện. | `PosCheckoutFacade.java` | Nút "Thanh toán & in hóa đơn" trên POS (`pos-terminal.tsx`). | Bản đặc tả thiết kế Java |
-| **07** | **Strategy** | Behavioral | Hoán đổi linh hoạt thuật toán chiết khấu Voucher (`Phần trăm`, `Số tiền cố định`, `Bậc thang`) tại thời điểm chạy (Runtime). | `IDiscountStrategy.java`<br>`PercentageDiscountStrategy.java`<br>`FixedAmountDiscountStrategy.java`<br>`TieredDiscountStrategy.java`<br>`DiscountContext.java` | Ô nhập mã giảm giá (`WELCOME10`) trong giỏ hàng `cart-store.ts`. | Bản đặc tả thiết kế Java |
-| **08** | **Chain of Resp.** | Behavioral | Chuỗi mắt xích kiểm tra tính hợp lệ của đơn Đặt bàn: Thông tin khách ➔ Giờ mở cửa & đặt trước 1h ➔ Số lượng khách (1–20 người). | `ReservationValidator.java`<br>`CustomerInfoValidator.java`<br>`ReservationTimeValidator.java`<br>`GuestCountValidator.java` | Form đặt bàn và danh sách duyệt đơn `reservations-management.tsx`. | Bản đặc tả thiết kế Java |
-| **09** | **Observer** | Behavioral | Khi đơn hàng thanh toán thành công, tự động thông báo để cộng điểm thành viên và cập nhật sơ đồ bàn sang `Occupied` hoặc `Cleaning`. | `IOrderObserver.java`<br>`OrderEventSubject.java`<br>`LoyaltyPointObserver.java`<br>`TableStatusObserver.java` | Sơ đồ bàn `FloorPlan.tsx` và xếp hạng khách hàng `customers/page.tsx`. | Bản đặc tả thiết kế Java |
+| **01** | **Singleton** | Creational | Quản lý thông số vận hành toàn cục (giờ mở/đóng cửa, tỷ lệ tích điểm, thời gian tự động hủy bàn) với duy nhất 1 thể hiện trong JVM. | `SystemConfigManager` | Màn hình `Settings` (`/admin/settings`) và logic tính điểm POS. | Đã cài đặt (#03), `SingletonTest` |
+| **02** | **Factory Method** | Creational | Khởi tạo bộ xử lý thanh toán theo phương thức khách chọn (`Tiền mặt`, `QR MoMo`, `Thẻ POS`) không dùng `if-else` cứng. | `IPaymentProcessor`<br>`PaymentProcessorFactory`<br>`CashPaymentProcessor`<br>`MomoQrPaymentProcessor`<br>`CardPosPaymentProcessor` | Nút chọn phương thức thanh toán tại quầy POS (`pos-terminal.tsx`). | Đã cài đặt (#04), `FactoryTest` |
+| **03** | **Builder** | Creational | Xây dựng từng bước đối tượng Đơn hàng (`Order`) có nhiều trường tùy chọn (bàn, khách, loại đơn, món, thanh toán, giảm giá, ghi chú). | `OrderBuilder`<br>`Order`<br>`OrderItem` | Thao tác lên đơn và thanh toán trên POS (`pos-terminal.tsx`). | Đã cài đặt (#06), `BuilderTest` |
+| **04** | **Decorator** | Structural | Bọc món nước cơ sở để cộng dồn giá tiền và mô tả khi khách chọn thêm Topping (Trân châu, Cheese Foam) hoặc nâng Size L. | `IBeverage`<br>`BaseCoffee`<br>`BeverageDecorator`<br>`LargeSizeDecorator`<br>`CheeseFoamDecorator`<br>`PearlToppingDecorator` | Modal tùy biến đồ uống `DrinkMenu.tsx` & chọn biến thể trên POS. | Đã cài đặt (#05), `DecoratorTest` |
+| **05** | **Adapter** | Structural | Chuyển đổi Phiếu đặt bàn trước (`Reservation`) sang Đơn hàng POS (`Order`) khi khách đến nhận bàn mà không sửa code cũ. | `IPosOrderTarget`<br>`ReservationToOrderAdapter` | Nút "Chuyển sang POS" trong `reservations-management.tsx`. | Đã cài đặt (#10), `AdapterTest` |
+| **06** | **Facade** | Structural | Một lời gọi `checkout(CheckoutRequest)` gom toàn bộ quy trình: tính giá, giảm giá, giữ kho, thanh toán, lưu đơn, phát sự kiện. | `PosCheckoutFacade`<br>`CheckoutRequest`<br>`CheckoutResult` | Nút thanh toán trên POS (`pos-terminal.tsx`) qua `POST /api/checkout`. | Đã cài đặt (#11), `FacadeTest` |
+| **07** | **Strategy** | Behavioral | Hoán đổi thuật toán giảm giá (`Phần trăm có trần`, `Số tiền cố định`, `Hạng thành viên`, `Không giảm`) tại thời điểm chạy. | `IDiscountStrategy`<br>`PercentageDiscountStrategy`<br>`FixedAmountDiscountStrategy`<br>`LoyaltyTierDiscountStrategy`<br>`NoDiscountStrategy`<br>`DiscountContext` | Mã giảm giá `WELCOME10` và ưu đãi khách quen khi checkout. | Đã cài đặt (#07), `StrategyTest` |
+| **08** | **Chain of Resp.** | Behavioral | Chuỗi kiểm tra phiếu đặt bàn: Giờ mở cửa ➔ Bàn tồn tại & sức chứa (1–20 khách) ➔ Không trùng lịch bàn. | `ReservationValidatorHandler`<br>`OperatingHoursValidator`<br>`CapacityGuestValidator`<br>`TableAvailabilityValidator`<br>`ReservationValidationChainFactory` | Đặt bàn qua `POST /api/reservations` và màn hình `reservations-management.tsx`. | Đã cài đặt (#09), `ChainTest` |
+| **09** | **Observer** | Behavioral | Khi đơn hàng hoàn tất, tự động cộng điểm thành viên, chuyển bàn sang `Cleaning` và báo bếp gỡ phiếu. | `IOrderObserver`<br>`OrderEventSubject`<br>`LoyaltyPointObserver`<br>`TableStatusSyncObserver`<br>`KitchenNotificationObserver` | Sơ đồ bàn `FloorPlan.tsx`, KDS và xếp hạng khách hàng `customers/page.tsx`. | Đã cài đặt (#08), `ObserverTest` |
 
 ---
 
@@ -426,7 +396,7 @@ Dự án áp dụng trọn vẹn **9 Design Patterns chuẩn Gang of Four (GoF)*
   | :--- | :--- | :--- |
   | **Singleton** | `SystemConfigManager` | Chứa constructor `private`, biến tĩnh `instance` và các thông số cấu hình vận hành |
   | **Global Accessor** | `getInstance()` | Phương thức tĩnh công khai cung cấp điểm truy cập toàn cục duy nhất đến instance |
-  | **Client** | `LoyaltyPointObserver`, `ReservationTimeValidator` | Gọi `SystemConfigManager.getInstance()` để lấy thông số nghiệp vụ |
+  | **Client** | `LoyaltyPointObserver`, `OperatingHoursValidator`, `CheckoutHandler` | Gọi `SystemConfigManager.getInstance()` để lấy thông số nghiệp vụ |
 
 - **Sơ đồ lớp (Class Diagram):**
 ```mermaid
@@ -453,12 +423,12 @@ classDiagram
         +onOrderCompleted(Order order) void
     }
 
-    class ReservationTimeValidator {
-        +validate(Reservation reservation) boolean
+    class OperatingHoursValidator {
+        +validate(Reservation reservation) ValidationResult
     }
 
     LoyaltyPointObserver --> SystemConfigManager : uses getInstance()
-    ReservationTimeValidator --> SystemConfigManager : uses getInstance()
+    OperatingHoursValidator --> SystemConfigManager : uses getInstance()
 ```
 
 - **Mã nguồn minh họa (Pure Java):**
@@ -843,7 +813,7 @@ IBeverage drink = new PearlToppingDecorator(
 
 ### 3.5. Adapter Pattern - Chuyển đổi Phiếu Đặt bàn sang Đơn hàng POS (`ReservationToOrderAdapter`)
 - **Bài toán thực tế trong nghiệp vụ:**  
-  Trên màn hình Quản lý Đặt bàn (`reservations-management.tsx`), khi khách đã đặt chỗ trước đến quán, nhân viên thu ngân nhấn nút "Chuyển đơn sang POS" (`handleTransferToPOS`). Đối tượng Phiếu đặt bàn (`Reservation`) có các thuộc tính: `customer`, `contact`, `table`, `dateTime`, `guests`, và danh sách món gọi trước `preOrders`. Trong khi đó, màn hình POS chỉ làm việc với giao diện chuẩn `IOrderTarget` (chứa `getOrderCode()`, `getCustomerName()`, `getTableId()`, `getLineItems()`, `calculateInitialTotal()`). Cấu trúc hai bên không tương thích trực tiếp.
+  Trên màn hình Quản lý Đặt bàn (`reservations-management.tsx`), khi khách đã đặt chỗ trước đến quán, nhân viên thu ngân nhấn nút "Chuyển đơn sang POS" (`handleTransferToPOS`). Đối tượng Phiếu đặt bàn (`Reservation`) có các thuộc tính: `customer`, `contact`, `table`, `dateTime`, `guests`, và danh sách món gọi trước `preOrders`. Trong khi đó, màn hình POS chỉ làm việc với giao diện chuẩn `IPosOrderTarget` (chứa `toPosOrder()`, `getAssignedTableId()`, `getCustomerIdentifier()`). Cấu trúc hai bên không tương thích trực tiếp.
 - **Giải pháp kỹ thuật (Pure Java OOP):**  
   Áp dụng **Object Adapter Pattern**. Màn hình POS chỉ làm việc với giao diện đích `IPosOrderTarget`. Lớp `ReservationToOrderAdapter` giữ một `Reservation` (Adaptee, không nhận `null`) và chuyển đổi khi được gọi: mã đặt bàn trở thành mã đơn, các món đặt trước (`preOrders`) được **sao chép** thành `OrderItem` mới, đơn mới có loại `DINE_IN`, trạng thái `PENDING`, thanh toán `UNPAID` và tổng tiền được tính lại. Adapter chỉ đọc Adaptee, không sửa `Reservation` hay `Order` gốc.
 - **Bảng ánh xạ thành phần (Participants Mapping):**
@@ -946,110 +916,136 @@ public class ReservationToOrderAdapter implements IPosOrderTarget {
   Quy trình hoàn tất một đơn hàng tại quầy thu ngân POS (`pos-terminal.tsx`) bao gồm rất nhiều hệ thống con phối hợp:
   1. Tính tiền từng món đồ uống (áp dụng Decorator nếu có Topping).
   2. Tính chiết khấu giảm giá Voucher thông qua Strategy Pattern (`DiscountContext`).
-  3. Trừ tiền quy đổi từ điểm tích lũy thành viên (`SystemConfigManager`).
+  3. Trừ tiền quy đổi từ điểm tích lũy thành viên (`SystemConfigManager`). *Hiện chưa hỗ trợ khi checkout: API trả lỗi nếu `useLoyaltyPoints > 0`.*
   4. Cộng thuế VAT (8%).
   5. Khởi tạo đối tượng xử lý thanh toán qua Factory (`PaymentProcessorFactory`) và thực hiện thanh toán.
   6. Lưu trữ thông tin đơn hàng vào hệ thống lưu trữ (DAO).
   7. Phát sự kiện hoàn tất đơn hàng cho các bên theo dõi (Observer) để cộng điểm và cập nhật trạng thái bàn.
   Nếu để Controller hoặc Handler xử lý trực tiếp toàn bộ 7 bước trên, mã nguồn sẽ bị phân mảnh, liên kết chặt (High Coupling) và cực kỳ khó kiểm thử.
 - **Giải pháp kỹ thuật (Pure Java OOP):**  
-  Áp dụng **Facade Pattern**. Xây dựng lớp mặt tiền `PosCheckoutFacade` che giấu toàn bộ độ phức tạp của các hệ thống con bên dưới. Tầng HTTP Handler chỉ cần gọi duy nhất một phương thức: `PosCheckoutFacade.checkout(CheckoutRequest request)` để hoàn thành giao dịch an toàn và toàn vẹn.
+  Áp dụng **Facade Pattern**. `PosCheckoutFacade` cung cấp một lời gọi duy nhất `checkout(CheckoutRequest)` (được đồng bộ hóa) và trả về `CheckoutResult` thay vì ném ngoại lệ cho lỗi nghiệp vụ. Bên trong, Facade điều phối năm pattern khác theo thứ tự đảm bảo nhất quán:
+  1. Tra menu qua `IMenuDao`, kiểm tra món tồn tại, còn bán và đủ tồn kho (`NOT_FOUND` / `OUT_OF_STOCK`).
+  2. Bọc từng món bằng **Decorator** theo `Customization` (`SIZE_L`, `CHEESE_FOAM`, `WHITE_PEARL`), dựng đơn bằng **Builder**, áp giảm giá bằng **Strategy** (`DiscountContext`).
+  3. Giữ chỗ tồn kho; nếu thất bại thì hoàn lại phần đã trừ.
+  4. Tạo bộ xử lý qua **Factory** và thanh toán; đơn được giảm còn 0 VNĐ thì không thu tiền. Thanh toán lỗi → hoàn tồn kho, `PAYMENT_FAILED`.
+  5. Đánh dấu `PAID` / `COMPLETED` và lưu qua `IOrderDao`; lưu lỗi → hoàn tồn kho, `PERSISTENCE_FAILED` kèm mã giao dịch cần hủy.
+  6. Phát sự kiện cho các **Observer**; lỗi của observer chỉ thành cảnh báo trong `CheckoutResult.getWarnings()`, không hoàn tác đơn đã lưu.
+
+  `CheckoutHandler` (`POST /api/checkout`) là client: chuyển JSON thành `CheckoutRequest`, gọi Facade và ánh xạ `FailureType` sang mã HTTP (404, 409, 400, 503).
 - **Bảng ánh xạ thành phần (Participants Mapping):**
-  | Vai trò GoF | Class Java | Trách nhiệm cụ thể |
+  | Vai trò GoF | Class / Interface Java | Trách nhiệm cụ thể |
   | :--- | :--- | :--- |
-  | **Facade** | `PosCheckoutFacade` | Giao diện mặt tiền đơn giản hóa toàn bộ quy trình chốt đơn POS |
-  | **Subsystem 1** | `OrderBuilder` | Xây dựng đối tượng đơn hàng hợp lệ |
-  | **Subsystem 2** | `DiscountContext` | Tính toán số tiền được giảm giá theo voucher |
-  | **Subsystem 3** | `PaymentProcessorFactory` | Cung cấp bộ xử lý thanh toán (Cash / MoMo / VNPay) |
-  | **Subsystem 4** | `OrderEventSubject` | Phát thông báo hoàn tất đơn cho các module lắng nghe |
-  | **Subsystem 5** | `IOrderDao` | Lưu thông tin đơn vào cơ sở dữ liệu |
+  | **Facade** | `PosCheckoutFacade` | Điểm vào duy nhất cho toàn bộ quy trình chốt đơn |
+  | **Dữ liệu vào** | `CheckoutRequest`, `CheckoutLine`, `Customization` | Dòng món, bàn, loại đơn, phương thức thanh toán, khách, strategy giảm giá, ghi chú |
+  | **Dữ liệu ra** | `CheckoutResult` (`FailureType`) | Thành công kèm `Order` và `PaymentResult`, hoặc loại lỗi và thông báo |
+  | **Subsystems** | `OrderBuilder`, `BeverageDecorator`, `DiscountContext`, `PaymentProcessorFactory`, `OrderEventSubject`, `IOrderDao`, `IMenuDao` | Các thành phần được Facade điều phối |
+  | **Client** | `CheckoutHandler` | Endpoint REST gọi Facade |
 
 - **Sơ đồ lớp (Class Diagram):**
 ```mermaid
 classDiagram
     class PosCheckoutFacade {
-        -OrderEventSubject eventSubject
         -IOrderDao orderDao
-        +checkout(CheckoutRequest req) CheckoutResponse
+        -IMenuDao menuDao
+        -OrderEventSubject eventSubject
+        +PosCheckoutFacade(IOrderDao orderDao, IMenuDao menuDao, OrderEventSubject eventSubject)
+        +getEventSubject() OrderEventSubject
+        +checkout(CheckoutRequest request) CheckoutResult
+        -buildOrder(CheckoutRequest request, Map menu) Order
+        -decorate(MenuItem item, CheckoutLine line) IBeverage
+        -reserveStock(Map demand) boolean
+        -releaseStock(Map demand)
     }
 
-    class OrderBuilder {
-        +build() Order
+    class CheckoutRequest {
+        <<final>>
+        +getLines() List~CheckoutLine~
+        +getTableId() Integer
+        +getOrderType() OrderType
+        +getPaymentMethod() PaymentMethod
+        +getCustomer() Customer
+        +getDiscountStrategy() IDiscountStrategy
+        +getNote() String
     }
 
-    class DiscountContext {
-        +executeDiscount(double total) double
+    class CheckoutLine {
+        <<final>>
+        +getMenuItemId() int
+        +getQuantity() int
+        +getCustomizations() Set~Customization~
     }
 
-    class PaymentProcessorFactory {
-        +static getProcessor(String method) IPaymentProcessor
+    class CheckoutResult {
+        <<final>>
+        +isSuccess() boolean
+        +getOrder() Order
+        +getPaymentResult() PaymentResult
+        +getFailureType() FailureType
+        +getMessage() String
+        +getWarnings() List~String~
     }
 
-    class OrderEventSubject {
-        +notifyObservers(Order order) void
+    class CheckoutHandler {
+        #route(HttpExchange exchange)
     }
 
-    PosCheckoutFacade ..> OrderBuilder : uses
-    PosCheckoutFacade ..> DiscountContext : uses
-    PosCheckoutFacade ..> PaymentProcessorFactory : uses
-    PosCheckoutFacade ..> OrderEventSubject : uses
+    CheckoutHandler --> PosCheckoutFacade : checkout()
+    PosCheckoutFacade ..> CheckoutRequest : reads
+    PosCheckoutFacade ..> CheckoutResult : returns
+    CheckoutRequest *--> CheckoutLine
+    PosCheckoutFacade ..> OrderBuilder : Builder
+    PosCheckoutFacade ..> BeverageDecorator : Decorator
+    PosCheckoutFacade ..> DiscountContext : Strategy
+    PosCheckoutFacade ..> PaymentProcessorFactory : Factory
+    PosCheckoutFacade --> OrderEventSubject : Observer
+    PosCheckoutFacade --> IOrderDao
+    PosCheckoutFacade --> IMenuDao
 ```
 
-- **Mã nguồn minh họa (Pure Java):**
+- **Mã nguồn thực tế** (`backend-java/src/main/java/com/dalatcafe/patterns/facade/PosCheckoutFacade.java`, rút gọn phần thanh toán và lưu đơn):
 ```java
-package com.dalatcafe.patterns.facade;
-
-public class PosCheckoutFacade {
-    private final OrderEventSubject eventSubject;
-    private final IOrderDao orderDao;
-
-    public PosCheckoutFacade(OrderEventSubject eventSubject, IOrderDao orderDao) {
-        this.eventSubject = eventSubject;
-        this.orderDao = orderDao;
+public synchronized CheckoutResult checkout(CheckoutRequest request) {
+    Objects.requireNonNull(request, "Request must not be null");
+    Map<Integer, MenuItem> menu = new LinkedHashMap<>();
+    Map<Integer, Integer> demand = new LinkedHashMap<>();
+    CheckoutResult problem = resolveMenu(request, menu, demand);
+    if (problem != null) {
+        return problem;
     }
-
-    public CheckoutResponse checkout(CheckoutRequest req) {
-        // 1. Tính tổng tiền gốc
-        double subtotal = req.calculateSubtotal();
-
-        // 2. Tính chiết khấu voucher qua Strategy
-        double discount = 0;
-        if (req.getVoucherStrategy() != null) {
-            DiscountContext discountContext = new DiscountContext(req.getVoucherStrategy());
-            discount = discountContext.executeDiscount(subtotal);
-        }
-
-        // 3. Tính thuế VAT và tổng cuối
-        double afterDiscount = Math.max(0, subtotal - discount);
-        double vat = afterDiscount * 0.08;
-        double finalAmount = afterDiscount + vat;
-
-        // 4. Thanh toán qua Factory
-        IPaymentProcessor processor = PaymentProcessorFactory.getProcessor(req.getPaymentMethod());
-        PaymentResult payResult = processor.processPayment(finalAmount, req.getOrderCode());
-        if (!payResult.isSuccess()) {
-            return new CheckoutResponse(false, "Thanh toán thất bại: " + payResult.getMessage());
-        }
-
-        // 5. Đóng gói đơn hàng qua Builder
-        Order order = new OrderBuilder()
-                .setOrderCode(req.getOrderCode())
-                .setCustomer(req.getCustomerName())
-                .setTableId(req.getTableId())
-                .setOrderType(req.getOrderType())
-                .setNote(req.getNote())
-                .build();
-
-        // 6. Lưu đơn hàng
-        orderDao.save(order);
-
-        // 7. Phát sự kiện Observer (Cộng điểm & đổi trạng thái bàn)
-        eventSubject.notifyObservers(order);
-
-        return new CheckoutResponse(true, "Thanh toán thành công đơn " + order.getOrderCode());
+    // Steps 1-3: decorate drinks, build the order, apply the discount.
+    Order order = buildOrder(request, menu);
+    if (!reserveStock(demand)) {
+        return CheckoutResult.failure(CheckoutResult.FailureType.OUT_OF_STOCK, "Could not reserve inventory", null);
     }
+    // Step 4: payment.
+    PaymentResult payment;
+    try {
+        if (order.getTotal() <= 0) {
+            payment = new PaymentResult(true, "NO-CHARGE-" + order.getOrderCode(), "Nothing to charge");
+        } else {
+            IPaymentProcessor processor = PaymentProcessorFactory.createProcessor(request.getPaymentMethod());
+            payment = processor.processPayment(order.getTotal(), order.getOrderCode());
+        }
+    } catch (RuntimeException e) {
+        releaseStock(demand);
+        return CheckoutResult.failure(CheckoutResult.FailureType.PAYMENT_FAILED, "Payment error: " + e.getMessage(), null);
+    }
+    // ... payment declined -> releaseStock + PAYMENT_FAILED
+    // Step 5: persist the completed order (save failure -> releaseStock + PERSISTENCE_FAILED).
+    order.setPaymentStatus(PaymentStatus.PAID);
+    order.setStatus(OrderStatus.COMPLETED);
+    // ...
+    // Step 6: broadcast; observer failures must not undo a committed checkout.
+    List<String> warnings = new ArrayList<>();
+    try {
+        eventSubject.notifyOrderCompleted(order);
+    } catch (RuntimeException e) {
+        warnings.add("Order event observer failed: " + e.getMessage());
+    }
+    return CheckoutResult.success(order, payment, warnings);
 }
 ```
+- **Kiểm thử:** `FacadeTest` (toàn bộ quy trình bằng một lời gọi, cộng dồn tùy chọn, giảm giá không làm tổng âm, thiếu tồn kho không gây tác dụng phụ, món không tồn tại/hết hàng, hoàn kho khi lưu lỗi, lỗi observer không hoàn tác đơn, kiểm tra cấu trúc yêu cầu).
 
 ---
 
@@ -1440,13 +1436,15 @@ public class LoyaltyPointObserver implements IOrderObserver {
 | Tiêu chí đối chiếu | Hiện trạng Mã nguồn Thực tế | Bản Đặc tả Thiết kế Kỹ thuật (SPEC) |
 | :--- | :--- | :--- |
 | **Frontend Framework** | Next.js 16.4.0 (App Router), React 19, Tailwind CSS v4 | Đồng bộ chính xác 100% với mã nguồn thực tế |
-| **Giao tiếp Dữ liệu Frontend** | Server Actions (`admin/actions.ts`), Route Handlers (`/api/cart`), Zustand, SWR | Phản ánh đúng cơ chế tự chủ hiện tại và mô tả chuẩn giao tiếp REST |
-| **Thư mục Backend Java** | Phase 1 (#01, #02) & #03 (Singleton) đã hoàn thành | Cấu trúc Maven Java SE OOP chuẩn mực tại `src/main/java/com/dalatcafe/` |
-| **Khung công nghệ Backend** | Tuyệt đối không dùng Spring Boot / Security / Data JPA | Thiết kế hướng đối tượng thuần túy Java SE 17+ (Pure Java OOP) |
-| **9 GoF Design Patterns** | Đã có màn hình UI/UX tương ứng trên Next.js | Đặc tả chi tiết đầy đủ 9 pattern bằng Java thuần, sơ đồ Mermaid hợp lệ |
+| **Giao tiếp Dữ liệu Frontend** | Server Actions (`admin/actions.ts`) chuyển tiếp sang Java qua `lib/api-client.ts`, fallback Mock Store; Route Handlers (`/api/cart`), Zustand, SWR | Mục 1.5 mô tả đúng luồng tích hợp và quy tắc chịu lỗi |
+| **Thư mục Backend Java** | Hoàn thành #01–#12: POJO, DAO (In-Memory/JDBC), 9 pattern, HttpServer cổng 8080 | Cấu trúc Maven Java SE OOP tại `src/main/java/com/dalatcafe/` (mục 1.4.2) |
+| **Khung công nghệ Backend** | Không dùng Spring Boot / Security / Data JPA | Thiết kế hướng đối tượng thuần túy Java SE 17+ (Pure Java OOP) |
+| **9 GoF Design Patterns** | Đã cài đặt đủ 9 pattern, mỗi pattern có lớp test JUnit 5 riêng (#13) | Sơ đồ lớp Mermaid và mã nguồn tại Mục 3 được vẽ lại theo code thực tế |
+| **Kiểm thử tự động** | 166 test JUnit 5 (`mvn test`) và 25 test UI/UX (`npm test`) chạy trên GitHub Actions | Kết quả E2E ghi tại `docs/E2E_TEST_REPORT.md` (#15) |
 
-### 5.2. Lộ trình Thực hiện Hoàn thiện Backend Java Thuần (`backend-java`)
-1. **Khởi tạo cấu trúc gói Java tiêu chuẩn:** Tạo cấu trúc thư mục `src/main/java/com/dalatcafe/` theo chuẩn Maven.
-2. **Cài đặt các lớp POJO & DAO (Hoàn thành 🟢):** Triển khai các lớp thực thể nghiệp vụ (`Order`, `Table`, `Reservation`, `MenuItem`, `Customer`) và tầng lưu trữ `InMemoryDatabase` & `JdbcDatabase`.
-3. **Cài đặt 9 GoF Design Patterns:** Lần lượt hiện thực hóa 9 mẫu thiết kế trong gói `com.dalatcafe.patterns` theo đúng code minh họa đã đặc tả tại Mục 3.
-4. **Cài đặt Java HTTP Server & RBAC:** Sử dụng `com.sun.net.httpserver.HttpServer` trên cổng 8080 kết hợp `SimpleAuthFilter`, giúp Frontend Next.js gọi trực tiếp vào lõi Java Backend an toàn.
+### 5.2. Lộ trình Thực hiện Backend Java Thuần (`backend-java`)
+1. **Khởi tạo cấu trúc gói Java tiêu chuẩn (Hoàn thành 🟢, #01):** Cấu trúc thư mục `src/main/java/com/dalatcafe/` theo chuẩn Maven.
+2. **Cài đặt các lớp POJO & DAO (Hoàn thành 🟢, #01–#02):** Các lớp thực thể nghiệp vụ (`Order`, `Table`, `Reservation`, `MenuItem`, `Customer`) và tầng lưu trữ `InMemoryDatabase` & `JdbcDatabase`.
+3. **Cài đặt 9 GoF Design Patterns (Hoàn thành 🟢, #03–#11):** Hiện thực hóa 9 mẫu thiết kế trong gói `com.dalatcafe.patterns` như mô tả tại Mục 3.
+4. **Cài đặt Java HTTP Server & RBAC (Hoàn thành 🟢, #12):** `com.sun.net.httpserver.HttpServer` trên cổng 8080 kết hợp `SimpleAuthFilter` và `CorsHandler`.
+5. **Kiểm thử & Tích hợp (Hoàn thành 🟢, #13–#15):** Bộ test JUnit 5 cho 9 pattern, kết nối Server Actions Next.js với Java Backend, kiểm thử E2E toàn hệ thống.
