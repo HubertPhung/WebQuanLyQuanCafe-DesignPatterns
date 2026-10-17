@@ -1,5 +1,7 @@
 package com.dalatcafe.dao;
 
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -28,12 +30,37 @@ public class DaoFactory {
 
     private DaoFactory() {
         // Auto-detect JDBC availability, default to IN_MEMORY
-        if (JdbcDatabase.isAvailable()) {
+        if (JdbcDatabase.isAvailable() && prepareJdbcStore(jdbcTableDao, jdbcMenuDao)) {
             this.mode = DaoMode.JDBC;
             LOGGER.info("DaoFactory initialized in JDBC mode (PostgreSQL connected).");
         } else {
             this.mode = DaoMode.IN_MEMORY;
             LOGGER.info("DaoFactory initialized in IN_MEMORY mode (Zero-crash fallback active).");
+        }
+    }
+
+    /**
+     * Creates or upgrades the JDBC schema, seeds the floor plan and the menu when they are
+     * empty (orders reference tables by foreign key), then re-aligns the id sequences.
+     * Returns false when the schema cannot be prepared, so the caller stays in memory.
+     */
+    static boolean prepareJdbcStore(ITableDao tables, IMenuDao menu) {
+        try (Connection conn = JdbcDatabase.getConnection()) {
+            JdbcDatabase.initializeSchema(conn);
+            InMemoryDatabase seed = InMemoryDatabase.getInstance();
+            if (tables.findAll().isEmpty()) {
+                seed.getTables().values().forEach(tables::save);
+                LOGGER.info("Seeded " + seed.getTables().size() + " tables into PostgreSQL.");
+            }
+            if (menu.findAll().isEmpty()) {
+                seed.getMenuItems().values().forEach(menu::save);
+                LOGGER.info("Seeded " + seed.getMenuItems().size() + " menu items into PostgreSQL.");
+            }
+            JdbcDatabase.syncSequences(conn);
+            return true;
+        } catch (SQLException e) {
+            LOGGER.log(Level.SEVERE, "Could not prepare the PostgreSQL schema: " + e.getMessage(), e);
+            return false;
         }
     }
 
@@ -53,7 +80,7 @@ public class DaoFactory {
     }
 
     public void setMode(DaoMode mode) {
-        if (mode == DaoMode.JDBC && !JdbcDatabase.isAvailable()) {
+        if (mode == DaoMode.JDBC && !(JdbcDatabase.isAvailable() && prepareJdbcStore(jdbcTableDao, jdbcMenuDao))) {
             LOGGER.log(Level.WARNING, "Cannot switch to JDBC mode: Database connection unavailable. Remaining in IN_MEMORY mode.");
             this.mode = DaoMode.IN_MEMORY;
             return;

@@ -15,28 +15,30 @@ Mọi endpoint Java trả JSON UTF-8 với cùng một khung:
 { "ok": false, "error": "mô tả lỗi", "code": "MÃ_LỖI" }
 ```
 
-Ngoại lệ: một đường dẫn chưa đăng ký nằm ngoài bốn nhóm `/api/menu`, `/api/tables`, `/api/reservations`, `/api/checkout` sẽ nhận trang 404 mặc định của `HttpServer`, không theo khung trên.
+Ngoại lệ: một đường dẫn nằm ngoài các nhóm đã đăng ký (`/api/menu`, `/api/tables`, `/api/reservations`, `/api/checkout`, `/api/orders`, `/api/customers`, `/api/analytics`, `/api/vouchers`) sẽ nhận trang 404 mặc định của `HttpServer`, không theo khung trên.
 
 ### 1.2. Mã lỗi
 
 | HTTP | `code` | Khi nào |
 | :---: | :--- | :--- |
-| 400 | `INVALID_INPUT` | Thiếu hoặc sai trường, JSON hỏng, `useLoyaltyPoints > 0` (chưa hỗ trợ), thanh toán bị từ chối (`PAYMENT_FAILED`) |
+| 400 | `INVALID_INPUT` | Thiếu hoặc sai trường, JSON hỏng, đổi điểm mà không có SĐT thành viên, thanh toán bị từ chối (`PAYMENT_FAILED`) |
+| 400 | `INSUFFICIENT_POINTS` | `useLoyaltyPoints` lớn hơn số điểm khách đang có |
 | 400 | `CHAIN_VALIDATION_FAILED` | Phiếu đặt bàn không qua chuỗi kiểm định |
 | 400 | `INVALID_VOUCHER` | Mã giảm giá khác `WELCOME10` |
 | 401 | `UNAUTHORIZED` | Thiếu hoặc sai header `X-User-Role` ở endpoint cần quyền |
 | 403 | `FORBIDDEN` | Vai trò không đủ quyền (ví dụ `CUSTOMER` gọi `/api/checkout`) |
-| 404 | `NOT_FOUND` | Không tìm thấy bàn hoặc món, hoặc sai đường dẫn con |
+| 404 | `NOT_FOUND` | Không tìm thấy bàn, món, đơn, phiếu đặt bàn hoặc khách, hoặc sai đường dẫn con |
 | 405 | `INVALID_INPUT` | Sai phương thức HTTP |
-| 409 | `RESOURCE_CONFLICT` | Hết hàng hoặc không giữ được tồn kho, không cập nhật được bàn |
+| 409 | `RESOURCE_CONFLICT` | Hết hàng, không giữ được tồn kho, trùng tên món, chuyển trạng thái đơn / phiếu không hợp lệ, đơn đã thanh toán |
 | 413 | `INVALID_INPUT` | Body vượt 1 MB |
 | 500 | `INTERNAL_SERVER_ERROR` | Lỗi không mong đợi |
-| 503 | `DATABASE_UNAVAILABLE` | Chế độ JDBC mất kết nối khi checkout. Không thu tiền, không ghi đơn. |
+| 503 | `DATABASE_UNAVAILABLE` | Chế độ JDBC mất kết nối khi checkout hoặc khi thanh toán đơn (`/pay`). Không thu tiền, không ghi đơn. |
 
 ### 1.3. Phân quyền & CORS
 - **Vai trò** đọc từ header `X-User-Role` (`ADMIN`, `MANAGER`, `STAFF`, `CUSTOMER`). Đây chỉ là cổng phân vai cho đồ án: vai trò không được xác thực, và header `Authorization` **không** được dùng. Chi tiết tại [ARCHITECTURE §4](ARCHITECTURE.md#4-phân-quyền-rbac).
-- **Công khai:** `GET /api/menu`, `POST /api/reservations`.
-- **Cần STAFF, MANAGER hoặc ADMIN:** các endpoint còn lại dưới `/api/tables`, `/api/reservations` (kể cả `transfer-pos`) và `/api/checkout`.
+- **Công khai:** `GET /api/menu`, `POST /api/reservations`, `POST /api/vouchers/validate`.
+- **Cần MANAGER hoặc ADMIN:** `POST /api/menu`, `GET /api/analytics/overview`.
+- **Cần STAFF, MANAGER hoặc ADMIN:** mọi endpoint còn lại. `SimpleAuthFilter` từ chối theo mặc định, nên một endpoint mới không bao giờ vô tình thành công khai.
 - **CORS:** `Access-Control-Allow-Origin: *`. Cho phép các phương thức GET, POST, PUT, PATCH, DELETE và OPTIONS. Preflight `OPTIONS` trả 204, không cần header vai trò.
 
 ---
@@ -52,17 +54,17 @@ Ngoại lệ: một đường dẫn chưa đăng ký nằm ngoài bốn nhóm `/
 | `/api/reservations` | POST | Công khai | **Chain of Responsibility** | 🟢 Đã triển khai |
 | `/api/checkout` | POST | STAFF+ | **Facade** (+ Decorator, Builder, Strategy, Factory, Observer) | 🟢 Đã triển khai |
 | `/api/reservations/{code}/transfer-pos` | POST | STAFF+ | **Adapter** | 🟢 Đã triển khai |
-| `/api/menu` | POST | — | — | ⚪ Chưa triển khai |
-| `/api/menu/{id}/stock` | PATCH | — | — | ⚪ Chưa triển khai |
-| `/api/reservations/{id}/status` | PATCH | — | — | ⚪ Chưa triển khai |
-| `/api/orders` | GET | — | — | ⚪ Chưa triển khai |
-| `/api/orders/{id}/status` | PATCH | — | 🔷 State | ⚪ Chưa triển khai |
-| `/api/orders/{id}/pay` | POST | — | — | ⚪ Chưa triển khai |
-| `/api/vouchers/validate` | POST | — | Strategy | ⚪ Chưa triển khai |
-| `/api/customers` | GET | — | — | ⚪ Chưa triển khai |
-| `/api/analytics/overview` | GET | — | 🔷 Template Method | ⚪ Chưa triển khai |
+| `/api/menu` | POST | MANAGER+ | — | 🟢 Đã triển khai |
+| `/api/menu/{id}/stock` | PATCH, PUT | STAFF+ | — | 🟢 Đã triển khai |
+| `/api/reservations/{code}/status` | PATCH, PUT | STAFF+ | — | 🟢 Đã triển khai |
+| `/api/orders` | GET | STAFF+ | — | 🟢 Đã triển khai |
+| `/api/orders/{code}/status` | PATCH, PUT | STAFF+ | **Observer** (đơn hoàn tất) | 🟢 Đã triển khai |
+| `/api/orders/{code}/pay` | POST | STAFF+ | **Factory** + **Observer** | 🟢 Đã triển khai |
+| `/api/customers` | GET | STAFF+ | — | 🟢 Đã triển khai |
+| `/api/analytics/overview` | GET | MANAGER+ | — | 🟢 Đã triển khai |
+| `/api/vouchers/validate` | POST | Công khai | **Strategy** | 🟢 Đã triển khai |
 
-Với các chức năng chưa có endpoint, frontend vẫn tự xử lý bằng Server Actions và kho dữ liệu riêng (xem [DATABASE.md](DATABASE.md)).
+Vòng đời đơn hiện được kiểm bằng một bảng chuyển trạng thái trong `OrderHandler`; tách thành State Pattern vẫn là đề xuất (🔷, xem [DESIGN_PATTERNS_SPEC](DESIGN_PATTERNS_SPEC.md)).
 
 ---
 
@@ -128,7 +130,8 @@ Danh sách phiếu: `id` (mã `RES-xxxx`), `customer`, `contact`, `email`, `date
 - **Giảm giá:**
   - `voucherCode` chỉ nhận `WELCOME10`: giảm 10%, tối đa 50.000đ.
   - Không có voucher nhưng `customerPhone` khớp một khách đã lưu: giảm theo hạng thành viên. Khách đó cũng được cộng điểm qua `LoyaltyPointObserver`.
-  - `useLoyaltyPoints > 0` hiện bị từ chối (400).
+  - **Đổi điểm:** `useLoyaltyPoints` (số nguyên) cần `customerPhone` của một thành viên và không vượt số điểm đang có (nếu vượt: 400 `INSUFFICIENT_POINTS`). `PointRedemptionDiscountStrategy` cộng giá trị điểm (1 điểm = 1.000đ) lên trên voucher hoặc giảm theo hạng, và chỉ dùng số điểm mà phần tiền còn lại hấp thụ được. Số điểm thực dùng bị trừ sau khi thanh toán thành công.
+- **Sau khi thu tiền:** đơn được lưu với `paymentStatus = paid`, `status = pending` (chờ quầy pha chế), rồi `OrderEventSubject.notifyOrderPaid` chạy: cộng điểm, bàn ăn tại chỗ chuyển `OCCUPIED`, KDS nhận phiếu. Bàn chỉ chuyển `CLEANING` khi KDS báo đơn `completed` (mục 3.9).
 - **Mã đơn** do Java sinh theo dạng `AC-XXXX-XXX`. Phản hồi 200:
 ```json
 {
@@ -136,7 +139,8 @@ Danh sách phiếu: `id` (mã `RES-xxxx`), `customer`, `contact`, `email`, `date
   "data": {
     "orderCode": "AC-ECEC-512", "subtotal": 90000, "discountAmount": 9000,
     "vatAmount": 6480, "finalTotal": 87480, "changeDue": 0, "paymentStatus": "paid",
-    "pointsEarned": 0, "transactionId": "CARD-…", "warnings": []
+    "pointsEarned": 0, "pointsRedeemed": 0, "pointsDiscountVnd": 0,
+    "transactionId": "CARD-…", "warnings": []
   },
   "message": "Checkout completed"
 }
@@ -144,7 +148,7 @@ Danh sách phiếu: `id` (mã `RES-xxxx`), `customer`, `contact`, `email`, `date
 - **Lỗi:**
   - 404: món không tồn tại.
   - 409: hết hàng.
-  - 400: thanh toán bị từ chối, hoặc voucher sai.
+  - 400: thanh toán bị từ chối, voucher sai, hoặc đổi điểm không hợp lệ.
   - 503 `DATABASE_UNAVAILABLE`: chế độ JDBC mất kết nối. Không thu tiền, không ghi đơn.
 
 ### 3.7. `POST /api/reservations/{code}/transfer-pos`
@@ -173,6 +177,69 @@ Khách đặt trước đến quán: `ReservationToOrderAdapter` chuyển phiế
   - 405: sai phương thức.
   - 401 / 403: thiếu quyền.
 
+### 3.8. `GET /api/orders`
+Danh sách đơn, mới nhất trước. Lọc bằng `?status=pending|brewing|ready|completed|cancelled` (sai giá trị: 400). Mỗi đơn gồm `orderCode`, `customer`, `tableId`, `orderType`, `status`, `paymentStatus`, `paymentMethod`, `items[]` (`menuItemId`, `name`, `qty`, `price`, `variation`), `subtotal`, `discountAmount`, `vatAmount`, `total`, `note`, `createdAt`, `completedAt`.
+
+### 3.9. `PATCH /api/orders/{code}/status`
+```json
+{ "status": "brewing" }
+```
+- Chỉ đi tiến theo `pending → brewing → ready → completed` (được nhảy bước). `cancelled` được phép khi đơn chưa đóng; huỷ một đơn đã thu tiền đặt `paymentStatus = refunded`.
+- `completed` cần đơn đã thanh toán. Khi tới `completed`, `notifyOrderCompleted` chạy: bàn chuyển `CLEANING` với 0 khách, KDS gỡ phiếu.
+- Gửi lại đúng trạng thái hiện tại trả 200 và không đổi gì.
+- **Lỗi:** 400 trạng thái lạ; 404 không có đơn; 409 đi lùi, đơn đã đóng, hoặc hoàn tất khi chưa thanh toán.
+
+### 3.10. `POST /api/orders/{code}/pay`
+```json
+{ "paymentMethod": "cash", "customerPhone": "0901234567" }
+```
+Thanh toán một đơn chưa thu tiền (ví dụ đơn chuyển từ đặt bàn ở mục 3.7). Bộ xử lý lấy từ `PaymentProcessorFactory`; sau khi thu tiền, `notifyOrderPaid` chạy như ở checkout. `customerPhone` (tuỳ chọn) cộng điểm cho thành viên đó. Phản hồi là đơn (như mục 3.8) kèm `transactionId` và `warnings`.
+- **Lỗi:** 400 phương thức sai hoặc bị từ chối; 404 không có đơn hoặc khách; 409 đơn đã thanh toán hoặc đã huỷ; 503 `DATABASE_UNAVAILABLE`.
+
+### 3.11. `POST /api/menu` (MANAGER+)
+```json
+{
+  "name": "Trà Atiso", "category": "Trà", "kind": "menu", "sellPrice": 39000, "costPrice": 12000,
+  "stockQty": 20, "unit": "ly", "lowStockThreshold": 5, "recipe": "…", "imageUrl": null,
+  "variations": [{ "name": "Ít ngọt", "price": 0 }]
+}
+```
+Bắt buộc `name`, `category`, `sellPrice`; số tiền và số lượng không được âm. `inStock` mặc định là `stockQty > 0`. Trả **201** với món vừa tạo (định dạng như mục 3.1). Trùng tên (không phân biệt hoa thường) trả 409.
+
+### 3.12. `PATCH /api/menu/{id}/stock`
+```json
+{ "change": -3, "inStock": true }
+```
+`change` cộng / trừ tồn kho, `stockQty` đặt số tồn tuyệt đối, `inStock` bật / tắt món. Cần ít nhất một trong ba trường; không được gửi cùng lúc `change` và `stockQty`. Trừ quá số tồn trả 409. Trả về món sau khi cập nhật.
+
+### 3.13. `PATCH /api/reservations/{code}/status`
+```json
+{ "status": "confirmed" }
+```
+`pending → confirmed`, và `pending | confirmed → cancelled`. `seated` chỉ đạt được qua `transfer-pos` (400 nếu gửi trực tiếp), để đơn và bàn luôn được tạo cùng lúc. Chuyển không hợp lệ trả 409, không có phiếu trả 404.
+
+### 3.14. `GET /api/customers`
+Danh sách thành viên, chi tiêu nhiều nhất trước: `id`, `name`, `phone`, `email`, `totalOrders`, `totalSpent`, `loyaltyPoints`, `rank` (`bronze`, `silver`, `gold`, `vip`), `lastVisit`. `?phone=0901234567` trả mảng 0 hoặc 1 phần tử (POS dùng để tra cứu thành viên).
+
+### 3.15. `GET /api/analytics/overview` (MANAGER+)
+Tính trực tiếp từ DAO mỗi lần gọi. Doanh thu chỉ tính đơn đã thanh toán và chưa huỷ; "hôm nay" theo giờ `Asia/Ho_Chi_Minh`.
+```json
+{
+  "totalRevenue": 1250000, "paidOrders": 21, "averageOrderValue": 59523.8,
+  "revenueToday": 320000, "paidOrdersToday": 6,
+  "ordersByStatus": { "pending": 2, "brewing": 1, "ready": 0, "completed": 18, "cancelled": 0 },
+  "topItems": [{ "name": "Cà phê Muối Đặc Biệt", "qty": 14, "revenue": 630000 }],
+  "lowStockItems": [{ "id": 7, "name": "Sữa tươi", "stockQty": 4, "unit": "lít", "lowStockThreshold": 5 }],
+  "tables": { "total": 15, "available": 9, "occupied": 4, "reserved": 1, "cleaning": 1, "occupancyRate": 0.27 }
+}
+```
+
+### 3.16. `POST /api/vouchers/validate` (công khai)
+```json
+{ "code": "welcome10", "subtotal": 100000 }
+```
+Xem trước voucher bằng đúng Strategy mà checkout dùng (`VoucherCatalog`). Mã hợp lệ: `{ "code": "WELCOME10", "valid": true, "discountAmount": 10000, "description": "…" }`. Mã sai vẫn trả 200 với `"valid": false` và `discountAmount: 0`. Thiếu `subtotal` hoặc âm trả 400.
+
 ---
 
 ## 4. Route Handler Next.js
@@ -185,4 +252,4 @@ Hai endpoint này dùng định dạng JSON riêng (không theo khung `{ ok, dat
 | `/api/cart` | POST | Body dạng `{ action, … }` với `action` là `add` (kèm tuỳ chọn Sữa / Độ ngọt / Đá), `quantity`, `discount` (mã `WELCOME`, `WELCOME10`, `DALATCAFE`, `COFFEE`, `DISCOUNT`; mã nào cũng giảm cố định 10%) hoặc `note` |
 | `/api/favorites` | GET, POST | Danh sách món yêu thích, lưu trong cookie `dalatcafe-favorites` |
 
-> Mã giảm giá của giỏ hàng Storefront được xử lý hoàn toàn trong Next.js, khác với quy tắc `WELCOME10` của Java ở mục 3.6.
+> Mã giảm giá của giỏ hàng Storefront được xử lý hoàn toàn trong Next.js, khác với quy tắc `WELCOME10` của Java ở mục 3.6 và 3.16.

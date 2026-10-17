@@ -89,7 +89,7 @@ frontend-nextjs/
 │   ├── db/                 index.ts (Drizzle), schema.ts, mock-store.ts
 │   ├── store/cart-store.ts # Zustand
 │   └── shopify.ts, utils.ts
-└── scripts/test-ui-ux.mjs  # 25 test UI/UX
+└── scripts/test-ui-ux.mjs  # 27 test UI/UX
 ```
 
 ### 1.3.2. Backend Java (`backend-java`)
@@ -192,7 +192,7 @@ classDiagram
     }
 
     class LoyaltyPointObserver {
-        +onOrderCompleted(Order order) void
+        +onOrderPaid(Order order) void
     }
 
     class OperatingHoursValidator {
@@ -688,11 +688,11 @@ public class ReservationToOrderAdapter implements IPosOrderTarget {
   Quy trình hoàn tất một đơn hàng tại quầy thu ngân POS (`pos-terminal.tsx`) bao gồm rất nhiều hệ thống con phối hợp:
   1. Tính tiền từng món đồ uống (áp dụng Decorator nếu có Topping).
   2. Tính chiết khấu giảm giá Voucher thông qua Strategy Pattern (`DiscountContext`).
-  3. Trừ tiền quy đổi từ điểm tích lũy thành viên (`SystemConfigManager`). *Hiện chưa hỗ trợ khi checkout: API trả lỗi nếu `useLoyaltyPoints > 0`.*
+  3. Trừ tiền quy đổi từ điểm tích lũy thành viên (`SystemConfigManager`, 1 điểm = 1.000đ) qua `PointRedemptionDiscountStrategy`, cộng dồn lên voucher hoặc giảm theo hạng.
   4. Cộng thuế VAT (8%).
   5. Khởi tạo đối tượng xử lý thanh toán qua Factory (`PaymentProcessorFactory`) và thực hiện thanh toán.
   6. Lưu trữ thông tin đơn hàng vào hệ thống lưu trữ (DAO).
-  7. Phát sự kiện hoàn tất đơn hàng cho các bên theo dõi (Observer) để cộng điểm và cập nhật trạng thái bàn.
+  7. Phát sự kiện "đã thanh toán" cho các bên theo dõi (Observer) để cộng điểm, xếp bàn và báo bếp.
   Nếu để Controller hoặc Handler xử lý trực tiếp toàn bộ 7 bước trên, mã nguồn sẽ bị phân mảnh, liên kết chặt (High Coupling) và cực kỳ khó kiểm thử.
 - **Giải pháp kỹ thuật (Pure Java OOP):**  
   Áp dụng **Facade Pattern**. `PosCheckoutFacade` cung cấp một lời gọi duy nhất `checkout(CheckoutRequest)` (được đồng bộ hóa) và trả về `CheckoutResult` thay vì ném ngoại lệ cho lỗi nghiệp vụ. Bên trong, Facade điều phối năm pattern khác theo thứ tự đảm bảo nhất quán:
@@ -700,10 +700,10 @@ public class ReservationToOrderAdapter implements IPosOrderTarget {
   2. Bọc từng món bằng **Decorator** theo `Customization` (`SIZE_L`, `CHEESE_FOAM`, `WHITE_PEARL`), dựng đơn bằng **Builder**, áp giảm giá bằng **Strategy** (`DiscountContext`).
   3. Giữ chỗ tồn kho; nếu thất bại thì hoàn lại phần đã trừ.
   4. Tạo bộ xử lý qua **Factory** và thanh toán; đơn được giảm còn 0 VNĐ thì không thu tiền. Thanh toán lỗi → hoàn tồn kho, `PAYMENT_FAILED`.
-  5. Đánh dấu `PAID` / `COMPLETED` và lưu qua `IOrderDao`; lưu lỗi → hoàn tồn kho, `PERSISTENCE_FAILED` kèm mã giao dịch cần hủy.
-  6. Phát sự kiện cho các **Observer**; lỗi của observer chỉ thành cảnh báo trong `CheckoutResult.getWarnings()`, không hoàn tác đơn đã lưu.
+  5. Đánh dấu `PAID` với trạng thái `PENDING` (đơn chờ quầy pha chế) và lưu qua `IOrderDao`; lưu lỗi → hoàn tồn kho, `PERSISTENCE_FAILED` kèm mã giao dịch cần hủy.
+  6. Phát sự kiện `notifyOrderPaid` cho các **Observer**; lỗi của observer chỉ thành cảnh báo trong `CheckoutResult.getWarnings()`, không hoàn tác đơn đã lưu. Sự kiện hoàn tất (`notifyOrderCompleted`) do `OrderHandler` phát khi KDS chuyển đơn sang `completed`.
 
-  `CheckoutHandler` (`POST /api/checkout`) là client: chuyển JSON thành `CheckoutRequest`, gọi Facade và ánh xạ `FailureType` sang mã HTTP (404, 409, 400, 503).
+  `CheckoutHandler` (`POST /api/checkout`) là client: chuyển JSON thành `CheckoutRequest`, gọi Facade và ánh xạ `FailureType` sang mã HTTP (404, 409, 400, 503). Khi có `useLoyaltyPoints`, nó kiểm tra số dư điểm trước, và sau khi Facade thành công thì trừ đúng số điểm strategy đã dùng.
 - **Bảng ánh xạ thành phần (Participants Mapping):**
   | Vai trò GoF | Class / Interface Java | Trách nhiệm cụ thể |
   | :--- | :--- | :--- |
@@ -803,14 +803,14 @@ public synchronized CheckoutResult checkout(CheckoutRequest request) {
         return CheckoutResult.failure(CheckoutResult.FailureType.PAYMENT_FAILED, "Payment error: " + e.getMessage(), null);
     }
     // ... payment declined -> releaseStock + PAYMENT_FAILED
-    // Step 5: persist the completed order (save failure -> releaseStock + PERSISTENCE_FAILED).
+    // Step 5: persist the paid order; it waits on the KDS (save failure -> releaseStock + PERSISTENCE_FAILED).
     order.setPaymentStatus(PaymentStatus.PAID);
-    order.setStatus(OrderStatus.COMPLETED);
+    order.setStatus(OrderStatus.PENDING);
     // ...
     // Step 6: broadcast; observer failures must not undo a committed checkout.
     List<String> warnings = new ArrayList<>();
     try {
-        eventSubject.notifyOrderCompleted(order);
+        eventSubject.notifyOrderPaid(order);
     } catch (RuntimeException e) {
         warnings.add("Order event observer failed: " + e.getMessage());
     }
@@ -842,6 +842,7 @@ public synchronized CheckoutResult checkout(CheckoutRequest request) {
   | **Concrete Strategy B** | `FixedAmountDiscountStrategy` | Giảm một số tiền cố định |
   | **Concrete Strategy C** | `LoyaltyTierDiscountStrategy` | Giảm theo hạng thành viên `CustomerRank` |
   | **Concrete Strategy D** | `NoDiscountStrategy` | Null Object: không giảm |
+  | **Concrete Strategy E** | `PointRedemptionDiscountStrategy` | Đổi điểm thành viên: bọc một strategy khác (voucher hoặc hạng), cộng giá trị điểm và chỉ dùng số điểm mà phần tiền còn lại hấp thụ được (`getPointsUsed()`) |
   | **Context** | `DiscountContext` | Giữ strategy hiện tại, kẹp kết quả trong `[0, subtotal]` |
 
 - **Sơ đồ lớp (Class Diagram):**
@@ -1071,37 +1072,39 @@ public final class ReservationValidationChainFactory {
 - **Bài toán thực tế trong nghiệp vụ:**  
   Khi đơn hàng được thanh toán hoàn tất tại quầy POS, hệ thống cần kích hoạt đồng thời nhiều tác vụ phụ thuộc:
   1. Tự động quy đổi giá trị hóa đơn thành điểm thưởng thành viên (cứ 10.000 VNĐ tích 1 điểm vào hồ sơ khách hàng quen trong CRM).
-  2. Đồng bộ trạng thái bàn trên sơ đồ tầng (`floor-plan.tsx`): Nếu khách thanh toán xong và rời quán, bàn được chuyển sang trạng thái `cleaning` để nhân viên dọn bàn.
-  3. Báo cho màn hình bếp (KDS) gỡ phiếu của đơn đã hoàn tất.
+  2. Đồng bộ trạng thái bàn trên sơ đồ tầng (`floor-plan.tsx`): thanh toán xong thì bàn ăn tại chỗ là `occupied` (khách đang dùng); khi bếp báo đơn hoàn tất thì bàn chuyển `cleaning` để nhân viên dọn.
+  3. Báo cho màn hình bếp (KDS) có phiếu mới khi đơn được thanh toán, và gỡ phiếu khi đơn hoàn tất.
   Nếu lớp Đơn hàng trực tiếp gọi tới các Service này, mã nguồn sẽ bị phụ thuộc chéo (Tight Coupling), vi phạm nguyên tắc Single Responsibility Principle.
 - **Giải pháp kỹ thuật (Pure Java OOP):**  
-  Áp dụng **Observer Pattern**. `OrderEventSubject` quản lý danh sách `IOrderObserver`: `attach` từ chối `null` và bỏ qua đăng ký trùng, `detach` hủy đăng ký, `notifyOrderCompleted(Order)` duyệt trên **bản sao** danh sách nên observer có thể tự hủy đăng ký trong lúc nhận tin. Ba Concrete Observer phản hồi độc lập:
-  - `LoyaltyPointObserver(ICustomerDao, customerId)`: chỉ cộng điểm khi đơn đã `PAID`, số điểm do `SystemConfigManager.calculateLoyaltyPoints` quy đổi; khách không tồn tại gây `IllegalStateException`.
-  - `TableStatusSyncObserver(ITableDao)`: chuyển bàn sang `CLEANING` và đưa số khách về 0; đơn mang đi (không có bàn) được bỏ qua.
-  - `KitchenNotificationObserver`: gửi thông báo gỡ phiếu khỏi KDS (mặc định in ra console, có thể truyền `Consumer<String>`).
+  Áp dụng **Observer Pattern** với **hai sự kiện** trong vòng đời đơn. `OrderEventSubject` quản lý danh sách `IOrderObserver` trong một `CopyOnWriteArrayList`: `attach` từ chối `null` và bỏ qua đăng ký trùng, `detach` hủy đăng ký; `notifyOrderPaid(Order)` và `notifyOrderCompleted(Order)` duyệt trên ảnh chụp của danh sách, nên observer có thể tự hủy đăng ký, và luồng khác có thể gắn observer trong lúc đang phát tin. `IOrderObserver` có hai phương thức mặc định rỗng (`onOrderPaid`, `onOrderCompleted`), mỗi observer chỉ ghi đè sự kiện mình cần. Ba Concrete Observer phản hồi độc lập:
+  - `LoyaltyPointObserver(ICustomerDao, customerId)` — *paid*: chỉ cộng điểm khi đơn đã `PAID`, số điểm do `SystemConfigManager.calculateLoyaltyPoints` quy đổi; khách không tồn tại gây `IllegalStateException`. Không cộng lần hai khi đơn hoàn tất.
+  - `TableStatusSyncObserver(ITableDao)` — *paid*: bàn chuyển `OCCUPIED` (giữ số khách đang có, tối thiểu 1); *completed*: bàn chuyển `CLEANING` và số khách về 0. Đơn mang đi (không có bàn) được bỏ qua.
+  - `KitchenNotificationObserver` — *paid*: báo phiếu mới; *completed*: báo gỡ phiếu khỏi KDS (mặc định in ra console, có thể truyền `Consumer<String>`).
 
-  `MainServer` đăng ký sẵn `TableStatusSyncObserver` và `KitchenNotificationObserver`; `CheckoutHandler` gắn `LoyaltyPointObserver` cho riêng khách quen trong thời gian một lần checkout. `PosCheckoutFacade` phát sự kiện sau khi đơn đã lưu, và lỗi của observer chỉ được ghi thành cảnh báo, không hoàn tác giao dịch.
+  `MainServer` đăng ký sẵn `TableStatusSyncObserver` và `KitchenNotificationObserver` trên một subject dùng chung. `PosCheckoutFacade` phát *paid* sau khi đơn đã lưu (`CheckoutHandler` gắn `LoyaltyPointObserver` cho riêng khách quen trong thời gian một lần checkout); `OrderHandler` phát *paid* khi thu tiền một đơn chuyển từ đặt bàn (`POST /api/orders/{code}/pay`) và *completed* khi KDS chuyển đơn sang `completed`. Lỗi của observer chỉ được ghi thành cảnh báo, không hoàn tác giao dịch.
 - **Bảng ánh xạ thành phần (Participants Mapping):**
   | Vai trò GoF | Class / Interface Java | Trách nhiệm cụ thể |
   | :--- | :--- | :--- |
   | **Subject** | `OrderEventSubject` | Đăng ký, hủy đăng ký và thông báo cho các Observer |
-  | **Observer Interface** | `IOrderObserver` | Phương thức `onOrderCompleted(Order order)` |
+  | **Observer Interface** | `IOrderObserver` | Phương thức mặc định `onOrderPaid(Order)` và `onOrderCompleted(Order)` |
   | **Concrete Observer 1** | `LoyaltyPointObserver` | Cộng điểm và doanh số cho khách hàng thân thiết |
-  | **Concrete Observer 2** | `TableStatusSyncObserver` | Giải phóng bàn trên sơ đồ sang trạng thái dọn dẹp |
-  | **Concrete Observer 3** | `KitchenNotificationObserver` | Báo màn hình bếp gỡ phiếu của đơn đã xong |
+  | **Concrete Observer 2** | `TableStatusSyncObserver` | Xếp bàn khi đơn được thanh toán, chuyển bàn sang dọn dẹp khi đơn hoàn tất |
+  | **Concrete Observer 3** | `KitchenNotificationObserver` | Báo màn hình bếp có phiếu mới, rồi gỡ phiếu khi đơn xong |
 
 - **Sơ đồ lớp (Class Diagram):**
 ```mermaid
 classDiagram
     class OrderEventSubject {
-        -List~IOrderObserver~ observers
+        -CopyOnWriteArrayList~IOrderObserver~ observers
         +attach(IOrderObserver observer)
         +detach(IOrderObserver observer)
+        +notifyOrderPaid(Order order)
         +notifyOrderCompleted(Order order)
     }
 
     class IOrderObserver {
         <<interface>>
+        +onOrderPaid(Order order)
         +onOrderCompleted(Order order)
     }
 
@@ -1109,12 +1112,13 @@ classDiagram
         -ICustomerDao customerDao
         -int customerId
         +LoyaltyPointObserver(ICustomerDao customerDao, int customerId)
-        +onOrderCompleted(Order order)
+        +onOrderPaid(Order order)
     }
 
     class TableStatusSyncObserver {
         -ITableDao tableDao
         +TableStatusSyncObserver(ITableDao tableDao)
+        +onOrderPaid(Order order)
         +onOrderCompleted(Order order)
     }
 
@@ -1122,6 +1126,7 @@ classDiagram
         -Consumer~String~ notificationSink
         +KitchenNotificationObserver()
         +KitchenNotificationObserver(Consumer~String~ notificationSink)
+        +onOrderPaid(Order order)
         +onOrderCompleted(Order order)
     }
 
@@ -1137,24 +1142,37 @@ classDiagram
 - **Mã nguồn thực tế** (`backend-java/src/main/java/com/dalatcafe/patterns/observer/`):
 ```java
 public class OrderEventSubject {
-    private final List<IOrderObserver> observers = new ArrayList<>();
+    private final CopyOnWriteArrayList<IOrderObserver> observers = new CopyOnWriteArrayList<>();
 
     public void attach(IOrderObserver observer) {
         Objects.requireNonNull(observer, "Observer must not be null");
-        if (!observers.contains(observer)) {
-            observers.add(observer);
-        }
+        observers.addIfAbsent(observer);
     }
 
     public void detach(IOrderObserver observer) {
         observers.remove(observer);
     }
 
+    public void notifyOrderPaid(Order order) {
+        Objects.requireNonNull(order, "Order must not be null");
+        for (IOrderObserver observer : observers) {
+            observer.onOrderPaid(order);
+        }
+    }
+
     public void notifyOrderCompleted(Order order) {
         Objects.requireNonNull(order, "Order must not be null");
-        for (IOrderObserver observer : List.copyOf(observers)) {
+        for (IOrderObserver observer : observers) {
             observer.onOrderCompleted(order);
         }
+    }
+}
+
+public interface IOrderObserver {
+    default void onOrderPaid(Order order) {
+    }
+
+    default void onOrderCompleted(Order order) {
     }
 }
 
@@ -1163,7 +1181,7 @@ public class LoyaltyPointObserver implements IOrderObserver {
     private final int customerId;
 
     @Override
-    public void onOrderCompleted(Order order) {
+    public void onOrderPaid(Order order) {
         Objects.requireNonNull(order, "Order must not be null");
         if (order.getPaymentStatus() != PaymentStatus.PAID) {
             return;
@@ -1175,7 +1193,7 @@ public class LoyaltyPointObserver implements IOrderObserver {
     }
 }
 ```
-- **Kiểm thử:** `ObserverTest` (thông báo cả ba observer, chống đăng ký trùng và hủy đăng ký, đơn chưa thanh toán không tích điểm, đơn mang đi không đổi bàn, khách/bàn không tồn tại, đối số `null`).
+- **Kiểm thử:** `ObserverTest` (sự kiện *paid* cộng điểm, xếp bàn và mở phiếu KDS; sự kiện *completed* chuyển bàn sang dọn mà không cộng điểm lần hai; chống đăng ký trùng và hủy đăng ký; đơn chưa thanh toán không tích điểm; đơn mang đi không đổi bàn; khách/bàn không tồn tại; đối số `null`), cùng `ServerTest` cho luồng thật qua REST (checkout → KDS `completed` → bàn `CLEANING`).
 
 ---
 
@@ -1212,7 +1230,7 @@ public class LoyaltyPointObserver implements IOrderObserver {
 | **Thư mục Backend Java** | Hoàn thành #01–#12: POJO, DAO (In-Memory/JDBC), 9 pattern, HttpServer cổng 8080 | Cấu trúc Maven Java SE OOP tại `src/main/java/com/dalatcafe/` (mục 1.4.2) |
 | **Khung công nghệ Backend** | Không dùng Spring Boot / Security / Data JPA | Thiết kế hướng đối tượng thuần túy Java SE 17+ (Pure Java OOP) |
 | **9 GoF Design Patterns** | Đã cài đặt đủ 9 pattern, mỗi pattern có lớp test JUnit 5 riêng (#13) | Sơ đồ lớp Mermaid và mã nguồn tại Mục 3 được vẽ lại theo code thực tế |
-| **Kiểm thử tự động** | 168 test JUnit 5 (`mvn test`) và 25 test UI/UX (`npm test`) chạy trên GitHub Actions | Kết quả E2E ghi tại [TESTING.md](TESTING.md) (#15) |
+| **Kiểm thử tự động** | 188 test JUnit 5 (`mvn test`, gồm test JDBC trên PostgreSQL nhúng) và 27 test UI/UX (`npm test`) chạy trên GitHub Actions | Kết quả E2E ghi tại [TESTING.md](TESTING.md) (#15) |
 
 ### 5.2. Lộ trình Thực hiện Backend Java Thuần (`backend-java`)
 1. **Khởi tạo cấu trúc gói Java tiêu chuẩn (Hoàn thành 🟢, #01):** Cấu trúc thư mục `src/main/java/com/dalatcafe/` theo chuẩn Maven.

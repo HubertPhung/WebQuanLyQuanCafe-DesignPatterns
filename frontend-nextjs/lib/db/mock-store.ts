@@ -688,12 +688,26 @@ export function getMockOrdersSince(days: number): Order[] {
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
 }
 
+export function getMockOrder(orderId: number): Order | undefined {
+  return getStore().orders.find((o) => o.id === orderId)
+}
+
 export function updateMockOrderStatus(orderId: number, status: OrderStatus): { ok: boolean; error?: string } {
   const store = getStore()
   const order = store.orders.find((o) => o.id === orderId)
   if (!order) return { ok: false, error: 'Order not found.' }
   order.status = status
   order.completedAt = status === 'completed' ? new Date() : null
+  // Same rule as the Java TableStatusSyncObserver: a finished dine-in order frees its table for cleaning.
+  if (status === 'completed' && order.tableId) {
+    const table = store.tables.find((t) => t.id === order.tableId)
+    if (table) {
+      table.status = 'cleaning'
+      table.guestCount = 0
+      table.occupiedSince = null
+      table.updatedAt = new Date()
+    }
+  }
   return { ok: true }
 }
 
@@ -733,6 +747,8 @@ export type NewMockOrderInput = {
   paid: boolean
   // Set when the Java backend already issued the order code.
   orderCode?: string
+  // Set when the Java backend priced the order (member discount, redeemed points).
+  totals?: { subtotal: number; total: number }
 }
 
 export function createMockOrder(input: NewMockOrderInput): { ok: boolean; message?: string; error?: string } {
@@ -757,8 +773,8 @@ export function createMockOrder(input: NewMockOrderInput): { ok: boolean; messag
     item.stockQty = Math.max(0, item.stockQty - line.qty)
   }
 
-  const subtotal = Math.round(items.reduce((s, it) => s + it.price * it.qty, 0) * 100) / 100
-  const total = Math.round(subtotal * (1 + TAX_RATE) * 100) / 100
+  const subtotal = input.totals?.subtotal ?? Math.round(items.reduce((s, it) => s + it.price * it.qty, 0) * 100) / 100
+  const total = input.totals?.total ?? Math.round(subtotal * (1 + TAX_RATE) * 100) / 100
   const nextId = store.orders.reduce((max, o) => Math.max(max, o.id), 0) + 1
 
   const newOrder: Order = {
@@ -808,6 +824,13 @@ export function createMockReservation(input: NewMockReservationInput): { ok: boo
   const code = `RES-L${String(localCount + 1).padStart(4, '0')}`
   store.reservations.push({ ...input, code, tableName: table.name, status: 'Chờ xác nhận', preOrders: [] })
   return { ok: true, code }
+}
+
+export function updateMockReservationStatus(code: string, status: ReservationStatusLabel): { ok: boolean; error?: string } {
+  const reservation = getStore().reservations.find((r) => r.code === code)
+  if (!reservation) return { ok: false, error: 'Reservation not found.' }
+  reservation.status = status
+  return { ok: true }
 }
 
 export function getMockReservations(): MockReservation[] {

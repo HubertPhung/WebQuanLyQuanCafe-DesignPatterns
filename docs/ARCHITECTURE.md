@@ -122,9 +122,9 @@ Lưu ý: kho của frontend và kho của Java là hai bộ dữ liệu riêng, 
 | Nơi | Cơ chế |
 | :--- | :--- |
 | Admin Next.js | `lib/admin/access.ts`. `REQUIRE_ADMIN_AUTH=true` sẽ chặn trang Admin; mặc định cho phép, dùng khi phát triển và demo |
-| Java REST | `SimpleAuthFilter` đọc header `X-User-Role`, chia **2 mức**: *công khai* (`GET /api/menu`, `POST /api/reservations`) và *STAFF / MANAGER / ADMIN* (các endpoint còn lại). Thiếu hoặc sai header trả 401; `CUSTOMER` gọi endpoint nhân viên trả 403. Vai trò **không được xác thực**: đây chỉ là cổng phân vai cho đồ án |
+| Java REST | `SimpleAuthFilter` đọc header `X-User-Role`, chia **3 mức**: *công khai* (`GET /api/menu`, `POST /api/reservations`, `POST /api/vouchers/validate`), *MANAGER / ADMIN* (`POST /api/menu`, `GET /api/analytics/overview`) và *STAFF / MANAGER / ADMIN* (mọi endpoint còn lại, kể cả endpoint mới chưa liệt kê: bộ lọc từ chối theo mặc định). Thiếu hoặc sai header trả 401; vai trò không đủ trả 403. Frontend gửi `STAFF`, riêng tạo món gửi `MANAGER`. Vai trò **không được xác thực**: đây chỉ là cổng phân vai cho đồ án |
 
-**Thiết kế mở rộng (Chưa triển khai):** tách quyền chi tiết hơn giữa `ADMIN` (cấu hình, báo cáo tài chính), `MANAGER` (duyệt đặt bàn, sửa menu), `STAFF` (POS, KDS, bàn) và `CUSTOMER`. Kèm theo là xác thực bằng token hoặc session thay cho header tự khai.
+**Thiết kế mở rộng (Chưa triển khai):** tách thêm quyền riêng cho `ADMIN` (cấu hình, báo cáo tài chính) và xác thực bằng token hoặc session thay cho header tự khai.
 
 ---
 
@@ -162,14 +162,15 @@ sequenceDiagram
 
     JavaFacade->>DAO: save(order)
 
-    JavaFacade->>Observer: notifyOrderCompleted(order)
+    JavaFacade->>Observer: notifyOrderPaid(order)
     par Tích điểm Loyalty
         Observer->>Observer: LoyaltyPointObserver: Cộng điểm CRM
-    and Đổi trạng thái bàn
-        Observer->>Observer: TableStatusSyncObserver: Chuyển bàn sang "Cleaning"
+    and Xếp bàn
+        Observer->>Observer: TableStatusSyncObserver: Bàn sang "Occupied"
     and Báo bếp
-        Observer->>Observer: KitchenNotificationObserver: Gỡ phiếu khỏi KDS
+        Observer->>Observer: KitchenNotificationObserver: Phiếu mới trên KDS
     end
+    Note over Observer: Khi KDS báo "completed" (PATCH /api/orders/{code}/status),<br/>notifyOrderCompleted chuyển bàn sang "Cleaning" và gỡ phiếu
 
     JavaFacade-->>Handler: CheckoutResult (success, order, payment, warnings)
     Handler-->>NextAction: 200 { orderCode, finalTotal, ... }

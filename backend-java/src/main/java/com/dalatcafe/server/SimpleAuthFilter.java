@@ -10,13 +10,15 @@ import java.util.Set;
 
 /**
  * Header-based RBAC (docs/API_SPEC.md 1.4). The role comes from {@code X-User-Role}.
- * Public endpoints need no header; staff endpoints need STAFF, MANAGER or ADMIN.
+ * Public endpoints need no header; creating menu items and analytics need MANAGER or ADMIN;
+ * every other endpoint needs STAFF, MANAGER or ADMIN.
  * This is a role gate for the course project, not authentication: roles are not verified.
  */
 public class SimpleAuthFilter extends Filter {
     public enum Role { ADMIN, MANAGER, STAFF, CUSTOMER }
 
     private static final Set<Role> STAFF_UP = EnumSet.of(Role.STAFF, Role.MANAGER, Role.ADMIN);
+    private static final Set<Role> MANAGER_UP = EnumSet.of(Role.MANAGER, Role.ADMIN);
 
     @Override
     public void doFilter(HttpExchange exchange, Chain chain) throws IOException {
@@ -45,19 +47,31 @@ public class SimpleAuthFilter extends Filter {
         chain.doFilter(exchange);
     }
 
-    /** Roles allowed for the request, or null when the endpoint is public. */
+    /**
+     * Roles allowed for the request, or null when the endpoint is public. Anything not listed
+     * as public or manager-only needs STAFF+, so a new endpoint is never public by accident.
+     */
     static Set<Role> requiredRoles(String method, String path) {
-        if (path.equals("/api/menu") && method.equals("GET")) {
+        String p = path.replaceAll("/+$", "");
+        if (method.equals("OPTIONS")) {
             return null;
         }
-        if (path.equals("/api/reservations") && method.equals("POST")) {
+        if (p.equals("/api/menu") && method.equals("GET")) {
             return null;
         }
-        if (path.startsWith("/api/tables") || path.startsWith("/api/reservations")
-                || path.startsWith("/api/checkout")) {
-            return STAFF_UP;
+        if (p.equals("/api/reservations") && method.equals("POST")) {
+            return null;
         }
-        return null;
+        if (p.equals("/api/vouchers/validate") && method.equals("POST")) {
+            return null;
+        }
+        if (p.equals("/api/menu") && method.equals("POST")) {
+            return MANAGER_UP;
+        }
+        if (p.startsWith("/api/analytics")) {
+            return MANAGER_UP;
+        }
+        return STAFF_UP;
     }
 
     static Role parseRole(String header) {

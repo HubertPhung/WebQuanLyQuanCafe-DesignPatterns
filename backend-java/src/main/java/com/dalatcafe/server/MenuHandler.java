@@ -9,11 +9,13 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
 /**
- * GET /api/menu: the menu and inventory catalog from IMenuDao.
+ * GET /api/menu (public catalog), POST /api/menu (new item, MANAGER+) and
+ * PATCH /api/menu/{id}/stock (stock quantity and the in-stock switch, STAFF+).
  */
 public class MenuHandler extends ApiHandler {
     private final IMenuDao menuDao;
@@ -24,17 +26,110 @@ public class MenuHandler extends ApiHandler {
 
     @Override
     protected void route(HttpExchange exchange) throws IOException {
-        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
-            throw methodNotAllowed(exchange);
+        List<String> parts = segments(exchange);
+        String method = exchange.getRequestMethod().toUpperCase(Locale.ROOT);
+        if (parts.size() == 4 && parts.get(3).equals("stock")) {
+            if (!method.equals("PATCH") && !method.equals("PUT")) {
+                throw methodNotAllowed(exchange);
+            }
+            updateStock(exchange, parseId(parts.get(2)));
+            return;
         }
-        if (segments(exchange).size() != 2) {
+        if (parts.size() != 2) {
             throw ApiException.notFound("Unknown menu resource");
         }
-        List<Object> data = new ArrayList<>();
-        for (MenuItem item : menuDao.findAll()) {
-            data.add(toJson(item));
+        switch (method) {
+            case "GET":
+                List<Object> data = new ArrayList<>();
+                for (MenuItem item : menuDao.findAll()) {
+                    data.add(toJson(item));
+                }
+                sendOk(exchange, 200, data, null);
+                break;
+            case "POST":
+                create(exchange);
+                break;
+            default:
+                throw methodNotAllowed(exchange);
         }
-        sendOk(exchange, 200, data, null);
+    }
+
+    private void create(HttpExchange exchange) throws IOException {
+        Map<String, Object> body = readJsonBody(exchange);
+        String name = requireStr(body, "name");
+        boolean duplicate = menuDao.findAll().stream().anyMatch(item -> name.equalsIgnoreCase(item.getName()));
+        if (duplicate) {
+            throw new ApiException(409, "RESOURCE_CONFLICT", "Menu item already exists: " + name);
+        }
+        MenuItem item = new MenuItem(null, name, requireStr(body, "category"),
+                nonNegative(body, "sellPrice", null), nonNegative(body, "costPrice", 0.0),
+                nonNegative(body, "stockQty", 0.0));
+        String kind = str(body, "kind");
+        if (kind != null) {
+            item.setKind(kind);
+        }
+        String unit = str(body, "unit");
+        if (unit != null) {
+            item.setUnit(unit);
+        }
+        item.setLowStockThreshold(nonNegative(body, "lowStockThreshold", item.getLowStockThreshold()));
+        item.setRecipe(str(body, "recipe"));
+        item.setImageUrl(str(body, "imageUrl"));
+        item.setInStock(bool(body, "inStock", item.getStockQty() > 0));
+        for (Object raw : list(body, "variations")) {
+            Map<String, Object> variation = asObject(raw, "variations entry");
+            item.addVariation(new Variation(requireStr(variation, "name"), nonNegative(variation, "price", 0.0)));
+        }
+        if (!menuDao.save(item)) {
+            throw new ApiException(500, "INTERNAL_SERVER_ERROR", "Could not save menu item " + name);
+        }
+        sendOk(exchange, 201, toJson(item), "Menu item created");
+    }
+
+    private void updateStock(HttpExchange exchange, int id) throws IOException {
+        Map<String, Object> body = readJsonBody(exchange);
+        MenuItem item = menuDao.findById(id).orElseThrow(() -> ApiException.notFound("Menu item not found: " + id));
+        Double change = num(body, "change");
+        Double stockQty = num(body, "stockQty");
+        boolean hasSwitch = body.get("inStock") != null;
+        if (change == null && stockQty == null && !hasSwitch) {
+            throw ApiException.badRequest("Provide at least one of: inStock, change, stockQty");
+        }
+        if (change != null && stockQty != null) {
+            throw ApiException.badRequest("Use either change or stockQty, not both");
+        }
+        if (stockQty != null) {
+            if (stockQty < 0) {
+                throw ApiException.badRequest("stockQty must not be negative");
+            }
+            change = stockQty - item.getStockQty();
+        }
+        if (change != null) {
+            if (item.getStockQty() + change < 0) {
+                throw new ApiException(409, "RESOURCE_CONFLICT",
+                        "Only " + item.getStockQty() + " " + item.getUnit() + " of " + item.getName() + " left");
+            }
+            menuDao.updateStock(id, change);
+        }
+        if (hasSwitch) {
+            menuDao.toggleInStock(id, bool(body, "inStock", item.isInStock()));
+        }
+        MenuItem updated = menuDao.findById(id).orElseThrow(() -> ApiException.notFound("Menu item not found: " + id));
+        sendOk(exchange, 200, toJson(updated), "Stock updated");
+    }
+
+    private static double nonNegative(Map<String, Object> body, String key, Double fallback) {
+        Double value = num(body, key);
+        if (value == null) {
+            if (fallback == null) {
+                throw ApiException.badRequest("Field '" + key + "' is required");
+            }
+            return fallback;
+        }
+        if (value < 0) {
+            throw ApiException.badRequest("Field '" + key + "' must not be negative");
+        }
+        return value;
     }
 
     static Map<String, Object> toJson(MenuItem item) {

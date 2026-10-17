@@ -45,9 +45,9 @@ Cột *Frontend* là `frontend-nextjs/`, cột *Java* là `backend-java/`. Cột
 | `FEAT-POS-01` | Lên đơn nhanh, chọn bàn hoặc mang đi | **Builder** | 🟢 `pos-terminal.tsx` | 🟢 `OrderBuilder` | 🟢 |
 | `FEAT-POS-02` | Nhập tiền khách đưa, tính tiền thừa | — | 🟢 `pos-terminal.tsx` | 🟢 `changeDue` | ⚪ |
 | `FEAT-POS-03` | VAT 8% trên phần sau giảm giá | — | 🟢 `lib/admin/format.ts` | 🟢 `Order.recalculateTotals` | 🟢 |
-| `FEAT-POS-04` | Đổi điểm thành viên trừ vào hoá đơn | **Singleton** | ⚪ Nút bị vô hiệu ("chưa hỗ trợ") | ⚪ `useLoyaltyPoints` bị từ chối | ⚪ |
+| `FEAT-POS-04` | Tra cứu thành viên & đổi điểm trừ vào hoá đơn | **Singleton, Strategy** | 🟢 `pos-terminal.tsx` + `lookupMember` | 🟢 `PointRedemptionDiscountStrategy`, `GET /api/customers` | 🟢 gửi `customerPhone`, `useLoyaltyPoints` |
 | `FEAT-POS-05` | Chốt đơn & thanh toán đa kênh (Tiền mặt / QR / Thẻ) | **Facade, Factory** | 🟢 `createOrder` | 🟢 `POST /api/checkout` | 🟢 Chỉ đơn đã thanh toán |
-| `FEAT-POS-06` | Quản lý đơn online | — | 🟢 `online-orders.tsx` | ⚪ Không có endpoint đơn | ⚪ |
+| `FEAT-POS-06` | Quản lý đơn online | — | 🟢 `online-orders.tsx` | 🟢 `GET /api/orders` | ⚪ (đọc từ kho cục bộ) |
 | `FEAT-POS-07` | Chọn Size L / Topping cho từng dòng đơn POS | **Decorator** | 🟢 `pos-terminal.tsx` + `lib/admin/customizations.ts` | 🟢 `Customization` + Decorator | 🟢 gửi `customizations` |
 
 ### 1.4. Màn hình bếp (KDS)
@@ -55,7 +55,7 @@ Cột *Frontend* là `frontend-nextjs/`, cột *Java* là `backend-java/`. Cột
 | Mã | Tính năng | Pattern | Frontend | Java | Tích hợp |
 | :--- | :--- | :---: | :---: | :---: | :---: |
 | `FEAT-KDS-01` | Bảng Kanban `Pending → Brewing → Ready → Completed` | 🔷 State | 🟢 `kds-board.tsx` | 🟢 enum `OrderStatus` | — |
-| `FEAT-KDS-02` | Thao tác 1 chạm của barista | — | 🟢 `updateOrderStatus` (kho cục bộ) | ⚪ Không có `PATCH /api/orders/:id/status` | ⚪ |
+| `FEAT-KDS-02` | Thao tác 1 chạm của barista; hoàn tất thì bàn sang dọn | **Observer** | 🟢 `updateOrderStatus` | 🟢 `PATCH /api/orders/{code}/status` | 🟢 404 → giữ cục bộ |
 | `FEAT-KDS-03` | Cảnh báo đơn trễ quá 10 phút | — | 🟢 `kds-board.tsx` | — | — |
 
 ### 1.5. Sơ đồ bàn
@@ -82,10 +82,10 @@ Cột *Frontend* là `frontend-nextjs/`, cột *Java* là `backend-java/`. Cột
 | :--- | :--- | :---: | :---: | :---: | :---: |
 | `FEAT-INV-01` | Danh sách tồn kho & menu | — | 🟢 `inventory-table.tsx` | 🟢 `IMenuDao` | ⚪ |
 | `FEAT-INV-02` | Cảnh báo sắp hết hàng | — | 🟢 `inventory-table.tsx` | 🟢 `MenuItem` | — |
-| `FEAT-INV-03` | Bật/tắt bán món | — | 🟢 `setItemInStock` | ⚪ Không có `PATCH /api/menu/:id/stock` | ⚪ |
-| `FEAT-INV-04` | Thêm món mới | — | 🟢 `add-item-dialog.tsx` | ⚪ Không có `POST /api/menu` | ⚪ |
+| `FEAT-INV-03` | Bật/tắt bán món | — | 🟢 `setItemInStock` | 🟢 `PATCH /api/menu/{id}/stock` | 🟢 ghép theo tên món |
+| `FEAT-INV-04` | Thêm món mới | — | 🟢 `add-item-dialog.tsx` | 🟢 `POST /api/menu` (MANAGER) | 🟢 |
 | `FEAT-CRM-01` | Xếp hạng khách hàng | — | 🟢 `admin/customers` | 🟢 `ICustomerDao` | ⚪ |
-| `FEAT-ANA-01` | Doanh thu 7 ngày | — | 🟢 `RevenueChart.tsx` | ⚪ Không có `/api/analytics` | ⚪ |
+| `FEAT-ANA-01` | Doanh thu 7 ngày | — | 🟢 `RevenueChart.tsx` | 🟢 `GET /api/analytics/overview` (tổng, hôm nay, theo trạng thái) | ⚪ biểu đồ đọc kho cục bộ |
 | `FEAT-ANA-02` | Cơ cấu thanh toán & món bán chạy | — | 🟢 `dashboard-charts.tsx` | ⚪ | ⚪ |
 
 > **Mở rộng (🔷):** State Pattern (vòng đời đơn và bàn) và Template Method (xuất báo cáo) được phân tích tại [DESIGN_PATTERNS_SPEC §4](DESIGN_PATTERNS_SPEC.md#4-đánh-giá--đề-xuất-mở-rộng-nâng-cao), không cài đặt trong code.

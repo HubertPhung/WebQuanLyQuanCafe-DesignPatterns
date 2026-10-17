@@ -23,7 +23,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from 'sonner'
-import { createReservation, transferReservationToPos } from '@/app/admin/actions'
+import { createReservation, transferReservationToPos, updateReservationStatus } from '@/app/admin/actions'
 import type { ReservationView } from '@/lib/admin/queries'
 import type { FloorTable } from '@/lib/db/schema'
 import type { ReservationStatusLabel } from '@/lib/db/mock-store'
@@ -68,11 +68,17 @@ export function ReservationsManagement({
     return matchSearch && matchStatus
   })
 
-  const handleStatusChange = (id: string, newStatus: ReservationStatus) => {
-    setReservations(
-      reservations.map((r) => (r.id === id ? { ...r, status: newStatus } : r))
-    )
-    toast.success(`Đã cập nhật trạng thái đặt bàn #${id} sang "${newStatus}"`)
+  const handleStatusChange = (res: Reservation, newStatus: ReservationStatus) => {
+    startTransition(async () => {
+      // Java bookings go through PATCH /api/reservations/{code}/status; local ones stay in the mock store.
+      const result = await updateReservationStatus(res.id, res.source, newStatus)
+      if (!result.ok) {
+        toast.error(result.error)
+        return
+      }
+      setReservations((current) => current.map((r) => (r.id === res.id ? { ...r, status: newStatus } : r)))
+      toast.success(`Đã cập nhật trạng thái đặt bàn #${res.id} sang "${newStatus}"`)
+    })
   }
 
   const handleTransferToPOS = (res: Reservation) => {
@@ -263,7 +269,9 @@ export function ReservationsManagement({
                   <td className="py-3.5 px-3">
                     <select
                       value={r.status}
-                      onChange={(e) => handleStatusChange(r.id, e.target.value as ReservationStatus)}
+                      onChange={(e) => handleStatusChange(r, e.target.value as ReservationStatus)}
+                      disabled={pending}
+                      aria-label={`Trạng thái phiếu ${r.id}`}
                       className={cn(
                         'h-8 rounded-lg px-2 text-xs font-bold border cursor-pointer focus:outline-none',
                         r.status === 'Đã đặt' && 'bg-blue-50/90 border-blue-300 text-blue-950',
@@ -274,7 +282,7 @@ export function ReservationsManagement({
                     >
                       <option value="Chờ xác nhận">Chờ xác nhận</option>
                       <option value="Đã đặt">Đã đặt</option>
-                      <option value="Hoàn thành">Hoàn thành</option>
+                      <option value="Hoàn thành" disabled>Hoàn thành (qua "Sang POS")</option>
                       <option value="Đã hủy">Đã hủy</option>
                     </select>
                   </td>

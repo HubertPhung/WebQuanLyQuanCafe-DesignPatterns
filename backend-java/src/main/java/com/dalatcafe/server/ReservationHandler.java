@@ -27,7 +27,8 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * GET|POST /api/reservations and POST /api/reservations/{code}/transfer-pos.
+ * GET|POST /api/reservations, PATCH /api/reservations/{code}/status and
+ * POST /api/reservations/{code}/transfer-pos.
  * A booking is validated by the Chain of Responsibility (operating hours, capacity,
  * table availability) before being stored; a seated booking becomes a POS order through
  * the {@link ReservationToOrderAdapter}.
@@ -55,6 +56,14 @@ public class ReservationHandler extends ApiHandler {
                 throw methodNotAllowed(exchange);
             }
             transferToPos(exchange, parts.get(2));
+            return;
+        }
+        if (parts.size() == 4 && parts.get(3).equals("status")) {
+            String method = exchange.getRequestMethod().toUpperCase(Locale.ROOT);
+            if (!method.equals("PATCH") && !method.equals("PUT")) {
+                throw methodNotAllowed(exchange);
+            }
+            updateStatus(exchange, parts.get(2));
             return;
         }
         if (parts.size() != 2) {
@@ -113,6 +122,47 @@ public class ReservationHandler extends ApiHandler {
         sendOk(exchange, 201, data, "Reservation received");
     }
 
+    /**
+     * Confirms or cancels a booking. SEATED is reached only through transfer-pos, so the
+     * order and the table are always created together with it.
+     */
+    private void updateStatus(HttpExchange exchange, String code) throws IOException {
+        Map<String, Object> body = readJsonBody(exchange);
+        ReservationStatus target = parseStatus(requireStr(body, "status"));
+        Reservation reservation = reservationDao.findByReservationCode(code)
+                .orElseThrow(() -> ApiException.notFound("Reservation not found: " + code));
+        ReservationStatus current = reservation.getStatus();
+        if (target == ReservationStatus.SEATED) {
+            throw ApiException.badRequest("Use POST /api/reservations/" + code + "/transfer-pos to seat a booking");
+        }
+        if (current == target) {
+            sendOk(exchange, 200, toJson(reservation), "Reservation " + code + " is already " + target.getDescription());
+            return;
+        }
+        boolean allowed = switch (target) {
+            case CONFIRMED -> current == ReservationStatus.PENDING;
+            case CANCELLED -> current == ReservationStatus.PENDING || current == ReservationStatus.CONFIRMED;
+            default -> false;
+        };
+        if (!allowed) {
+            throw new ApiException(409, "RESOURCE_CONFLICT", "Reservation " + code + " cannot go from "
+                    + current.getDescription() + " to " + target.getDescription());
+        }
+        if (reservation.getId() == null || !reservationDao.updateStatus(reservation.getId(), target)) {
+            throw new ApiException(500, "INTERNAL_SERVER_ERROR", "Could not update reservation " + code);
+        }
+        reservation.setStatus(target);
+        sendOk(exchange, 200, toJson(reservation), "Reservation " + code + ": " + target.getDescription());
+    }
+
+    private static ReservationStatus parseStatus(String raw) {
+        try {
+            return ReservationStatus.valueOf(raw.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw ApiException.badRequest("status must be one of: pending, confirmed, cancelled");
+        }
+    }
+
     private void transferToPos(HttpExchange exchange, String code) throws IOException {
         Reservation reservation = reservationDao.findByReservationCode(code)
                 .orElseThrow(() -> ApiException.notFound("Reservation not found: " + code));
@@ -142,25 +192,8 @@ public class ReservationHandler extends ApiHandler {
     }
 
     private static Map<String, Object> orderJson(Order order, String customer) {
-        Map<String, Object> json = new LinkedHashMap<>();
-        json.put("orderCode", order.getOrderCode());
+        Map<String, Object> json = OrderHandler.toJson(order);
         json.put("customer", customer);
-        json.put("tableId", order.getTableId());
-        json.put("orderType", order.getOrderType().name().toLowerCase(Locale.ROOT).replace('_', '-'));
-        json.put("status", order.getStatus().name().toLowerCase(Locale.ROOT));
-        json.put("paymentStatus", order.getPaymentStatus().name().toLowerCase(Locale.ROOT));
-        List<Object> items = new ArrayList<>();
-        for (OrderItem item : order.getItems()) {
-            Map<String, Object> line = new LinkedHashMap<>();
-            line.put("name", item.getName());
-            line.put("qty", item.getQty());
-            line.put("price", item.getPrice());
-            items.add(line);
-        }
-        json.put("items", items);
-        json.put("subtotal", order.getSubtotal());
-        json.put("vatAmount", order.getVatAmount());
-        json.put("total", order.getTotal());
         return json;
     }
 

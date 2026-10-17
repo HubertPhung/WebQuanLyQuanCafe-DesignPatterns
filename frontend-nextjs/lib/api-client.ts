@@ -4,8 +4,9 @@
 
 const DEFAULT_BACKEND_URL = 'http://localhost:8080'
 const REQUEST_TIMEOUT_MS = 2500
-// The Java SimpleAuthFilter gates POS endpoints by role header (API_SPEC 1.3).
-const STAFF_ROLE = 'STAFF'
+// The Java SimpleAuthFilter gates endpoints by role header (API_SPEC 1.3): POS work needs
+// STAFF, creating menu items and analytics need MANAGER.
+type JavaRole = 'STAFF' | 'MANAGER'
 // 5xx codes the backend uses to refuse on purpose rather than crash (API_SPEC 1.2).
 const FAIL_CLOSED_CODES = new Set(['DATABASE_UNAVAILABLE'])
 
@@ -24,7 +25,10 @@ export function getJavaBackendUrl(): string | null {
   return raw.replace(/\/+$/, '')
 }
 
-async function request<T>(path: string, init: { method: string; body?: unknown }): Promise<JavaResult<T>> {
+async function request<T>(
+  path: string,
+  init: { method: string; body?: unknown; role?: JavaRole },
+): Promise<JavaResult<T>> {
   const baseUrl = getJavaBackendUrl()
   if (!baseUrl) return { ok: false, unreachable: true, error: 'Java backend is disabled.' }
 
@@ -35,7 +39,7 @@ async function request<T>(path: string, init: { method: string; body?: unknown }
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
-        'X-User-Role': STAFF_ROLE,
+        'X-User-Role': init.role ?? 'STAFF',
       },
       body: init.body === undefined ? undefined : JSON.stringify(init.body),
       cache: 'no-store',
@@ -63,7 +67,7 @@ async function request<T>(path: string, init: { method: string; body?: unknown }
   return { ok: false, unreachable: false, status: response.status, code, error }
 }
 
-export type JavaMenuItem = { id: number; name: string; kind: string; sellPrice: number; inStock: boolean }
+export type JavaMenuItem = { id: number; name: string; kind: string; sellPrice: number; inStock: boolean; stockQty: number }
 
 export function fetchMenu(): Promise<JavaResult<JavaMenuItem[]>> {
   return request<JavaMenuItem[]>('/api/menu', { method: 'GET' })
@@ -76,6 +80,9 @@ export type CheckoutPayload = {
   tableId: number | null
   orderType: 'dine-in' | 'pickup' | 'delivery'
   paymentMethod: 'cash' | 'qr' | 'card'
+  // A registered member: earns points, gets the tier discount and may redeem points.
+  customerPhone?: string
+  useLoyaltyPoints?: number
 }
 
 export type CheckoutReceipt = {
@@ -87,6 +94,9 @@ export type CheckoutReceipt = {
   paymentStatus: string
   transactionId: string | null
   warnings: string[]
+  pointsEarned: number
+  pointsRedeemed: number
+  pointsDiscountVnd: number
 }
 
 export function checkout(payload: CheckoutPayload): Promise<JavaResult<CheckoutReceipt>> {
@@ -133,6 +143,11 @@ export function fetchReservations(): Promise<JavaResult<JavaReservation[]>> {
   return request<JavaReservation[]>('/api/reservations', { method: 'GET' })
 }
 
+// PATCH /api/reservations/{code}/status: confirm or cancel (seating goes through transfer-pos).
+export function updateJavaReservationStatus(code: string, status: 'pending' | 'confirmed' | 'cancelled'): Promise<JavaResult<JavaReservation>> {
+  return request<JavaReservation>(`/api/reservations/${encodeURIComponent(code)}/status`, { method: 'PATCH', body: { status } })
+}
+
 export type TransferredOrder = {
   orderCode: string
   customer: string
@@ -145,4 +160,57 @@ export type TransferredOrder = {
 // POST /api/reservations/{code}/transfer-pos: the Java ReservationToOrderAdapter opens a POS order.
 export function transferReservation(code: string): Promise<JavaResult<TransferredOrder>> {
   return request<TransferredOrder>(`/api/reservations/${encodeURIComponent(code)}/transfer-pos`, { method: 'POST' })
+}
+
+export type JavaCustomer = {
+  id: number
+  name: string
+  phone: string
+  loyaltyPoints: number
+  rank: 'bronze' | 'silver' | 'gold' | 'vip'
+  totalOrders: number
+  totalSpent: number
+}
+
+// GET /api/customers?phone=...: the POS member lookup.
+export function findCustomerByPhone(phone: string): Promise<JavaResult<JavaCustomer[]>> {
+  return request<JavaCustomer[]>(`/api/customers?phone=${encodeURIComponent(phone)}`, { method: 'GET' })
+}
+
+export type JavaOrder = { orderCode: string; status: string; paymentStatus: string; total: number; warnings?: string[] }
+
+// PATCH /api/orders/{code}/status: KDS lifecycle; reaching "completed" frees the table for cleaning.
+export function updateJavaOrderStatus(code: string, status: string): Promise<JavaResult<JavaOrder>> {
+  return request<JavaOrder>(`/api/orders/${encodeURIComponent(code)}/status`, { method: 'PATCH', body: { status } })
+}
+
+// POST /api/orders/{code}/pay: settles an unpaid order (e.g. one transferred from a reservation).
+export function payJavaOrder(code: string, paymentMethod: string): Promise<JavaResult<JavaOrder>> {
+  return request<JavaOrder>(`/api/orders/${encodeURIComponent(code)}/pay`, { method: 'POST', body: { paymentMethod } })
+}
+
+export type StockPayload = { inStock?: boolean; change?: number; stockQty?: number }
+
+// PATCH /api/menu/{id}/stock
+export function updateJavaStock(menuItemId: number, payload: StockPayload): Promise<JavaResult<JavaMenuItem>> {
+  return request<JavaMenuItem>(`/api/menu/${menuItemId}/stock`, { method: 'PATCH', body: payload })
+}
+
+export type NewJavaMenuItem = {
+  name: string
+  category: string
+  kind: string
+  sellPrice: number
+  costPrice: number
+  stockQty: number
+  unit: string
+  lowStockThreshold: number
+  recipe?: string
+  imageUrl?: string
+  variations: { name: string; price: number }[]
+}
+
+// POST /api/menu (MANAGER+)
+export function createJavaMenuItem(payload: NewJavaMenuItem): Promise<JavaResult<JavaMenuItem>> {
+  return request<JavaMenuItem>('/api/menu', { method: 'POST', body: payload, role: 'MANAGER' })
 }

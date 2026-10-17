@@ -19,7 +19,7 @@ public class JdbcMenuDao implements IMenuDao {
     @Override
     public List<MenuItem> findAll() {
         List<MenuItem> list = new ArrayList<>();
-        String sql = "SELECT id, name, category, kind, stock_qty, unit, low_stock_threshold, cost_price, sell_price, in_stock, recipe, image_url, created_at FROM menu_items ORDER BY id ASC";
+        String sql = "SELECT id, name, category, kind, stock_qty, unit, low_stock_threshold, cost_price, sell_price, in_stock, recipe, image_url, created_at, variations FROM menu_items ORDER BY id ASC";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
@@ -34,7 +34,7 @@ public class JdbcMenuDao implements IMenuDao {
 
     @Override
     public Optional<MenuItem> findById(int id) {
-        String sql = "SELECT id, name, category, kind, stock_qty, unit, low_stock_threshold, cost_price, sell_price, in_stock, recipe, image_url, created_at FROM menu_items WHERE id = ?";
+        String sql = "SELECT id, name, category, kind, stock_qty, unit, low_stock_threshold, cost_price, sell_price, in_stock, recipe, image_url, created_at, variations FROM menu_items WHERE id = ?";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, id);
@@ -53,7 +53,7 @@ public class JdbcMenuDao implements IMenuDao {
     public List<MenuItem> findByCategory(String category) {
         List<MenuItem> list = new ArrayList<>();
         if (category == null) return list;
-        String sql = "SELECT id, name, category, kind, stock_qty, unit, low_stock_threshold, cost_price, sell_price, in_stock, recipe, image_url, created_at FROM menu_items WHERE LOWER(category) = LOWER(?) ORDER BY id ASC";
+        String sql = "SELECT id, name, category, kind, stock_qty, unit, low_stock_threshold, cost_price, sell_price, in_stock, recipe, image_url, created_at, variations FROM menu_items WHERE LOWER(category) = LOWER(?) ORDER BY id ASC";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, category);
@@ -71,7 +71,7 @@ public class JdbcMenuDao implements IMenuDao {
     @Override
     public List<MenuItem> findLowStockItems() {
         List<MenuItem> list = new ArrayList<>();
-        String sql = "SELECT id, name, category, kind, stock_qty, unit, low_stock_threshold, cost_price, sell_price, in_stock, recipe, image_url, created_at FROM menu_items WHERE stock_qty <= low_stock_threshold ORDER BY stock_qty ASC";
+        String sql = "SELECT id, name, category, kind, stock_qty, unit, low_stock_threshold, cost_price, sell_price, in_stock, recipe, image_url, created_at, variations FROM menu_items WHERE stock_qty <= low_stock_threshold ORDER BY stock_qty ASC";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
@@ -89,8 +89,8 @@ public class JdbcMenuDao implements IMenuDao {
         if (item == null) return false;
         if (item.getId() != null && item.getId() > 0) {
             String sql = """
-                INSERT INTO menu_items (id, name, category, kind, stock_qty, unit, low_stock_threshold, cost_price, sell_price, in_stock, recipe, image_url, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO menu_items (id, name, category, kind, stock_qty, unit, low_stock_threshold, cost_price, sell_price, in_stock, recipe, image_url, created_at, variations)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB))
                 ON CONFLICT (id) DO UPDATE SET
                     name = EXCLUDED.name,
                     category = EXCLUDED.category,
@@ -102,7 +102,8 @@ public class JdbcMenuDao implements IMenuDao {
                     sell_price = EXCLUDED.sell_price,
                     in_stock = EXCLUDED.in_stock,
                     recipe = EXCLUDED.recipe,
-                    image_url = EXCLUDED.image_url
+                    image_url = EXCLUDED.image_url,
+                    variations = EXCLUDED.variations
             """;
             try (Connection conn = JdbcDatabase.getConnection();
                  PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -114,8 +115,8 @@ public class JdbcMenuDao implements IMenuDao {
             }
         } else {
             String sql = """
-                INSERT INTO menu_items (name, category, kind, stock_qty, unit, low_stock_threshold, cost_price, sell_price, in_stock, recipe, image_url, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO menu_items (name, category, kind, stock_qty, unit, low_stock_threshold, cost_price, sell_price, in_stock, recipe, image_url, created_at, variations)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB))
             """;
             try (Connection conn = JdbcDatabase.getConnection();
                  PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
@@ -131,6 +132,7 @@ public class JdbcMenuDao implements IMenuDao {
                 ps.setString(10, item.getRecipe());
                 ps.setString(11, item.getImageUrl());
                 ps.setTimestamp(12, Timestamp.from(Instant.now()));
+                ps.setString(13, JsonColumns.fromVariations(item.getVariations()));
                 int rows = ps.executeUpdate();
                 if (rows > 0) {
                     try (ResultSet keys = ps.getGeneratedKeys()) {
@@ -161,6 +163,7 @@ public class JdbcMenuDao implements IMenuDao {
         ps.setString(11, item.getRecipe());
         ps.setString(12, item.getImageUrl());
         ps.setTimestamp(13, Timestamp.from(item.getCreatedAt() != null ? item.getCreatedAt() : Instant.now()));
+        ps.setString(14, JsonColumns.fromVariations(item.getVariations()));
     }
 
     @Override
@@ -218,6 +221,7 @@ public class JdbcMenuDao implements IMenuDao {
         item.setInStock(rs.getBoolean("in_stock"));
         item.setRecipe(rs.getString("recipe"));
         item.setImageUrl(rs.getString("image_url"));
+        item.setVariations(JsonColumns.toVariations(rs.getString("variations")));
 
         Timestamp createdAt = rs.getTimestamp("created_at");
         if (createdAt != null) {

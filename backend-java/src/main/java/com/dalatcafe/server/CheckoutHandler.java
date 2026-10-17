@@ -15,7 +15,7 @@ import com.dalatcafe.patterns.observer.LoyaltyPointObserver;
 import com.dalatcafe.patterns.singleton.SystemConfigManager;
 import com.dalatcafe.patterns.strategy.IDiscountStrategy;
 import com.dalatcafe.patterns.strategy.LoyaltyTierDiscountStrategy;
-import com.dalatcafe.patterns.strategy.PercentageDiscountStrategy;
+import com.dalatcafe.patterns.strategy.PointRedemptionDiscountStrategy;
 import com.sun.net.httpserver.HttpExchange;
 
 import java.io.IOException;
@@ -35,10 +35,6 @@ import java.util.function.BooleanSupplier;
  * when the primary database is down (no money movement on a degraded store).
  */
 public class CheckoutHandler extends ApiHandler {
-    static final String WELCOME_VOUCHER = "WELCOME10";
-    private static final double WELCOME_RATE = 0.10;
-    private static final double WELCOME_CAP_VND = 50_000;
-
     private final PosCheckoutFacade facade;
     private final ICustomerDao customerDao;
     private final BooleanSupplier databaseHealthy;
@@ -64,11 +60,16 @@ public class CheckoutHandler extends ApiHandler {
         }
 
         Customer known = findCustomer(str(body, "customerPhone"));
-        CheckoutRequest request = toRequest(body, known);
+        int requestedPoints = requestedPoints(body, known);
+        PointRedemptionDiscountStrategy redemption = requestedPoints > 0
+                ? new PointRedemptionDiscountStrategy(discount(str(body, "voucherCode"), known), requestedPoints) : null;
+        CheckoutRequest request = toRequest(body, known, redemption);
         PaymentMethod method = request.getPaymentMethod();
         Double tendered = num(body, "tenderedAmount");
 
         CheckoutResult result;
+        int pointsRedeemed = 0;
+        List<String> warnings = new ArrayList<>();
         // The subject is shared, so attaching a per-customer observer must be exclusive.
         synchronized (facade) {
             IOrderObserver loyalty = known != null && known.getId() != null
@@ -83,13 +84,44 @@ public class CheckoutHandler extends ApiHandler {
                     facade.getEventSubject().detach(loyalty);
                 }
             }
+            if (result.isSuccess() && redemption != null && redemption.getPointsUsed() > 0) {
+                pointsRedeemed = redemption.getPointsUsed();
+                if (!customerDao.redeemPoints(known.getId(), pointsRedeemed)) {
+                    warnings.add("Loyalty points could not be deducted: " + pointsRedeemed);
+                }
+            }
         }
 
         if (!result.isSuccess()) {
             throw mapFailure(result);
         }
         Order order = result.getOrder();
-        sendOk(exchange, 200, toResponse(order, tendered, method, result, known != null), "Checkout completed");
+        warnings.addAll(0, result.getWarnings());
+        Map<String, Object> data = toResponse(order, tendered, method, result, known != null);
+        data.put("warnings", warnings);
+        data.put("pointsRedeemed", pointsRedeemed);
+        data.put("pointsDiscountVnd", SystemConfigManager.getInstance().calculateDiscountFromPoints(pointsRedeemed));
+        sendOk(exchange, 200, data, "Checkout completed");
+    }
+
+    /** Points the cashier wants to redeem; only a known member with enough balance may. */
+    private static int requestedPoints(Map<String, Object> body, Customer known) {
+        Double raw = num(body, "useLoyaltyPoints");
+        if (raw == null || raw == 0) {
+            return 0;
+        }
+        if (raw < 0 || raw != Math.floor(raw)) {
+            throw ApiException.badRequest("useLoyaltyPoints must be a positive whole number");
+        }
+        if (known == null || known.getId() == null) {
+            throw ApiException.badRequest("Redeeming points needs the phone number of a registered customer");
+        }
+        int points = raw.intValue();
+        if (points > known.getLoyaltyPoints()) {
+            throw new ApiException(400, "INSUFFICIENT_POINTS",
+                    "Customer has " + known.getLoyaltyPoints() + " points, cannot redeem " + points);
+        }
+        return points;
     }
 
     private ApiException mapFailure(CheckoutResult result) {
@@ -116,13 +148,10 @@ public class CheckoutHandler extends ApiHandler {
         return customerDao.findByPhone(phone).orElse(null);
     }
 
-    private CheckoutRequest toRequest(Map<String, Object> body, Customer known) {
+    private CheckoutRequest toRequest(Map<String, Object> body, Customer known, IDiscountStrategy redemption) {
         List<Object> rawLines = list(body, "lines");
         if (rawLines.isEmpty()) {
             throw ApiException.badRequest("Field 'lines' must contain at least one item");
-        }
-        if (num(body, "useLoyaltyPoints") != null && num(body, "useLoyaltyPoints") > 0) {
-            throw ApiException.badRequest("Redeeming loyalty points at checkout is not supported yet");
         }
         List<CheckoutLine> lines = new ArrayList<>();
         for (Object raw : rawLines) {
@@ -145,7 +174,7 @@ public class CheckoutHandler extends ApiHandler {
         }
         return new CheckoutRequest(lines, tableId, orderType(str(body, "orderType")),
                 paymentMethod(requireStr(body, "paymentMethod")), customer,
-                discount(str(body, "voucherCode"), known), str(body, "note"));
+                redemption != null ? redemption : discount(str(body, "voucherCode"), known), str(body, "note"));
     }
 
     private static Set<Customization> customizations(Map<String, Object> line) {
@@ -184,10 +213,8 @@ public class CheckoutHandler extends ApiHandler {
 
     private static IDiscountStrategy discount(String voucher, Customer known) {
         if (voucher != null) {
-            if (!voucher.equalsIgnoreCase(WELCOME_VOUCHER)) {
-                throw new ApiException(400, "INVALID_VOUCHER", "Invalid voucher code: " + voucher);
-            }
-            return new PercentageDiscountStrategy(WELCOME_RATE, WELCOME_CAP_VND);
+            return VoucherCatalog.find(voucher).orElseThrow(() ->
+                    new ApiException(400, "INVALID_VOUCHER", "Invalid voucher code: " + voucher));
         }
         return known != null ? new LoyaltyTierDiscountStrategy() : null;
     }

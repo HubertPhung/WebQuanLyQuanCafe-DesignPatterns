@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -19,7 +20,7 @@ public class JdbcOrderDao implements IOrderDao {
     @Override
     public List<Order> findAll() {
         List<Order> list = new ArrayList<>();
-        String sql = "SELECT id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at FROM orders ORDER BY created_at DESC";
+        String sql = "SELECT id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items FROM orders ORDER BY created_at DESC";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
@@ -34,7 +35,7 @@ public class JdbcOrderDao implements IOrderDao {
 
     @Override
     public Optional<Order> findById(int id) {
-        String sql = "SELECT id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at FROM orders WHERE id = ?";
+        String sql = "SELECT id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items FROM orders WHERE id = ?";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, id);
@@ -52,7 +53,7 @@ public class JdbcOrderDao implements IOrderDao {
     @Override
     public Optional<Order> findByOrderCode(String orderCode) {
         if (orderCode == null) return Optional.empty();
-        String sql = "SELECT id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at FROM orders WHERE LOWER(order_code) = LOWER(?)";
+        String sql = "SELECT id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items FROM orders WHERE LOWER(order_code) = LOWER(?)";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, orderCode);
@@ -71,7 +72,7 @@ public class JdbcOrderDao implements IOrderDao {
     public List<Order> findByStatus(OrderStatus status) {
         List<Order> list = new ArrayList<>();
         if (status == null) return list;
-        String sql = "SELECT id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at FROM orders WHERE UPPER(status) = ? ORDER BY created_at DESC";
+        String sql = "SELECT id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items FROM orders WHERE UPPER(status) = ? ORDER BY created_at DESC";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, status.name());
@@ -89,7 +90,7 @@ public class JdbcOrderDao implements IOrderDao {
     @Override
     public List<Order> findByTableId(int tableId) {
         List<Order> list = new ArrayList<>();
-        String sql = "SELECT id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at FROM orders WHERE table_id = ? ORDER BY created_at DESC";
+        String sql = "SELECT id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items FROM orders WHERE table_id = ? ORDER BY created_at DESC";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, tableId);
@@ -109,8 +110,8 @@ public class JdbcOrderDao implements IOrderDao {
         if (order == null) return false;
         if (order.getId() != null && order.getId() > 0) {
             String sql = """
-                INSERT INTO orders (id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO orders (id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB))
                 ON CONFLICT (id) DO UPDATE SET
                     order_code = EXCLUDED.order_code,
                     customer = EXCLUDED.customer,
@@ -124,7 +125,8 @@ public class JdbcOrderDao implements IOrderDao {
                     payment_status = EXCLUDED.payment_status,
                     status = EXCLUDED.status,
                     note = EXCLUDED.note,
-                    completed_at = EXCLUDED.completed_at
+                    completed_at = EXCLUDED.completed_at,
+                    items = EXCLUDED.items
             """;
             try (Connection conn = JdbcDatabase.getConnection();
                  PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -136,17 +138,15 @@ public class JdbcOrderDao implements IOrderDao {
             }
         } else {
             String sql = """
-                INSERT INTO orders (order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO orders (order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB))
             """;
             try (Connection conn = JdbcDatabase.getConnection();
                  PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
                 String code = order.getOrderCode();
-                if (code == null || code.isBlank()) {
-                    code = "AC-" + (System.currentTimeMillis() % 10000);
-                    order.setOrderCode(code);
-                }
-                ps.setString(1, code);
+                boolean generated = code == null || code.isBlank();
+                // A unique placeholder until the id is known; renamed to AC-0001 style below.
+                ps.setString(1, generated ? "TMP-" + UUID.randomUUID() : code);
                 ps.setString(2, order.getCustomer());
                 if (order.getTableId() != null) {
                     ps.setInt(3, order.getTableId());
@@ -164,6 +164,7 @@ public class JdbcOrderDao implements IOrderDao {
                 ps.setString(12, order.getNote());
                 ps.setTimestamp(13, Timestamp.from(order.getCreatedAt() != null ? order.getCreatedAt() : Instant.now()));
                 ps.setTimestamp(14, order.getCompletedAt() != null ? Timestamp.from(order.getCompletedAt()) : null);
+                ps.setString(15, JsonColumns.fromItems(order.getItems()));
 
                 int rows = ps.executeUpdate();
                 if (rows > 0) {
@@ -171,6 +172,16 @@ public class JdbcOrderDao implements IOrderDao {
                         if (keys.next()) {
                             order.setId(keys.getInt(1));
                         }
+                    }
+                    if (generated && order.getId() != null) {
+                        String finalCode = "AC-" + String.format("%04d", order.getId());
+                        try (PreparedStatement rename = conn.prepareStatement(
+                                "UPDATE orders SET order_code = ? WHERE id = ?")) {
+                            rename.setString(1, finalCode);
+                            rename.setInt(2, order.getId());
+                            rename.executeUpdate();
+                        }
+                        order.setOrderCode(finalCode);
                     }
                     return true;
                 }
@@ -201,6 +212,7 @@ public class JdbcOrderDao implements IOrderDao {
         ps.setString(13, order.getNote());
         ps.setTimestamp(14, Timestamp.from(order.getCreatedAt() != null ? order.getCreatedAt() : Instant.now()));
         ps.setTimestamp(15, order.getCompletedAt() != null ? Timestamp.from(order.getCompletedAt()) : null);
+        ps.setString(16, JsonColumns.fromItems(order.getItems()));
     }
 
     @Override
@@ -266,9 +278,12 @@ public class JdbcOrderDao implements IOrderDao {
             }
         }
 
+        // setItems and setDiscountAmount recalculate totals, so they go first and the stored
+        // amounts (what the customer actually paid) are written last.
+        order.setItems(JsonColumns.toItems(rs.getString("items")));
+        order.setDiscountAmount(rs.getDouble("discount_amount"));
         order.setSubtotal(rs.getDouble("subtotal"));
         order.setVatAmount(rs.getDouble("vat_amount"));
-        order.setDiscountAmount(rs.getDouble("discount_amount"));
         order.setTotal(rs.getDouble("total"));
 
         String payMethod = rs.getString("payment_method");

@@ -55,15 +55,13 @@ class ObserverTest {
     }
 
     @Test
-    void notifiesLoyaltyTableAndKitchenObservers() {
+    void paidEventEarnsPointsSeatsTableAndOpensKdsTicket() {
         Order order = paidOrder();
         List<String> notifications = new ArrayList<>();
-        OrderEventSubject subject = new OrderEventSubject();
-        subject.attach(new LoyaltyPointObserver(customerDao, customer.getId()));
-        subject.attach(new TableStatusSyncObserver(tableDao));
-        subject.attach(new KitchenNotificationObserver(notifications::add));
+        OrderEventSubject subject = allObservers(notifications);
+        tableDao.updateStatus(table.getId(), TableStatus.AVAILABLE, 0);
 
-        subject.notifyOrderCompleted(order);
+        subject.notifyOrderPaid(order);
 
         Customer updatedCustomer = customerDao.findById(customer.getId()).orElseThrow();
         int expectedPoints = SystemConfigManager.getInstance().calculateLoyaltyPoints(order.getTotal());
@@ -72,20 +70,48 @@ class ObserverTest {
         assertEquals(order.getTotal(), updatedCustomer.getTotalSpent());
 
         Table updatedTable = tableDao.findById(table.getId()).orElseThrow();
+        assertEquals(TableStatus.OCCUPIED, updatedTable.getStatus());
+        assertEquals(1, updatedTable.getGuestCount());
+        assertTrue(notifications.get(0).contains(order.getOrderCode()));
+        assertTrue(notifications.get(0).contains("paid"));
+    }
+
+    @Test
+    void paidEventKeepsGuestCountOfSeatedTable() {
+        OrderEventSubject subject = new OrderEventSubject();
+        subject.attach(new TableStatusSyncObserver(tableDao));
+
+        subject.notifyOrderPaid(paidOrder());
+
+        assertEquals(2, tableDao.findById(table.getId()).orElseThrow().getGuestCount());
+    }
+
+    @Test
+    void completedEventFreesTableForCleaningWithoutEarningPointsTwice() {
+        Order order = paidOrder();
+        List<String> notifications = new ArrayList<>();
+        OrderEventSubject subject = allObservers(notifications);
+
+        subject.notifyOrderCompleted(order);
+
+        Customer unchanged = customerDao.findById(customer.getId()).orElseThrow();
+        assertEquals(0, unchanged.getLoyaltyPoints());
+        Table updatedTable = tableDao.findById(table.getId()).orElseThrow();
         assertEquals(TableStatus.CLEANING, updatedTable.getStatus());
         assertEquals(0, updatedTable.getGuestCount());
-        assertTrue(notifications.get(0).contains(order.getOrderCode()));
+        assertTrue(notifications.get(0).contains("remove it from KDS"));
     }
 
     @Test
     void preventsDuplicateObserversAndSupportsDetach() {
         AtomicInteger notifications = new AtomicInteger();
-        IOrderObserver observer = order -> notifications.incrementAndGet();
+        IOrderObserver observer = IOrderObserver.whenCompleted(order -> notifications.incrementAndGet());
         OrderEventSubject subject = new OrderEventSubject();
         subject.attach(observer);
         subject.attach(observer);
 
         subject.notifyOrderCompleted(paidOrder());
+        subject.notifyOrderPaid(paidOrder());
         subject.detach(observer);
         subject.notifyOrderCompleted(paidOrder());
 
@@ -97,7 +123,7 @@ class ObserverTest {
         OrderEventSubject subject = new OrderEventSubject();
         subject.attach(new LoyaltyPointObserver(customerDao, customer.getId()));
 
-        subject.notifyOrderCompleted(order(true, false));
+        subject.notifyOrderPaid(order(true, false));
 
         Customer unchanged = customerDao.findById(customer.getId()).orElseThrow();
         assertEquals(0, unchanged.getLoyaltyPoints());
@@ -109,6 +135,7 @@ class ObserverTest {
         OrderEventSubject subject = new OrderEventSubject();
         subject.attach(new TableStatusSyncObserver(tableDao));
 
+        subject.notifyOrderPaid(order(false, true));
         subject.notifyOrderCompleted(order(false, true));
 
         Table unchanged = tableDao.findById(table.getId()).orElseThrow();
@@ -121,7 +148,7 @@ class ObserverTest {
         OrderEventSubject subject = new OrderEventSubject();
         subject.attach(new LoyaltyPointObserver(customerDao, 9_999));
 
-        assertThrows(IllegalStateException.class, () -> subject.notifyOrderCompleted(paidOrder()));
+        assertThrows(IllegalStateException.class, () -> subject.notifyOrderPaid(paidOrder()));
     }
 
     @Test
@@ -131,6 +158,7 @@ class ObserverTest {
         OrderEventSubject subject = new OrderEventSubject();
         subject.attach(new TableStatusSyncObserver(tableDao));
 
+        assertThrows(IllegalStateException.class, () -> subject.notifyOrderPaid(order));
         assertThrows(IllegalStateException.class, () -> subject.notifyOrderCompleted(order));
     }
 
@@ -140,6 +168,7 @@ class ObserverTest {
 
         assertThrows(NullPointerException.class, () -> subject.attach(null));
         assertThrows(NullPointerException.class, () -> subject.notifyOrderCompleted(null));
+        assertThrows(NullPointerException.class, () -> subject.notifyOrderPaid(null));
         assertThrows(IllegalArgumentException.class, () -> new LoyaltyPointObserver(customerDao, 0));
         assertThrows(NullPointerException.class, () -> new TableStatusSyncObserver(null));
     }
@@ -147,6 +176,14 @@ class ObserverTest {
     @Test
     void subjectWithoutObserversIsNoOp() {
         assertDoesNotThrow(() -> new OrderEventSubject().notifyOrderCompleted(paidOrder()));
+    }
+
+    private OrderEventSubject allObservers(List<String> kitchen) {
+        OrderEventSubject subject = new OrderEventSubject();
+        subject.attach(new LoyaltyPointObserver(customerDao, customer.getId()));
+        subject.attach(new TableStatusSyncObserver(tableDao));
+        subject.attach(new KitchenNotificationObserver(kitchen::add));
+        return subject;
     }
 
     private Order paidOrder() {

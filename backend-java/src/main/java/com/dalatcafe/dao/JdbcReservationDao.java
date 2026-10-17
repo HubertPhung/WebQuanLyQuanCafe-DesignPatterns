@@ -8,6 +8,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -20,7 +21,7 @@ public class JdbcReservationDao implements IReservationDao {
     @Override
     public List<Reservation> findAll() {
         List<Reservation> list = new ArrayList<>();
-        String sql = "SELECT id, reservation_code, customer, contact, email, date_time, table_name, table_id, guests, status, note, created_at FROM reservations ORDER BY date_time ASC";
+        String sql = "SELECT id, reservation_code, customer, contact, email, date_time, table_name, table_id, guests, status, note, created_at, pre_orders FROM reservations ORDER BY date_time ASC";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
@@ -35,7 +36,7 @@ public class JdbcReservationDao implements IReservationDao {
 
     @Override
     public Optional<Reservation> findById(int id) {
-        String sql = "SELECT id, reservation_code, customer, contact, email, date_time, table_name, table_id, guests, status, note, created_at FROM reservations WHERE id = ?";
+        String sql = "SELECT id, reservation_code, customer, contact, email, date_time, table_name, table_id, guests, status, note, created_at, pre_orders FROM reservations WHERE id = ?";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, id);
@@ -53,7 +54,7 @@ public class JdbcReservationDao implements IReservationDao {
     @Override
     public Optional<Reservation> findByReservationCode(String code) {
         if (code == null) return Optional.empty();
-        String sql = "SELECT id, reservation_code, customer, contact, email, date_time, table_name, table_id, guests, status, note, created_at FROM reservations WHERE LOWER(reservation_code) = LOWER(?)";
+        String sql = "SELECT id, reservation_code, customer, contact, email, date_time, table_name, table_id, guests, status, note, created_at, pre_orders FROM reservations WHERE LOWER(reservation_code) = LOWER(?)";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, code);
@@ -72,7 +73,7 @@ public class JdbcReservationDao implements IReservationDao {
     public List<Reservation> findByStatus(ReservationStatus status) {
         List<Reservation> list = new ArrayList<>();
         if (status == null) return list;
-        String sql = "SELECT id, reservation_code, customer, contact, email, date_time, table_name, table_id, guests, status, note, created_at FROM reservations WHERE UPPER(status) = ? ORDER BY date_time ASC";
+        String sql = "SELECT id, reservation_code, customer, contact, email, date_time, table_name, table_id, guests, status, note, created_at, pre_orders FROM reservations WHERE UPPER(status) = ? ORDER BY date_time ASC";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, status.name());
@@ -92,8 +93,8 @@ public class JdbcReservationDao implements IReservationDao {
         if (res == null) return false;
         if (res.getId() != null && res.getId() > 0) {
             String sql = """
-                INSERT INTO reservations (id, reservation_code, customer, contact, email, date_time, table_name, table_id, guests, status, note, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO reservations (id, reservation_code, customer, contact, email, date_time, table_name, table_id, guests, status, note, created_at, pre_orders)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB))
                 ON CONFLICT (id) DO UPDATE SET
                     reservation_code = EXCLUDED.reservation_code,
                     customer = EXCLUDED.customer,
@@ -104,7 +105,8 @@ public class JdbcReservationDao implements IReservationDao {
                     table_id = EXCLUDED.table_id,
                     guests = EXCLUDED.guests,
                     status = EXCLUDED.status,
-                    note = EXCLUDED.note
+                    note = EXCLUDED.note,
+                    pre_orders = EXCLUDED.pre_orders
             """;
             try (Connection conn = JdbcDatabase.getConnection();
                  PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -116,17 +118,15 @@ public class JdbcReservationDao implements IReservationDao {
             }
         } else {
             String sql = """
-                INSERT INTO reservations (reservation_code, customer, contact, email, date_time, table_name, table_id, guests, status, note, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO reservations (reservation_code, customer, contact, email, date_time, table_name, table_id, guests, status, note, created_at, pre_orders)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB))
             """;
             try (Connection conn = JdbcDatabase.getConnection();
                  PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
                 String code = res.getReservationCode();
-                if (code == null || code.isBlank()) {
-                    code = "RES-" + (System.currentTimeMillis() % 10000);
-                    res.setReservationCode(code);
-                }
-                ps.setString(1, code);
+                boolean generated = code == null || code.isBlank();
+                // A unique placeholder until the id is known; renamed to RES-0001 style below.
+                ps.setString(1, generated ? "TMP-" + UUID.randomUUID() : code);
                 ps.setString(2, res.getCustomer());
                 ps.setString(3, res.getContact());
                 ps.setString(4, res.getEmail());
@@ -141,6 +141,7 @@ public class JdbcReservationDao implements IReservationDao {
                 ps.setString(9, res.getStatus() != null ? res.getStatus().name() : ReservationStatus.PENDING.name());
                 ps.setString(10, res.getNote());
                 ps.setTimestamp(11, Timestamp.from(res.getCreatedAt() != null ? res.getCreatedAt() : Instant.now()));
+                ps.setString(12, JsonColumns.fromItems(res.getPreOrders()));
 
                 int rows = ps.executeUpdate();
                 if (rows > 0) {
@@ -148,6 +149,16 @@ public class JdbcReservationDao implements IReservationDao {
                         if (keys.next()) {
                             res.setId(keys.getInt(1));
                         }
+                    }
+                    if (generated && res.getId() != null) {
+                        String finalCode = "RES-" + String.format("%04d", res.getId());
+                        try (PreparedStatement rename = conn.prepareStatement(
+                                "UPDATE reservations SET reservation_code = ? WHERE id = ?")) {
+                            rename.setString(1, finalCode);
+                            rename.setInt(2, res.getId());
+                            rename.executeUpdate();
+                        }
+                        res.setReservationCode(finalCode);
                     }
                     return true;
                 }
@@ -175,6 +186,7 @@ public class JdbcReservationDao implements IReservationDao {
         ps.setString(10, res.getStatus() != null ? res.getStatus().name() : ReservationStatus.PENDING.name());
         ps.setString(11, res.getNote());
         ps.setTimestamp(12, Timestamp.from(res.getCreatedAt() != null ? res.getCreatedAt() : Instant.now()));
+        ps.setString(13, JsonColumns.fromItems(res.getPreOrders()));
     }
 
     @Override
@@ -232,6 +244,7 @@ public class JdbcReservationDao implements IReservationDao {
         }
 
         res.setNote(rs.getString("note"));
+        res.setPreOrders(JsonColumns.toItems(rs.getString("pre_orders")));
         Timestamp created = rs.getTimestamp("created_at");
         if (created != null) {
             res.setCreatedAt(created.toInstant());

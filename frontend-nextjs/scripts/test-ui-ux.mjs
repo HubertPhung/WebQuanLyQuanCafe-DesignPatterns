@@ -393,6 +393,44 @@ async function runAdminMutationTests() {
       recordTest('TC-ACT-05', 'Add New Menu Item to Catalog & POS', 'Admin Actions', 'FAIL', createItemRes.error)
     }
 
+    // TC-ACT-06: Completing a dine-in ticket frees the table for cleaning (mirrors the Java Observer)
+    updateMockTableStatus(6, 'available', 0)
+    createMockOrder({
+      lines: [{ menuItemId: 1, qty: 1 }],
+      customer: 'Table Sync Tester',
+      tableId: 6,
+      orderType: 'dine-in',
+      paymentMethod: 'cash',
+      paid: true,
+    })
+    const seated = getMockTables().find(t => t.id === 6)?.status
+    const syncOrder = getMockActiveOrders().find(o => o.customer === 'Table Sync Tester')
+    const syncDone = syncOrder ? updateMockOrderStatus(syncOrder.id, 'completed') : { ok: false }
+    const freed = getMockTables().find(t => t.id === 6)
+    if (seated === 'occupied' && syncDone.ok && freed?.status === 'cleaning' && freed.guestCount === 0) {
+      recordTest('TC-ACT-06', 'Paid Order Seats Table, Completed Ticket Sends It to Cleaning', 'Admin Actions', 'PASS', 'occupied -> cleaning')
+    } else {
+      recordTest('TC-ACT-06', 'Paid Order Seats Table, Completed Ticket Sends It to Cleaning', 'Admin Actions', 'FAIL', `seated=${seated}, after=${freed?.status}`)
+    }
+
+    // TC-ACT-07: An order priced by Java (member discount, redeemed points) keeps Java's totals locally
+    createMockOrder({
+      lines: [{ menuItemId: 1, qty: 1 }],
+      customer: 'Loyalty Tester',
+      tableId: null,
+      orderType: 'pickup',
+      paymentMethod: 'qr',
+      paid: true,
+      orderCode: 'AC-9001',
+      totals: { subtotal: 55000, total: 37800 },
+    })
+    const priced = getMockActiveOrders().find(o => o.orderCode === 'AC-9001')
+    if (priced?.subtotal === 55000 && priced.total === 37800) {
+      recordTest('TC-ACT-07', 'Mirror Java Receipt Totals After Point Redemption', 'Admin Actions', 'PASS', 'Total 37.800 đ kept')
+    } else {
+      recordTest('TC-ACT-07', 'Mirror Java Receipt Totals After Point Redemption', 'Admin Actions', 'FAIL', `total=${priced?.total}`)
+    }
+
   } catch (err) {
     recordTest('TC-ACT-01', 'Admin Server Actions & Mock Store Operations', 'Admin Actions', 'FAIL', err.message)
   }

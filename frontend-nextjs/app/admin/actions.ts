@@ -12,6 +12,7 @@ import {
   paymentMethods,
   tableStatuses,
   type MenuItem,
+  type Order,
   type OrderItem,
   type OrderStatus,
   type TableStatus,
@@ -27,11 +28,19 @@ import {
 } from '@/lib/admin/customizations'
 import {
   checkout,
+  createJavaMenuItem,
   createReservation as createJavaReservation,
   fetchMenu,
+  findCustomerByPhone,
+  payJavaOrder,
   transferReservation as transferJavaReservation,
+  updateJavaOrderStatus,
+  updateJavaReservationStatus,
+  updateJavaStock,
   updateTable,
   type CheckoutPayload,
+  type CheckoutReceipt,
+  type JavaResult,
 } from '@/lib/api-client'
 import {
   updateMockOrderStatus,
@@ -43,6 +52,10 @@ import {
   getMockMenuItems,
   createMockReservation,
   createMockOrderFromItems,
+  getMockOrder,
+  updateMockReservationStatus,
+  reservationStatuses,
+  type ReservationStatusLabel,
   transferMockReservation,
   type ExternalOrderInput,
   type NewMockOrderInput,
@@ -58,20 +71,60 @@ function fail(error: unknown): ActionResult {
   return { ok: false, error: error instanceof Error ? error.message : 'Something went wrong.' }
 }
 
+type LocalOrderRef = Pick<Order, 'orderCode' | 'tableId' | 'paymentMethod'>
+
+// Code and table of a frontend order: the database first, then the mock store.
+async function findLocalOrder(orderId: number): Promise<LocalOrderRef | null> {
+  if (isDbConfigured && db) {
+    try {
+      const [row] = await db
+        .select({ orderCode: adminOrders.orderCode, tableId: adminOrders.tableId, paymentMethod: adminOrders.paymentMethod })
+        .from(adminOrders)
+        .where(eq(adminOrders.id, orderId))
+      if (row) return row
+    } catch {
+      // Fall through to the mock store, like the writes below.
+    }
+  }
+  const mock = getMockOrder(orderId)
+  return mock ? { orderCode: mock.orderCode, tableId: mock.tableId, paymentMethod: mock.paymentMethod } : null
+}
+
+// Java only knows the orders it priced or opened, and for those its answer is final.
+// Unreachable, or 404 for an order recorded locally (e.g. while Java was down): keep it local.
+function javaRefusal(result: JavaResult<unknown>): string | null {
+  if (result.ok || result.unreachable || result.status === 404) return null
+  return result.error
+}
+
 export async function updateOrderStatus(orderId: number, status: OrderStatus): Promise<ActionResult> {
   try {
     assertAdminAccess()
     if (!Number.isInteger(orderId) || !orderStatuses.includes(status)) throw new Error('Invalid order update.')
+    const local = await findLocalOrder(orderId)
+    if (local) {
+      const refused = javaRefusal(await updateJavaOrderStatus(local.orderCode, status))
+      if (refused) return { ok: false, error: refused }
+    }
     if (!isDbConfigured || !db) {
       const res = updateMockOrderStatus(orderId, status)
       refresh()
       return res.ok ? { ok: true } : { ok: false, error: res.error ?? 'Failed' }
     }
     try {
-      await db
-        .update(adminOrders)
-        .set({ status, completedAt: status === 'completed' ? new Date() : null })
-        .where(eq(adminOrders.id, orderId))
+      await db.transaction(async (tx) => {
+        await tx
+          .update(adminOrders)
+          .set({ status, completedAt: status === 'completed' ? new Date() : null })
+          .where(eq(adminOrders.id, orderId))
+        // Mirrors the Java TableStatusSyncObserver: a finished dine-in order frees its table for cleaning.
+        if (status === 'completed' && local?.tableId) {
+          await tx
+            .update(adminTables)
+            .set({ status: 'cleaning', guestCount: 0, occupiedSince: null, updatedAt: new Date() })
+            .where(eq(adminTables.id, local.tableId))
+        }
+      })
     } catch {
       updateMockOrderStatus(orderId, status)
     }
@@ -86,6 +139,11 @@ export async function markOrderPaid(orderId: number): Promise<ActionResult> {
   try {
     assertAdminAccess()
     if (!Number.isInteger(orderId)) throw new Error('Invalid order.')
+    const local = await findLocalOrder(orderId)
+    if (local) {
+      const refused = javaRefusal(await payJavaOrder(local.orderCode, local.paymentMethod))
+      if (refused) return { ok: false, error: refused }
+    }
     if (!isDbConfigured || !db) {
       const res = markMockOrderPaid(orderId)
       refresh()
@@ -103,6 +161,39 @@ export async function markOrderPaid(orderId: number): Promise<ActionResult> {
   }
 }
 
+// Digits only, as the Java customer store keeps phone numbers ("0908 123 456" -> "0908123456").
+function normalizePhone(raw: string | undefined): string | null {
+  const digits = (raw ?? '').replace(/\D/g, '')
+  return digits.length >= 8 && digits.length <= 15 ? digits : null
+}
+
+export type Member = { name: string; phone: string; points: number; rank: string }
+export type MemberLookup = { ok: true; member: Member | null; offline: boolean } | { ok: false; error: string }
+
+// POS member lookup through GET /api/customers?phone=... (members live in the Java store).
+export async function lookupMember(phone: string): Promise<MemberLookup> {
+  try {
+    assertAdminAccess()
+    const digits = normalizePhone(phone)
+    if (!digits) throw new Error('Enter a phone number with 8 to 15 digits.')
+    const result = await findCustomerByPhone(digits)
+    if (result.ok) {
+      const customer = result.data[0]
+      return {
+        ok: true,
+        offline: false,
+        member: customer
+          ? { name: customer.name, phone: customer.phone, points: customer.loyaltyPoints, rank: customer.rank }
+          : null,
+      }
+    }
+    if (result.unreachable) return { ok: true, member: null, offline: true }
+    return { ok: false, error: result.error }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Something went wrong.' }
+  }
+}
+
 type NewOrderInput = {
   lines: { menuItemId: number; qty: number; variation?: string; customizations?: string[] }[]
   customer: string
@@ -110,12 +201,15 @@ type NewOrderInput = {
   orderType: string
   paymentMethod: string
   paid: boolean
+  // Member phone and the loyalty points to redeem; redeeming needs the Java backend.
+  customerPhone?: string
+  useLoyaltyPoints?: number
 }
 
 type LocalMenuItem = Pick<MenuItem, 'id' | 'name' | 'kind' | 'inStock' | 'variations'>
 
 type CheckoutOutcome =
-  | { kind: 'accepted'; orderCode: string }
+  | { kind: 'accepted'; receipt: CheckoutReceipt }
   | { kind: 'local' }
   | { kind: 'rejected'; error: string }
 
@@ -158,7 +252,13 @@ async function toJavaLines(lines: LocalOrderInput['lines'], localMenu: LocalMenu
 
 type LocalOrderInput = NewMockOrderInput
 
-async function forwardCheckout(order: LocalOrderInput, localMenu: LocalMenuItem[]): Promise<CheckoutOutcome> {
+type MemberCheckout = { customerPhone?: string; useLoyaltyPoints?: number }
+
+async function forwardCheckout(
+  order: LocalOrderInput,
+  localMenu: LocalMenuItem[],
+  member: MemberCheckout,
+): Promise<CheckoutOutcome> {
   // POST /api/checkout always takes payment, so open tabs stay on the local store.
   if (!order.paid) return { kind: 'local' }
   const lines = await toJavaLines(order.lines, localMenu)
@@ -170,8 +270,9 @@ async function forwardCheckout(order: LocalOrderInput, localMenu: LocalMenuItem[
     tableId: order.tableId,
     orderType: order.orderType,
     paymentMethod: order.paymentMethod,
+    ...member,
   })
-  if (receipt.ok) return { kind: 'accepted', orderCode: receipt.data.orderCode }
+  if (receipt.ok) return { kind: 'accepted', receipt: receipt.data }
   return receipt.unreachable ? { kind: 'local' } : { kind: 'rejected', error: receipt.error }
 }
 
@@ -199,8 +300,9 @@ async function recordOrderLocally(input: LocalOrderInput, quantities: Map<number
       }
     })
 
-    const subtotal = Math.round(items.reduce((sum, item) => sum + item.price * item.qty, 0) * 100) / 100
-    const total = Math.round(subtotal * (1 + TAX_RATE) * 100) / 100
+    // Java's receipt wins when it priced the order (member discount, redeemed points).
+    const subtotal = input.totals?.subtotal ?? Math.round(items.reduce((sum, item) => sum + item.price * item.qty, 0) * 100) / 100
+    const total = input.totals?.total ?? Math.round(subtotal * (1 + TAX_RATE) * 100) / 100
     const customer = input.customer.trim().slice(0, 60) || 'Walk-in'
 
     await db.transaction(async (tx) => {
@@ -262,6 +364,13 @@ export async function createOrder(input: NewOrderInput): Promise<ActionResult> {
     }
     if ([...quantities.values()].some((qty) => qty > 50)) throw new Error('Maximum 50 of any item per order.')
 
+    const points = input.useLoyaltyPoints ?? 0
+    if (!Number.isInteger(points) || points < 0 || points > 100000) throw new Error('Points must be a whole number.')
+    const customerPhone = input.customerPhone?.trim() ? normalizePhone(input.customerPhone) : null
+    if (input.customerPhone?.trim() && !customerPhone) throw new Error('Enter a phone number with 8 to 15 digits.')
+    if (points > 0 && !customerPhone) throw new Error('Look up the member phone number before redeeming points.')
+    if (points > 0 && !input.paid) throw new Error('Points can only be redeemed when the order is paid now.')
+
     const order: LocalOrderInput = {
       lines,
       customer: input.customer,
@@ -279,14 +388,31 @@ export async function createOrder(input: NewOrderInput): Promise<ActionResult> {
     })
     if (unavailable) throw new Error('One of the items is no longer available.')
 
-    const outcome = await forwardCheckout(order, localMenu)
+    const member: MemberCheckout = customerPhone ? { customerPhone, useLoyaltyPoints: points || undefined } : {}
+    const outcome = await forwardCheckout(order, localMenu, member)
     if (outcome.kind === 'rejected') return { ok: false, error: outcome.error }
+    // Points live in the Java store; charging full price instead would surprise the member.
+    if (outcome.kind === 'local' && points > 0) {
+      return { ok: false, error: 'Redeeming points needs the Java backend, which could not price this order. Retry or remove the points.' }
+    }
 
-    const orderCode = outcome.kind === 'accepted' ? outcome.orderCode : undefined
-    const res = await recordOrderLocally({ ...order, orderCode }, quantities)
+    const receipt = outcome.kind === 'accepted' ? outcome.receipt : undefined
+    const res = await recordOrderLocally(
+      {
+        ...order,
+        orderCode: receipt?.orderCode,
+        totals: receipt ? { subtotal: receipt.subtotal, total: receipt.finalTotal } : undefined,
+      },
+      quantities,
+    )
     refresh()
-    if (!res.ok || !orderCode) return res
-    return { ok: true, message: `Order ${orderCode} recorded by the Java backend.` }
+    if (!res.ok || !receipt) return res
+    const redeemed = receipt.pointsRedeemed > 0 ? ` Redeemed ${receipt.pointsRedeemed} points.` : ''
+    const earned = receipt.pointsEarned > 0 ? ` Earned ${receipt.pointsEarned} points.` : ''
+    return {
+      ok: true,
+      message: `Order ${receipt.orderCode} recorded by the Java backend: ${receipt.finalTotal.toLocaleString('vi-VN')} đ.${redeemed}${earned}`,
+    }
   } catch (error) {
     return fail(error)
   }
@@ -448,10 +574,60 @@ export async function transferReservationToPos(code: string, source: 'java' | 'l
   }
 }
 
+// The Java id of a frontend menu item; the two stores number their menus independently.
+async function javaMenuIdFor(itemId: number): Promise<number | undefined> {
+  const [local] = await loadLocalMenu([itemId])
+  if (!local) return undefined
+  const javaMenu = await fetchMenu()
+  if (!javaMenu.ok) return undefined
+  return javaMenu.data.find((item) => normalizeName(item.name) === normalizeName(local.name))?.id
+}
+
+const javaReservationStatus = {
+  'Chờ xác nhận': 'pending',
+  'Đã đặt': 'confirmed',
+  'Đã hủy': 'cancelled',
+} as const
+
+// Status dropdown on /admin/reservations. "Hoàn thành" (seated) is reached only through
+// "Sang POS", so the order and the table are always opened together with it.
+export async function updateReservationStatus(
+  code: string,
+  source: 'java' | 'local',
+  status: ReservationStatusLabel,
+): Promise<ActionResult> {
+  try {
+    assertAdminAccess()
+    if (typeof code !== 'string' || !/^[A-Za-z0-9-]{1,40}$/.test(code)) throw new Error('Invalid reservation code.')
+    if (!reservationStatuses.includes(status)) throw new Error('Invalid reservation status.')
+    if (status === 'Hoàn thành') throw new Error('Use "Sang POS" to seat the guests; it opens their order too.')
+
+    if (source === 'local') {
+      const res = updateMockReservationStatus(code, status)
+      refresh()
+      return res.ok ? { ok: true } : { ok: false, error: res.error ?? 'Failed' }
+    }
+    const remote = await updateJavaReservationStatus(code, javaReservationStatus[status])
+    if (!remote.ok) {
+      // The booking lives in Java, so there is nothing local to fall back to.
+      return { ok: false, error: remote.unreachable ? 'Java backend is unreachable; try again shortly.' : remote.error }
+    }
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
 export async function setItemInStock(itemId: number, inStock: boolean): Promise<ActionResult> {
   try {
     assertAdminAccess()
     if (!Number.isInteger(itemId)) throw new Error('Invalid item.')
+    const javaId = await javaMenuIdFor(itemId)
+    if (javaId !== undefined) {
+      const refused = javaRefusal(await updateJavaStock(javaId, { inStock: Boolean(inStock) }))
+      if (refused) return { ok: false, error: refused }
+    }
     if (!isDbConfigured || !db) {
       const res = setMockItemInStock(itemId, inStock)
       refresh()
@@ -500,6 +676,22 @@ export async function createMenuItem(input: NewItemInput): Promise<ActionResult>
       .filter((option) => option.name.trim())
       .slice(0, 12)
       .map((option) => ({ name: option.name.trim().slice(0, 40), price: money(option.price, 'Option price') }))
+
+    // POST /api/menu (MANAGER) keeps the Java catalog in step; 409 means Java already sells it.
+    const remote = await createJavaMenuItem({
+      name,
+      category,
+      kind: input.kind === 'ingredient' ? 'ingredient' : 'menu',
+      sellPrice: money(input.sellPrice, 'Selling price'),
+      costPrice: money(input.costPrice, 'Cost price'),
+      stockQty: money(input.stockQty, 'Stock'),
+      unit: input.unit.trim().slice(0, 12) || 'pcs',
+      lowStockThreshold: money(input.lowStockThreshold, 'Low-stock threshold'),
+      recipe: input.recipe.trim().slice(0, 1000) || undefined,
+      imageUrl: imageUrl || undefined,
+      variations,
+    })
+    if (!remote.ok && !remote.unreachable && remote.status !== 409) return { ok: false, error: remote.error }
 
     if (!isDbConfigured || !db) {
       const res = createMockMenuItem({

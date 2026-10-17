@@ -97,9 +97,9 @@ public class PosCheckoutFacade {
                     payment == null ? "Payment declined" : "Payment declined: " + payment.getMessage(), payment);
         }
 
-        // Step 5: persist the completed order.
+        // Step 5: persist the paid order; it waits on the KDS until the kitchen completes it.
         order.setPaymentStatus(PaymentStatus.PAID);
-        order.setStatus(OrderStatus.COMPLETED);
+        order.setStatus(OrderStatus.PENDING);
         boolean saved;
         try {
             saved = orderDao.save(order);
@@ -116,7 +116,7 @@ public class PosCheckoutFacade {
         // Step 6: broadcast; observer failures must not undo a committed checkout.
         List<String> warnings = new ArrayList<>();
         try {
-            eventSubject.notifyOrderCompleted(order);
+            eventSubject.notifyOrderPaid(order);
         } catch (RuntimeException e) {
             LOGGER.log(Level.WARNING, "Order event observer failed: " + e.getMessage(), e);
             warnings.add("Order event observer failed: " + e.getMessage());
