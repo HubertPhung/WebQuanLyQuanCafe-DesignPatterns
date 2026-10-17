@@ -3,6 +3,7 @@ import { OfflineSyncButton } from '@/components/admin/offline-sync-button'
 import { PosTerminal } from '@/components/admin/pos-terminal'
 import { AutoRefresh, PageHeading } from '@/components/admin/shared'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { fetchConfig } from '@/lib/api-client'
 import { getActiveOrders, getMenuItems, getPendingSyncCount, getTables } from '@/lib/admin/queries'
 
 export const metadata = { title: 'Đơn hàng & POS' }
@@ -15,6 +16,8 @@ export default async function PosPage({ searchParams }: { searchParams: Promise<
     getActiveOrders(),
     getPendingSyncCount(),
   ])
+  // Point value from the Java SystemConfigManager, so the POS preview matches the receipt.
+  const config = await fetchConfig()
 
   return (
     <>
@@ -32,7 +35,7 @@ export default async function PosPage({ searchParams }: { searchParams: Promise<
           </TabsTrigger>
         </TabsList>
         <TabsContent value="pos">
-          <PosTerminal menu={menu} tables={tables} />
+          <PosTerminal menu={menu} tables={tables} pointValue={config.ok ? config.data.pointRedeemValueVnd : undefined} />
         </TabsContent>
         <TabsContent value="kitchen">
           <KdsBoard orders={activeOrders} />

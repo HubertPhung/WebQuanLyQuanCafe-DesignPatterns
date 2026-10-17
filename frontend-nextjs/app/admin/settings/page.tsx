@@ -1,7 +1,10 @@
 import { PageHeading } from '@/components/admin/shared'
+import { StoreSettingsForm } from '@/components/admin/store-settings-form'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { TAX_RATE } from '@/lib/admin/format'
+import { assertAdminAccess } from '@/lib/admin/access'
+import { fetchConfig } from '@/lib/api-client'
 
 export const metadata = { title: 'Cài đặt' }
 
@@ -27,7 +30,10 @@ const rows = [
   { label: 'Cửa hàng trực tuyến', value: 'Đà Lạt Cafe Storefront (Đang kích hoạt)' },
 ]
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
+  assertAdminAccess()
+  const remote = await fetchConfig()
+  const config = remote.ok ? remote.data : null
   return (
     <>
       <PageHeading title="Cài đặt hệ thống" description="Cấu hình hoạt động chi nhánh áp dụng cho bán lẻ POS và báo cáo kế toán." />
@@ -50,6 +56,19 @@ export default function SettingsPage() {
               </div>
             ))}
           </dl>
+        </CardContent>
+      </Card>
+      <Card className="max-w-2xl rounded-xl border-stone-200/90 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
+        <CardHeader>
+          <CardTitle className="text-xl font-bold text-stone-900">
+            Thông số vận hành <span className="sr-only">Store settings</span>
+          </CardTitle>
+          <CardDescription className="text-stone-600">
+            Giờ mở cửa, giới hạn đặt bàn và tỷ lệ tích điểm, lưu trong <code>SystemConfigManager</code> (Singleton) của máy chủ Java.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <StoreSettingsForm config={config} />
         </CardContent>
       </Card>
     </>

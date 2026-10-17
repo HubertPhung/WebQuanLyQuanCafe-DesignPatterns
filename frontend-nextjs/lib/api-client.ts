@@ -6,7 +6,7 @@ const DEFAULT_BACKEND_URL = 'http://localhost:8080'
 const REQUEST_TIMEOUT_MS = 2500
 // The Java SimpleAuthFilter gates endpoints by role header (API_SPEC 1.3): POS work needs
 // STAFF, creating menu items and analytics need MANAGER.
-type JavaRole = 'STAFF' | 'MANAGER'
+type JavaRole = 'STAFF' | 'MANAGER' | 'ADMIN'
 // 5xx codes the backend uses to refuse on purpose rather than crash (API_SPEC 1.2).
 const FAIL_CLOSED_CODES = new Set(['DATABASE_UNAVAILABLE'])
 
@@ -270,4 +270,29 @@ export type VoucherVerdict = { code: string; valid: boolean; discountAmount: num
 // POST /api/vouchers/validate (public): previews a voucher with the Strategy checkout uses.
 export function validateVoucher(code: string, subtotal: number): Promise<JavaResult<VoucherVerdict>> {
   return request<VoucherVerdict>('/api/vouchers/validate', { method: 'POST', body: { code, subtotal } })
+}
+
+export type StoreConfig = {
+  storeName: string
+  storeAddress: string
+  storePhone: string
+  openingTime: string
+  closingTime: string
+  maxReservationGuests: number
+  loyaltyRateVndPerPoint: number
+  pointRedeemValueVnd: number
+  vatRate: number
+  autoCancelMinutes: number
+}
+
+export type StoreConfigChange = Partial<Omit<StoreConfig, 'vatRate' | 'autoCancelMinutes'>>
+
+// GET /api/config: settings held by the SystemConfigManager Singleton.
+export function fetchConfig(): Promise<JavaResult<StoreConfig>> {
+  return request<StoreConfig>('/api/config', { method: 'GET' })
+}
+
+// PUT /api/config (ADMIN)
+export function updateConfig(change: StoreConfigChange): Promise<JavaResult<StoreConfig>> {
+  return request<StoreConfig>('/api/config', { method: 'PUT', body: change, role: 'ADMIN' })
 }

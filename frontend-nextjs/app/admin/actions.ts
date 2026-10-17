@@ -38,9 +38,11 @@ import {
   updateJavaStock,
   updateTable,
   syncJavaOrders,
+  updateConfig,
   type CheckoutPayload,
   type CheckoutReceipt,
   type JavaResult,
+  type StoreConfigChange,
   type SyncOrderPayload,
 } from '@/lib/api-client'
 import { dequeueSync, enqueueSync, listSyncQueue } from '@/lib/admin/local-links'
@@ -851,6 +853,21 @@ export async function syncOfflineOrders(): Promise<ActionResult> {
       return { ok: false, error: `Synced ${summary.sent}, ${summary.failed.length} refused: ${summary.failed.slice(0, 3).join('; ')}` }
     }
     return { ok: true, message: `Synced ${summary.sent} offline order(s) to the Java backend.` }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+// Store settings live in the Java SystemConfigManager Singleton, so there is no local fallback.
+export async function updateStoreSettings(change: StoreConfigChange): Promise<ActionResult> {
+  try {
+    assertAdminAccess()
+    const remote = await updateConfig(change)
+    if (!remote.ok) {
+      return { ok: false, error: remote.unreachable ? 'Java backend is unreachable; settings were not changed.' : remote.error }
+    }
+    refresh()
+    return { ok: true, message: 'Settings saved on the Java backend.' }
   } catch (error) {
     return fail(error)
   }
