@@ -627,153 +627,125 @@ public final class PaymentProcessorFactory {
 - **Bài toán thực tế trong nghiệp vụ:**  
   Một đối tượng Đơn hàng (`Order`) trong hệ thống quán cà phê rất phức tạp và chứa nhiều trường thông tin tùy chọn: mã đơn hàng (`orderCode`), tên khách hàng, số điện thoại, số bàn (`tableId`), loại đơn hàng (`dine-in`, `pickup`, `delivery`), danh sách chi tiết món (`OrderItem`), mã voucher giảm giá, số điểm tích lũy sử dụng, ghi chú cho barista, thời gian tạo đơn và trạng thái thanh toán. Sử dụng constructor truyền thống với quá nhiều tham số (Telescoping Constructor) sẽ dẫn đến code khó đọc, dễ nhầm thứ tự tham số và khó bảo trì.
 - **Giải pháp kỹ thuật (Pure Java OOP):**  
-  Áp dụng **Builder Pattern**. Tách biệt quá trình khởi tạo từng bước của đối tượng `Order` thông qua lớp `OrderBuilder` cung cấp các phương thức thiết lập dạng chuỗi (Method Chaining / Fluent Interface). Phương thức `build()` kiểm tra tính hợp lệ trước khi trả về đối tượng `Order` hoàn chỉnh.
+  Áp dụng **Builder Pattern** dạng fluent interface. `OrderBuilder` gom từng bước tùy chọn: `forCustomer`, `atTable`, `ofType`, `addItem(IBeverage, qty)`, `withNote`, `withPayment`, `applyDiscount`, rồi `build()` tạo `Order`. Mỗi bước kiểm tra đầu vào ngay (bàn và số lượng phải dương, giảm giá không âm và hữu hạn, đối số bắt buộc khác `null`). Bước bị bỏ qua dùng giá trị mặc định: khách `Walk-in`, loại `DINE_IN`, thanh toán `CASH` chưa trả, không giảm giá. `build()` từ chối đơn rỗng, sinh mã đơn dạng `AC-XXXX-XXX`, còn `Order` tự tính subtotal, VAT 8% trên phần sau giảm giá và tổng tiền. Builder có thể dùng lại; đơn đã tạo không bị ảnh hưởng khi thêm món sau đó. `addItem` nhận `IBeverage`, nên giá đã gồm các Decorator.
 - **Bảng ánh xạ thành phần (Participants Mapping):**
-  | Vai trò GoF | Class Java | Trách nhiệm cụ thể |
+  | Vai trò GoF | Class / Interface Java | Trách nhiệm cụ thể |
   | :--- | :--- | :--- |
-  | **Product** | `Order` (`model/Order.java`) | Đối tượng đơn hàng chứa toàn bộ thuộc tính dữ liệu |
-  | **Builder** | `OrderBuilder` | Chứa các phương thức gán từng thuộc tính và phương thức `build()` |
-  | **Client** | `PosCheckoutFacade`, `AdminAction` | Sử dụng `new OrderBuilder().setX().build()` để tạo đơn hàng sạch sẽ |
+  | **Builder** | `OrderBuilder` | Lưu trạng thái trung gian và cung cấp các bước dựng đơn dạng chuỗi |
+  | **Product** | `Order` | Đơn hàng hoàn chỉnh, tự tính subtotal, VAT và tổng tiền |
+  | **Thành phần** | `OrderItem`, `IBeverage` | Dòng món được tạo từ đồ uống (đã bọc Decorator) và số lượng |
+  | **Director / Client** | `PosCheckoutFacade.buildOrder(...)` | Gọi các bước theo dữ liệu của `CheckoutRequest` |
 
 - **Sơ đồ lớp (Class Diagram):**
 ```mermaid
 classDiagram
+    class OrderBuilder {
+        -String customerName
+        -Integer tableId
+        -OrderType orderType
+        -List~OrderItem~ items
+        -String note
+        -PaymentMethod paymentMethod
+        -PaymentStatus paymentStatus
+        -double discountAmount
+        +forCustomer(String customerName) OrderBuilder
+        +atTable(int tableId) OrderBuilder
+        +ofType(OrderType type) OrderBuilder
+        +addItem(IBeverage beverage, int quantity) OrderBuilder
+        +withNote(String note) OrderBuilder
+        +withPayment(PaymentMethod method, boolean paid) OrderBuilder
+        +applyDiscount(double discountAmount) OrderBuilder
+        +build() Order
+        -generateOrderCode() String
+    }
+
     class Order {
         -String orderCode
-        -String customerName
-        -String customerPhone
+        -String customer
         -Integer tableId
-        -String orderType
+        -OrderType orderType
         -List~OrderItem~ items
-        -String voucherCode
-        -int loyaltyPointsUsed
-        -String note
-        -double totalAmount
-        -String status
-        +getOrderCode() String
-        +getTotalAmount() double
+        -double subtotal
+        -double discountAmount
+        -double vatAmount
+        -double total
+        +recalculateTotals()
+        +getSubtotal() double
+        +getVatAmount() double
+        +getTotal() double
     }
 
-    class OrderBuilder {
-        -String orderCode
-        -String customerName
-        -String customerPhone
-        -Integer tableId
-        -String orderType
-        -List~OrderItem~ items
-        -String voucherCode
-        -int loyaltyPointsUsed
-        -String note
-        +setOrderCode(String code) OrderBuilder
-        +setCustomer(String name, String phone) OrderBuilder
-        +setTableId(Integer tableId) OrderBuilder
-        +setOrderType(String orderType) OrderBuilder
-        +addItem(OrderItem item) OrderBuilder
-        +setVoucherCode(String voucher) OrderBuilder
-        +setLoyaltyPointsUsed(int points) OrderBuilder
-        +setNote(String note) OrderBuilder
-        +build() Order
+    class OrderItem {
+        -String name
+        -int qty
+        -double price
+        +getLineTotal() double
     }
 
-    OrderBuilder ..> Order : creates
+    class IBeverage {
+        <<interface>>
+        +getDescription() String
+        +getCost() double
+    }
+
+    OrderBuilder ..> Order : builds
+    OrderBuilder ..> IBeverage : reads cost
+    OrderBuilder o--> OrderItem : collects
+    Order *--> OrderItem : items
 ```
 
-- **Mã nguồn minh họa (Pure Java):**
+- **Mã nguồn thực tế** (`backend-java/src/main/java/com/dalatcafe/patterns/builder/OrderBuilder.java`, rút gọn):
 ```java
-package com.dalatcafe.patterns.builder;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-
-public class Order {
-    private final String orderCode;
-    private final String customerName;
-    private final Integer tableId;
-    private final String orderType;
-    private final List<OrderItem> items;
-    private final String voucherCode;
-    private final int loyaltyPointsUsed;
-    private final String note;
-
-    Order(OrderBuilder builder) {
-        this.orderCode = builder.orderCode;
-        this.customerName = builder.customerName;
-        this.tableId = builder.tableId;
-        this.orderType = builder.orderType;
-        this.items = Collections.unmodifiableList(builder.items);
-        this.voucherCode = builder.voucherCode;
-        this.loyaltyPointsUsed = builder.loyaltyPointsUsed;
-        this.note = builder.note;
-    }
-
-    public String getOrderCode() { return orderCode; }
-    public String getCustomerName() { return customerName; }
-    public Integer getTableId() { return tableId; }
-    public List<OrderItem> getItems() { return items; }
-}
-
 public class OrderBuilder {
-    String orderCode;
-    String customerName = "Khách vãng lai";
-    Integer tableId;
-    String orderType = "dine-in";
-    List<OrderItem> items = new ArrayList<>();
-    String voucherCode;
-    int loyaltyPointsUsed = 0;
-    String note = "";
+    private String customerName = "Walk-in";
+    private Integer tableId;
+    private OrderType orderType = OrderType.DINE_IN;
+    private final List<OrderItem> items = new ArrayList<>();
+    private PaymentMethod paymentMethod = PaymentMethod.CASH;
+    private PaymentStatus paymentStatus = PaymentStatus.UNPAID;
+    private double discountAmount;
+    // note, forCustomer, ofType, withNote, withPayment lược bớt
 
-    public OrderBuilder setOrderCode(String orderCode) {
-        this.orderCode = orderCode;
-        return this;
-    }
-
-    public OrderBuilder setCustomer(String customerName) {
-        this.customerName = customerName;
-        return this;
-    }
-
-    public OrderBuilder setTableId(Integer tableId) {
+    public OrderBuilder atTable(int tableId) {
+        if (tableId <= 0) {
+            throw new IllegalArgumentException("Table ID must be greater than zero");
+        }
         this.tableId = tableId;
         return this;
     }
 
-    public OrderBuilder setOrderType(String orderType) {
-        this.orderType = orderType;
-        return this;
-    }
-
-    public OrderBuilder addItem(OrderItem item) {
-        this.items.add(item);
-        return this;
-    }
-
-    public OrderBuilder setVoucherCode(String voucherCode) {
-        this.voucherCode = voucherCode;
-        return this;
-    }
-
-    public OrderBuilder setLoyaltyPointsUsed(int points) {
-        this.loyaltyPointsUsed = points;
-        return this;
-    }
-
-    public OrderBuilder setNote(String note) {
-        this.note = note;
+    public OrderBuilder addItem(IBeverage beverage, int quantity) {
+        Objects.requireNonNull(beverage, "Beverage must not be null");
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("Quantity must be greater than zero");
+        }
+        items.add(new OrderItem(beverage.getDescription(), quantity, beverage.getCost()));
         return this;
     }
 
     public Order build() {
-        if (this.orderCode == null || this.orderCode.trim().isEmpty()) {
-            this.orderCode = "AC-" + System.currentTimeMillis() % 100000;
+        if (items.isEmpty()) {
+            throw new IllegalStateException("Order must contain at least one item");
         }
-        if (this.items.isEmpty()) {
-            throw new IllegalStateException("Đơn hàng phải có ít nhất 1 món!");
-        }
-        return new Order(this);
+        Order order = new Order(null, generateOrderCode(), customerName, tableId, orderType);
+        order.setItems(items);
+        order.setPaymentMethod(paymentMethod);
+        order.setPaymentStatus(paymentStatus);
+        order.setDiscountAmount(discountAmount);
+        return order;
     }
 }
+
+// Sử dụng
+Order order = new OrderBuilder()
+        .forCustomer("Nguyen Hung Thinh")
+        .atTable(8)
+        .addItem(new LargeSizeDecorator(new BaseCoffee(latte)), 2)
+        .withPayment(PaymentMethod.CARD, true)
+        .applyDiscount(10_000)
+        .build();
 ```
+- **Kiểm thử:** `BuilderTest` (dựng đơn và tính VAT, giá trị mặc định cho khách vãng lai, từ chối đơn rỗng và đối số sai, tái sử dụng builder).
 
 ---
 
@@ -1165,63 +1137,77 @@ public class PosCheckoutFacade {
 - **Bài toán thực tế trong nghiệp vụ:**  
   Khi đơn hàng được thanh toán hoàn tất tại quầy POS, hệ thống cần kích hoạt đồng thời nhiều tác vụ phụ thuộc:
   1. Tự động quy đổi giá trị hóa đơn thành điểm thưởng thành viên (cứ 10.000 VNĐ tích 1 điểm vào hồ sơ khách hàng quen trong CRM).
-  2. Đồng bộ trạng thái bàn trên sơ đồ tầng (`FloorPlan.tsx`): Nếu khách thanh toán xong và rời quán, bàn được chuyển sang trạng thái `cleaning` hoặc `available`.
-  3. Cập nhật số liệu doanh thu tức thời lên bảng điều khiển Dashboard.
+  2. Đồng bộ trạng thái bàn trên sơ đồ tầng (`FloorPlan.tsx`): Nếu khách thanh toán xong và rời quán, bàn được chuyển sang trạng thái `cleaning` để nhân viên dọn bàn.
+  3. Báo cho màn hình bếp (KDS) gỡ phiếu của đơn đã hoàn tất.
   Nếu lớp Đơn hàng trực tiếp gọi tới các Service này, mã nguồn sẽ bị phụ thuộc chéo (Tight Coupling), vi phạm nguyên tắc Single Responsibility Principle.
 - **Giải pháp kỹ thuật (Pure Java OOP):**  
-  Áp dụng **Observer Pattern**. Lớp `OrderEventSubject` quản lý danh sách các `IOrderObserver`. Khi đơn hàng thanh toán thành công, Subject phát thông báo (`notifyObservers`) kèm thông tin đơn hàng `Order`. Các Observer cụ thể (`LoyaltyPointObserver`, `TableStatusObserver`) tự động phản hồi và thực thi nghiệp vụ độc lập.
+  Áp dụng **Observer Pattern**. `OrderEventSubject` quản lý danh sách `IOrderObserver`: `attach` từ chối `null` và bỏ qua đăng ký trùng, `detach` hủy đăng ký, `notifyOrderCompleted(Order)` duyệt trên **bản sao** danh sách nên observer có thể tự hủy đăng ký trong lúc nhận tin. Ba Concrete Observer phản hồi độc lập:
+  - `LoyaltyPointObserver(ICustomerDao, customerId)`: chỉ cộng điểm khi đơn đã `PAID`, số điểm do `SystemConfigManager.calculateLoyaltyPoints` quy đổi; khách không tồn tại gây `IllegalStateException`.
+  - `TableStatusSyncObserver(ITableDao)`: chuyển bàn sang `CLEANING` và đưa số khách về 0; đơn mang đi (không có bàn) được bỏ qua.
+  - `KitchenNotificationObserver`: gửi thông báo gỡ phiếu khỏi KDS (mặc định in ra console, có thể truyền `Consumer<String>`).
+
+  `MainServer` đăng ký sẵn `TableStatusSyncObserver` và `KitchenNotificationObserver`; `CheckoutHandler` gắn `LoyaltyPointObserver` cho riêng khách quen trong thời gian một lần checkout. `PosCheckoutFacade` phát sự kiện sau khi đơn đã lưu, và lỗi của observer chỉ được ghi thành cảnh báo, không hoàn tác giao dịch.
 - **Bảng ánh xạ thành phần (Participants Mapping):**
   | Vai trò GoF | Class / Interface Java | Trách nhiệm cụ thể |
   | :--- | :--- | :--- |
-  | **Subject** | `OrderEventSubject` | Quản lý việc đăng ký, hủy đăng ký và thông báo cho danh sách Observer |
-  | **Observer Interface** | `IOrderObserver` | Giao diện chuẩn với phương thức `onOrderCompleted(Order order)` |
-  | **Concrete Observer 1**| `LoyaltyPointObserver` | Lắng nghe để cộng điểm thưởng thành viên dựa trên giá trị đơn hàng |
-  | **Concrete Observer 2**| `TableStatusObserver` | Lắng nghe để giải phóng trạng thái bàn trên sơ đồ sàn |
+  | **Subject** | `OrderEventSubject` | Đăng ký, hủy đăng ký và thông báo cho các Observer |
+  | **Observer Interface** | `IOrderObserver` | Phương thức `onOrderCompleted(Order order)` |
+  | **Concrete Observer 1** | `LoyaltyPointObserver` | Cộng điểm và doanh số cho khách hàng thân thiết |
+  | **Concrete Observer 2** | `TableStatusSyncObserver` | Giải phóng bàn trên sơ đồ sang trạng thái dọn dẹp |
+  | **Concrete Observer 3** | `KitchenNotificationObserver` | Báo màn hình bếp gỡ phiếu của đơn đã xong |
 
 - **Sơ đồ lớp (Class Diagram):**
 ```mermaid
 classDiagram
-    class IOrderObserver {
-        <<interface>>
-        +onOrderCompleted(Order order) void
-    }
-
     class OrderEventSubject {
         -List~IOrderObserver~ observers
-        +attach(IOrderObserver observer) void
-        +detach(IOrderObserver observer) void
-        +notifyObservers(Order order) void
+        +attach(IOrderObserver observer)
+        +detach(IOrderObserver observer)
+        +notifyOrderCompleted(Order order)
+    }
+
+    class IOrderObserver {
+        <<interface>>
+        +onOrderCompleted(Order order)
     }
 
     class LoyaltyPointObserver {
-        +onOrderCompleted(Order order) void
+        -ICustomerDao customerDao
+        -int customerId
+        +LoyaltyPointObserver(ICustomerDao customerDao, int customerId)
+        +onOrderCompleted(Order order)
     }
 
-    class TableStatusObserver {
-        +onOrderCompleted(Order order) void
+    class TableStatusSyncObserver {
+        -ITableDao tableDao
+        +TableStatusSyncObserver(ITableDao tableDao)
+        +onOrderCompleted(Order order)
     }
 
+    class KitchenNotificationObserver {
+        -Consumer~String~ notificationSink
+        +KitchenNotificationObserver()
+        +KitchenNotificationObserver(Consumer~String~ notificationSink)
+        +onOrderCompleted(Order order)
+    }
+
+    OrderEventSubject o--> IOrderObserver : observers
     IOrderObserver <|.. LoyaltyPointObserver
-    IOrderObserver <|.. TableStatusObserver
-    OrderEventSubject o--> IOrderObserver : notifies
+    IOrderObserver <|.. TableStatusSyncObserver
+    IOrderObserver <|.. KitchenNotificationObserver
+    LoyaltyPointObserver ..> SystemConfigManager : calculateLoyaltyPoints
+    LoyaltyPointObserver --> ICustomerDao
+    TableStatusSyncObserver --> ITableDao
 ```
 
-- **Mã nguồn minh họa (Pure Java):**
+- **Mã nguồn thực tế** (`backend-java/src/main/java/com/dalatcafe/patterns/observer/`):
 ```java
-package com.dalatcafe.patterns.observer;
-
-import java.util.ArrayList;
-import java.util.List;
-
-public interface IOrderObserver {
-    void onOrderCompleted(Order order);
-}
-
 public class OrderEventSubject {
     private final List<IOrderObserver> observers = new ArrayList<>();
 
     public void attach(IOrderObserver observer) {
-        if (observer != null && !observers.contains(observer)) {
+        Objects.requireNonNull(observer, "Observer must not be null");
+        if (!observers.contains(observer)) {
             observers.add(observer);
         }
     }
@@ -1230,33 +1216,32 @@ public class OrderEventSubject {
         observers.remove(observer);
     }
 
-    public void notifyObservers(Order order) {
-        for (IOrderObserver observer : observers) {
+    public void notifyOrderCompleted(Order order) {
+        Objects.requireNonNull(order, "Order must not be null");
+        for (IOrderObserver observer : List.copyOf(observers)) {
             observer.onOrderCompleted(order);
         }
     }
 }
 
 public class LoyaltyPointObserver implements IOrderObserver {
-    @Override
-    public void onOrderCompleted(Order order) {
-        // Tỷ lệ quy đổi: 10.000 VNĐ = 1 điểm thưởng
-        int pointsEarned = (int) (order.getTotalAmount() / 10000);
-        if (pointsEarned > 0 && order.getCustomerPhone() != null) {
-            System.out.println("Tích lũy " + pointsEarned + " điểm thưởng cho khách " + order.getCustomerName());
-        }
-    }
-}
+    private final ICustomerDao customerDao;
+    private final int customerId;
 
-public class TableStatusObserver implements IOrderObserver {
     @Override
     public void onOrderCompleted(Order order) {
-        if (order.getTableId() != null) {
-            System.out.println("Chuyển trạng thái bàn số " + order.getTableId() + " sang 'cleaning' hoặc 'available'");
+        Objects.requireNonNull(order, "Order must not be null");
+        if (order.getPaymentStatus() != PaymentStatus.PAID) {
+            return;
+        }
+        int earnedPoints = SystemConfigManager.getInstance().calculateLoyaltyPoints(order.getTotal());
+        if (!customerDao.addOrderRecord(customerId, order.getTotal(), earnedPoints)) {
+            throw new IllegalStateException("Customer not found: " + customerId);
         }
     }
 }
 ```
+- **Kiểm thử:** `ObserverTest` (thông báo cả ba observer, chống đăng ký trùng và hủy đăng ký, đơn chưa thanh toán không tích điểm, đơn mang đi không đổi bàn, khách/bàn không tồn tại, đối số `null`).
 
 ---
 
