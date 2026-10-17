@@ -20,7 +20,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const { next, error } = await searchParams
   return (
     <>
-      <h1 className="text-2xl font-extrabold tracking-tight text-stone-900">
+      <h1 className="font-display text-[1.75rem] font-semibold leading-tight text-stone-900">
         Chào mừng trở lại <span className="sr-only">Sign in</span>
       </h1>
       <p className="mt-1 mb-6 text-sm text-stone-600">Nhân viên và khách hàng dùng chung một trang đăng nhập.</p>
