@@ -1,7 +1,6 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { Be_Vietnam_Pro, Playfair_Display } from 'next/font/google'
-import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
 
@@ -43,12 +42,12 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="vi" className={beVietnamPro.variable} suppressHydrationWarning>
+    <html lang="vi" className={beVietnamPro.variable} style={{ colorScheme: 'light' }}>
       <body className={`${beVietnamPro.className} ${playfair.variable} font-sans antialiased leading-relaxed min-h-screen selection:bg-amber-700/20 selection:text-amber-900 dark:selection:text-amber-200`}>
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
-          {children}
-          <Toaster richColors position="top-right" />
-        </ThemeProvider>
+        {/* Light theme only: every page is designed on a light background and there is no theme
+            switch. next-themes is gone because it injected <script> tags that React 19 rejects. */}
+        {children}
+        <Toaster richColors position="top-right" />
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

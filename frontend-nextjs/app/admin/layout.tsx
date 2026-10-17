@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { AdminHeader } from '@/components/admin/admin-header'
 import { AdminSidebar } from '@/components/admin/admin-sidebar'
-import { AdminThemeProvider } from '@/components/admin/shared'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -27,7 +26,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const header = await getHeaderData()
 
   return (
-    <AdminThemeProvider>
       <TooltipProvider>
         <SidebarProvider data-admin className="bg-[#F7F5F0] text-stone-900 font-sans antialiased">
           <AdminSidebar role={session.role} badges={{ orders: header.activeCount, stock: header.lowStock.length }} />
@@ -47,6 +45,5 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         </SidebarProvider>
         <Toaster position="bottom-right" richColors />
       </TooltipProvider>
-    </AdminThemeProvider>
   )
 }

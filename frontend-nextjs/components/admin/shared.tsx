@@ -2,19 +2,10 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ThemeProvider as NextThemesProvider } from 'next-themes'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { statusLabels } from '@/lib/admin/format'
 import type { OrderStatus } from '@/lib/db/schema'
-
-export function AdminThemeProvider({ children }: { children: React.ReactNode }) {
-  return (
-    <NextThemesProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-      {children}
-    </NextThemesProvider>
-  )
-}
 
 export function AutoRefresh({ intervalMs = 15000 }: { intervalMs?: number }) {
   const router = useRouter()
