@@ -70,7 +70,8 @@ export function fetchMenu(): Promise<JavaResult<JavaMenuItem[]>> {
 }
 
 export type CheckoutPayload = {
-  lines: { menuItemId: number; qty: number }[]
+  // customizations use the Java enum names (SIZE_L, CHEESE_FOAM, WHITE_PEARL), priced by its Decorators.
+  lines: { menuItemId: number; qty: number; customizations?: string[] }[]
   customer: string
   tableId: number | null
   orderType: 'dine-in' | 'pickup' | 'delivery'
@@ -112,4 +113,36 @@ export type ReservationReceipt = { id: string; status: string }
 
 export function createReservation(payload: ReservationPayload): Promise<JavaResult<ReservationReceipt>> {
   return request<ReservationReceipt>('/api/reservations', { method: 'POST', body: payload })
+}
+
+export type JavaReservation = {
+  id: string
+  customer: string
+  contact: string
+  email: string | null
+  dateTime: string
+  table: string | null
+  tableId: number | null
+  guests: number
+  status: string
+  note: string | null
+  preOrders: { name: string; qty: number; price: number }[]
+}
+
+export function fetchReservations(): Promise<JavaResult<JavaReservation[]>> {
+  return request<JavaReservation[]>('/api/reservations', { method: 'GET' })
+}
+
+export type TransferredOrder = {
+  orderCode: string
+  customer: string
+  tableId: number | null
+  items: { name: string; qty: number; price: number }[]
+  subtotal: number
+  total: number
+}
+
+// POST /api/reservations/{code}/transfer-pos: the Java ReservationToOrderAdapter opens a POS order.
+export function transferReservation(code: string): Promise<JavaResult<TransferredOrder>> {
+  return request<TransferredOrder>(`/api/reservations/${encodeURIComponent(code)}/transfer-pos`, { method: 'POST' })
 }

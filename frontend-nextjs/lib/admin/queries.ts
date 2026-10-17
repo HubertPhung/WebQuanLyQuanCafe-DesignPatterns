@@ -8,7 +8,10 @@ import {
   getMockTables,
   getMockActiveOrders,
   getMockOrdersSince,
+  getMockReservations,
+  type ReservationStatusLabel,
 } from '@/lib/db/mock-store'
+import { fetchReservations } from '@/lib/api-client'
 
 const DAY = 24 * 60 * 60 * 1000
 
@@ -167,4 +170,75 @@ export async function getCustomers() {
     customers.set(order.customer, entry)
   }
   return [...customers.values()].sort((a, b) => b.spent - a.spent)
+}
+
+export type ReservationView = {
+  id: string
+  // Where the booking lives decides how "Chuyển sang POS" converts it (Java Adapter or local mirror).
+  source: 'java' | 'local'
+  customer: string
+  contact: string
+  email: string
+  dateTime: string
+  table: string
+  tableId: number | null
+  guests: number
+  status: ReservationStatusLabel
+  note: string
+  preOrders: { name: string; qty: number; price: number }[]
+}
+
+// Java ReservationStatus descriptions → the four labels the reservations page works with.
+const javaStatusLabels: Record<string, ReservationStatusLabel> = {
+  'Chờ xác nhận': 'Chờ xác nhận',
+  'Đã xác nhận đặt bàn': 'Đã đặt',
+  'Khách đã nhận bàn': 'Hoàn thành',
+  'Đã hủy': 'Đã hủy',
+}
+
+function formatSlot(date: Date) {
+  return new Intl.DateTimeFormat('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date)
+}
+
+export async function getReservations(): Promise<{ reservations: ReservationView[]; javaOnline: boolean }> {
+  assertAdminAccess()
+  const local: ReservationView[] = getMockReservations().map((r) => ({
+    id: r.code,
+    source: 'local',
+    customer: r.customer,
+    contact: r.contact,
+    email: r.email ?? '',
+    dateTime: formatSlot(r.dateTime),
+    table: r.tableName.replace('Table', 'Bàn'),
+    tableId: r.tableId,
+    guests: r.guests,
+    status: r.status,
+    note: r.note ?? '',
+    preOrders: r.preOrders,
+  }))
+
+  const remote = await fetchReservations()
+  if (!remote.ok) return { reservations: local, javaOnline: false }
+  const fromJava: ReservationView[] = remote.data.map((r) => ({
+    id: r.id,
+    source: 'java',
+    customer: r.customer,
+    contact: r.contact,
+    email: r.email ?? '',
+    dateTime: formatSlot(new Date(r.dateTime)),
+    table: r.table ?? (r.tableId ? `Bàn ${String(r.tableId).padStart(2, '0')}` : '—'),
+    tableId: r.tableId,
+    guests: r.guests,
+    status: javaStatusLabels[r.status] ?? 'Chờ xác nhận',
+    note: r.note ?? '',
+    preOrders: r.preOrders ?? [],
+  }))
+  return { reservations: [...fromJava, ...local], javaOnline: true }
 }
