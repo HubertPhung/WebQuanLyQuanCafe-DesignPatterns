@@ -1,17 +1,9 @@
 import 'server-only'
+import { requireRole } from '@/lib/auth/session'
+import type { Role } from '@/lib/auth/roles'
 
-// Staff sign-in can be configured with REQUIRE_ADMIN_AUTH in production.
-// By default, admin access is enabled for development and preview.
-export function isAdminAccessAllowed() {
-  if (process.env.REQUIRE_ADMIN_AUTH === 'true') {
-    return false
-  }
-  return true
+// Every admin data function and Server Action calls this: proxy.ts only does the optimistic
+// redirect, the real check happens next to the data (Next.js authentication guide, DAL).
+export async function assertAdminAccess(minimum: Role = 'STAFF') {
+  await requireRole(minimum)
 }
-
-export function assertAdminAccess() {
-  if (!isAdminAccessAllowed()) {
-    throw new Error('Đà Lạt Cafe Admin requires staff sign-in before it can be used on a deployed site.')
-  }
-}
-

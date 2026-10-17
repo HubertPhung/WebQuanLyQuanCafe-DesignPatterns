@@ -1,6 +1,7 @@
 import { getProducts, type Product } from '@/lib/shopify'
 import { getOverview, getTables } from '@/lib/admin/queries'
 import { RoleSwitcherView } from '@/components/role-switcher-view'
+import { getSession } from '@/lib/auth/session'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,6 +15,7 @@ export default async function Page() {
     catalogError = 'Our menu is taking a little coffee break. Please refresh to try again.'
   }
 
+  const session = await getSession()
   let initialOverview
   let initialTables
 
@@ -27,6 +29,7 @@ export default async function Page() {
 
   return (
     <RoleSwitcherView
+      account={session ? { name: session.name, email: session.email, role: session.role } : null}
       products={products}
       catalogError={catalogError}
       storeDomain={process.env.SHOPIFY_STORE_DOMAIN}

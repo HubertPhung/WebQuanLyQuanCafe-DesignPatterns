@@ -1,9 +1,11 @@
 import { PageHeading } from '@/components/admin/shared'
 import { ScheduleManagement } from '@/components/admin/schedule-management'
+import { requirePageRole } from '@/lib/auth/session'
 
 export const metadata = { title: 'Lịch làm việc' }
 
-export default function SchedulePage() {
+export default async function SchedulePage() {
+  await requirePageRole('MANAGER', '/admin/schedule')
   return (
     <>
       <PageHeading

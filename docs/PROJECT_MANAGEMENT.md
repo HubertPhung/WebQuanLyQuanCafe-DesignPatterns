@@ -20,8 +20,8 @@ Cột *Frontend* là `frontend-nextjs/`, cột *Java* là `backend-java/`. Cột
 | Mã | Tính năng | Pattern | Frontend | Java | Tích hợp |
 | :--- | :--- | :---: | :---: | :---: | :---: |
 | `FEAT-CORE-01` | Thực thể miền (`Order`, `Table`, `MenuItem`, `Reservation`, `Customer`) | Core OOP | 🟢 `lib/db/schema.ts` | 🟢 `com.dalatcafe.model` | — |
-| `FEAT-AUTH-01` | Truy cập Admin qua cờ `REQUIRE_ADMIN_AUTH` | — | 🟢 `lib/admin/access.ts` | — | — |
-| `FEAT-AUTH-02` | Phân quyền theo header `X-User-Role` (công khai / STAFF·MANAGER·ADMIN) | — | 🟢 Gửi `X-User-Role: STAFF` | 🟢 `SimpleAuthFilter` | 🟢 |
+| `FEAT-AUTH-01` | Đăng nhập email/mật khẩu, đăng ký khách hàng, đăng nhập Google | — | 🟢 `/login`, `/register`, `lib/auth/*`, Google PKCE | 🟢 `/api/auth`, `PasswordHasher`, `TokenService`, `LoginThrottle` | 🟢 cookie httpOnly chứa token Java |
+| `FEAT-AUTH-02` | Phân quyền 4 vai trò (CUSTOMER < STAFF < MANAGER < ADMIN) và quản lý tài khoản | — | 🟢 `proxy.ts`, `requirePageRole`, `/admin/users` | 🟢 `SimpleAuthFilter` (Bearer), `/api/users` | 🟢 vai trò đọc lại từ tài khoản mỗi request |
 | `FEAT-AUTH-03` | Cấu hình quán toàn cục (07:00–22:00, 10.000đ = 1 điểm, tự huỷ 30 phút) | **Singleton** | 🟢 `admin/settings` + `store-settings-form.tsx` | 🟢 `SystemConfigManager`, `GET/PUT /api/config` | 🟢 (tự huỷ chưa có tác vụ chạy) |
 | `FEAT-AUTH-04` | Giao diện sáng/tối | — | 🟢 `theme-provider` | — | — |
 | `FEAT-AUTH-05` | Hồ sơ & chức danh nhân sự | — | 🟢 `staff-management.tsx` | ⚪ | ⚪ |

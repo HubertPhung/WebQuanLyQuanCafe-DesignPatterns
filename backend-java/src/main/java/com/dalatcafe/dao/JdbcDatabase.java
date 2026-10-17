@@ -297,6 +297,18 @@ public class JdbcDatabase {
                 last_visit TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
 
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                email VARCHAR(255) UNIQUE NOT NULL,
+                name VARCHAR(255) NOT NULL,
+                password_hash VARCHAR(255),
+                google_subject VARCHAR(255) UNIQUE,
+                role VARCHAR(30) NOT NULL DEFAULT 'CUSTOMER',
+                active BOOLEAN NOT NULL DEFAULT TRUE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                last_login_at TIMESTAMP WITH TIME ZONE
+            );
+
             -- List-valued fields (added after the first release, so ALTER keeps old databases working).
             ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS variations JSONB NOT NULL DEFAULT '[]'::jsonb;
             ALTER TABLE orders ADD COLUMN IF NOT EXISTS items JSONB NOT NULL DEFAULT '[]'::jsonb;
@@ -335,6 +347,7 @@ public class JdbcDatabase {
             SELECT setval(pg_get_serial_sequence('orders', 'id'), COALESCE((SELECT MAX(id) FROM orders), 0) + 1, false);
             SELECT setval(pg_get_serial_sequence('reservations', 'id'), COALESCE((SELECT MAX(id) FROM reservations), 0) + 1, false);
             SELECT setval(pg_get_serial_sequence('customers', 'id'), COALESCE((SELECT MAX(id) FROM customers), 0) + 1, false);
+            SELECT setval(pg_get_serial_sequence('users', 'id'), COALESCE((SELECT MAX(id) FROM users), 0) + 1, false);
         """;
         try (Statement stmt = conn.createStatement()) {
             stmt.execute(sql);

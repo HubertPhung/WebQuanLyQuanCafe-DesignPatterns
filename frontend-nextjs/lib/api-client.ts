@@ -4,9 +4,9 @@
 
 const DEFAULT_BACKEND_URL = 'http://localhost:8080'
 const REQUEST_TIMEOUT_MS = 2500
-// The Java SimpleAuthFilter gates endpoints by role header (API_SPEC 1.3): POS work needs
-// STAFF, creating menu items and analytics need MANAGER.
-type JavaRole = 'STAFF' | 'MANAGER' | 'ADMIN'
+// The Java SimpleAuthFilter identifies the caller by the Bearer access token of the signed-in
+// user (API_SPEC 1.3) and re-reads the role from the account, so no role is sent from here.
+import { SESSION_COOKIE } from '@/lib/auth/token'
 // 5xx codes the backend uses to refuse on purpose rather than crash (API_SPEC 1.2).
 const FAIL_CLOSED_CODES = new Set(['DATABASE_UNAVAILABLE'])
 
@@ -25,12 +25,29 @@ export function getJavaBackendUrl(): string | null {
   return raw.replace(/\/+$/, '')
 }
 
-async function request<T>(
-  path: string,
-  init: { method: string; body?: unknown; role?: JavaRole },
-): Promise<JavaResult<T>> {
+// The access token of the current request, when there is one (Server Components, Server
+// Actions and Route Handlers); outside a request there is simply no token.
+async function sessionToken(): Promise<string | undefined> {
+  try {
+    const { cookies } = await import('next/headers')
+    return (await cookies()).get(SESSION_COOKIE)?.value
+  } catch {
+    return undefined
+  }
+}
+
+type CallOptions = {
+  method: string
+  body?: unknown
+  // false for the sign-in calls themselves; a token string to call on behalf of a user just signed in.
+  auth?: false | string
+  headers?: Record<string, string>
+}
+
+async function request<T>(path: string, init: CallOptions): Promise<JavaResult<T>> {
   const baseUrl = getJavaBackendUrl()
   if (!baseUrl) return { ok: false, unreachable: true, error: 'Java backend is disabled.' }
+  const token = init.auth === false ? undefined : (init.auth ?? (await sessionToken()))
 
   let response: Response
   try {
@@ -39,7 +56,8 @@ async function request<T>(
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
-        'X-User-Role': init.role ?? 'STAFF',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...init.headers,
       },
       body: init.body === undefined ? undefined : JSON.stringify(init.body),
       cache: 'no-store',
@@ -212,7 +230,7 @@ export type NewJavaMenuItem = {
 
 // POST /api/menu (MANAGER+)
 export function createJavaMenuItem(payload: NewJavaMenuItem): Promise<JavaResult<JavaMenuItem>> {
-  return request<JavaMenuItem>('/api/menu', { method: 'POST', body: payload, role: 'MANAGER' })
+  return request<JavaMenuItem>('/api/menu', { method: 'POST', body: payload })
 }
 
 export type SyncOrderPayload = {
@@ -255,7 +273,7 @@ export type JavaAnalytics = {
 
 // GET /api/analytics/overview (MANAGER)
 export function fetchAnalytics(days: number): Promise<JavaResult<JavaAnalytics>> {
-  return request<JavaAnalytics>(`/api/analytics/overview?days=${days}`, { method: 'GET', role: 'MANAGER' })
+  return request<JavaAnalytics>(`/api/analytics/overview?days=${days}`, { method: 'GET' })
 }
 
 export type JavaCustomerSummary = JavaCustomer & { lastVisit: string | null }
@@ -294,5 +312,62 @@ export function fetchConfig(): Promise<JavaResult<StoreConfig>> {
 
 // PUT /api/config (ADMIN)
 export function updateConfig(change: StoreConfigChange): Promise<JavaResult<StoreConfig>> {
-  return request<StoreConfig>('/api/config', { method: 'PUT', body: change, role: 'ADMIN' })
+  return request<StoreConfig>('/api/config', { method: 'PUT', body: change })
+}
+
+// ---- accounts (/api/auth, /api/users) ----
+
+export type JavaRole = 'CUSTOMER' | 'STAFF' | 'MANAGER' | 'ADMIN'
+
+export type JavaUser = {
+  id: number
+  email: string
+  name: string
+  role: JavaRole
+  active: boolean
+  providers: ('password' | 'google')[]
+  createdAt: string | null
+  lastLoginAt: string | null
+}
+
+export type JavaSession = { token: string; expiresIn: number; user: JavaUser }
+
+export function signInWithPassword(email: string, password: string): Promise<JavaResult<JavaSession>> {
+  return request<JavaSession>('/api/auth/login', { method: 'POST', body: { email, password }, auth: false })
+}
+
+export function registerAccount(input: { email: string; name: string; password: string }): Promise<JavaResult<JavaSession>> {
+  return request<JavaSession>('/api/auth/register', { method: 'POST', body: input, auth: false })
+}
+
+// The frontend verified the Google ID token; the service key proves this call comes from it.
+export function signInWithGoogle(
+  identity: { googleSubject: string; email: string; name: string; emailVerified: boolean },
+  serviceKey: string,
+): Promise<JavaResult<JavaSession>> {
+  return request<JavaSession>('/api/auth/google', {
+    method: 'POST',
+    body: identity,
+    auth: false,
+    headers: { 'X-Service-Key': serviceKey },
+  })
+}
+
+export function changeOwnPassword(currentPassword: string, newPassword: string): Promise<JavaResult<JavaUser>> {
+  return request<JavaUser>('/api/auth/password', { method: 'POST', body: { currentPassword, newPassword } })
+}
+
+export function fetchUsers(): Promise<JavaResult<JavaUser[]>> {
+  return request<JavaUser[]>('/api/users', { method: 'GET' })
+}
+
+export function createUser(input: { email: string; name: string; password: string; role: JavaRole }): Promise<JavaResult<JavaUser>> {
+  return request<JavaUser>('/api/users', { method: 'POST', body: input })
+}
+
+export function updateUser(
+  id: number,
+  change: { role?: JavaRole; active?: boolean; name?: string; password?: string },
+): Promise<JavaResult<JavaUser>> {
+  return request<JavaUser>(`/api/users/${id}`, { method: 'PATCH', body: change })
 }

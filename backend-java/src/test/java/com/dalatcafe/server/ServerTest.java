@@ -521,13 +521,15 @@ class ServerTest {
 
     @Test
     void unknownEndpointsAreNotPublicByDefault() {
-        assertNull(SimpleAuthFilter.requiredRoles("GET", "/api/menu"));
-        assertNull(SimpleAuthFilter.requiredRoles("GET", "/api/menu/"));
-        assertNull(SimpleAuthFilter.requiredRoles("POST", "/api/reservations"));
-        assertNull(SimpleAuthFilter.requiredRoles("POST", "/api/vouchers/validate"));
-        assertNotNull(SimpleAuthFilter.requiredRoles("GET", "/api/anything-new"));
-        assertFalse(SimpleAuthFilter.requiredRoles("POST", "/api/menu").contains(SimpleAuthFilter.Role.STAFF));
-        assertTrue(SimpleAuthFilter.requiredRoles("PATCH", "/api/menu/1/stock").contains(SimpleAuthFilter.Role.STAFF));
+        assertEquals(SimpleAuthFilter.Access.PUBLIC, SimpleAuthFilter.required("GET", "/api/menu"));
+        assertEquals(SimpleAuthFilter.Access.PUBLIC, SimpleAuthFilter.required("GET", "/api/menu/"));
+        assertEquals(SimpleAuthFilter.Access.PUBLIC, SimpleAuthFilter.required("POST", "/api/reservations"));
+        assertEquals(SimpleAuthFilter.Access.PUBLIC, SimpleAuthFilter.required("POST", "/api/vouchers/validate"));
+        assertEquals(SimpleAuthFilter.Access.STAFF, SimpleAuthFilter.required("GET", "/api/anything-new"));
+        assertEquals(SimpleAuthFilter.Access.MANAGER, SimpleAuthFilter.required("POST", "/api/menu"));
+        assertEquals(SimpleAuthFilter.Access.STAFF, SimpleAuthFilter.required("PATCH", "/api/menu/1/stock"));
+        assertEquals(SimpleAuthFilter.Access.ADMIN, SimpleAuthFilter.required("GET", "/api/users"));
+        assertEquals(SimpleAuthFilter.Access.SIGNED_IN, SimpleAuthFilter.required("GET", "/api/auth/me"));
     }
 
     @Test

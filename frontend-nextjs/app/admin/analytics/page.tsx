@@ -2,10 +2,12 @@ import { PaymentMixChart, RevenueChart, TopDrinksChart } from '@/components/admi
 import { PageHeading } from '@/components/admin/shared'
 import { StaggerContainer, StaggerItem } from '@/components/admin/motion-stagger'
 import { getOverview } from '@/lib/admin/queries'
+import { requirePageRole } from '@/lib/auth/session'
 
 export const metadata = { title: 'Báo cáo phân tích' }
 
 export default async function AnalyticsPage() {
+  await requirePageRole('MANAGER', '/admin/analytics')
   const { revenueByDay, topDrinks, paymentMix, source } = await getOverview()
   return (
     <>

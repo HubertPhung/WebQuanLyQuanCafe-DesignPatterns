@@ -3,7 +3,7 @@ import { StoreSettingsForm } from '@/components/admin/store-settings-form'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { TAX_RATE } from '@/lib/admin/format'
-import { assertAdminAccess } from '@/lib/admin/access'
+import { requirePageRole } from '@/lib/auth/session'
 import { fetchConfig } from '@/lib/api-client'
 
 export const metadata = { title: 'Cài đặt' }
@@ -31,7 +31,7 @@ const rows = [
 ]
 
 export default async function SettingsPage() {
-  assertAdminAccess()
+  await requirePageRole('ADMIN', '/admin/settings')
   const remote = await fetchConfig()
   const config = remote.ok ? remote.data : null
   return (

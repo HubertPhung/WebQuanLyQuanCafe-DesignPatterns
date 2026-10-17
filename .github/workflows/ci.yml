@@ -21,6 +21,9 @@ jobs:
   frontend-ci:
     name: Frontend CI (Next.js & UI Tests)
     runs-on: ubuntu-latest
+    env:
+      # Test-only signing key: the UI suite signs session cookies with it (not a real secret).
+      AUTH_JWT_SECRET: ci-only-ui-test-signing-key-not-a-secret-0123456789
     defaults:
       run:
         working-directory: frontend-nextjs
@@ -45,7 +48,7 @@ jobs:
       - name: Build Next.js Application
         run: npm run build
 
-      - name: Run Automated UI/UX & Admin Action Test Suite (29 Tests)
+      - name: Run Automated UI/UX & Admin Action Test Suite (36 Tests)
         run: |
           # Khởi động production server Next.js ở chế độ background
           npx next start -p 3000 &

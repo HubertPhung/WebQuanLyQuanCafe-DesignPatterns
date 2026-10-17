@@ -18,17 +18,31 @@ import {
 import { Separator } from '@/components/ui/separator'
 import { SidebarTrigger } from '@/components/ui/sidebar'
 import { toast } from 'sonner'
+import { signOut } from '@/app/auth/actions'
+import { roleLabels, type Role } from '@/lib/auth/roles'
 
 type HeaderProps = {
   lowStock?: { id: number; name: string; stockQty: number; unit: string }[]
   readyOrders?: { id: number; orderCode: string; customer: string }[]
   activeCount?: number
+  user: { name: string; email: string; role: Role }
+}
+
+function initials(name: string) {
+  return name
+    .split(' ')
+    .filter(Boolean)
+    .map((part) => part[0])
+    .slice(-2)
+    .join('')
+    .toUpperCase() || 'NV'
 }
 
 export function AdminHeader({
   lowStock = [],
   readyOrders = [],
   activeCount = 0,
+  user,
 }: HeaderProps) {
   const router = useRouter()
   const notificationCount = lowStock.length + readyOrders.length
@@ -151,7 +165,7 @@ export function AdminHeader({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* Admin Profile Dropdown: Nguyễn Văn Admin · Quản lý */}
+        {/* Signed-in account */}
         <DropdownMenu>
           <DropdownMenuTrigger
             className="flex h-10 items-center gap-2 rounded-lg border border-stone-200/80 bg-white p-1 pr-3 hover:border-stone-300 hover:bg-stone-50 transition-colors cursor-pointer shadow-2xs flex-shrink-0 whitespace-nowrap"
@@ -159,39 +173,39 @@ export function AdminHeader({
           >
             <Avatar className="size-8 rounded-md border border-[#5A3E2B]/20">
               <AvatarFallback className="font-bold text-xs bg-[#5A3E2B] text-white rounded-md">
-                AD
+                {initials(user.name)}
               </AvatarFallback>
             </Avatar>
             <div className="hidden lg:flex flex-col text-left leading-tight whitespace-nowrap">
-              <span className="text-xs font-bold text-stone-900 whitespace-nowrap">Nguyễn Văn Admin</span>
-              <span className="text-[10px] font-semibold text-amber-900 whitespace-nowrap">Quản lý</span>
+              <span className="text-xs font-bold text-stone-900 whitespace-nowrap">{user.name}</span>
+              <span className="text-[10px] font-semibold text-amber-900 whitespace-nowrap">{roleLabels[user.role]}</span>
             </div>
             <ChevronsUpDown className="size-3 text-stone-400 ml-0.5" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-64 p-2 rounded-xl bg-white border-stone-200 text-stone-900 shadow-2xl">
             <DropdownMenuGroup>
               <div className="p-3 bg-[#F7F5F0] rounded-lg border border-stone-200/80 mb-1">
-                <p className="text-sm font-bold text-stone-900 whitespace-nowrap">Nguyễn Văn Admin</p>
-                <p className="text-xs text-stone-500 whitespace-nowrap">admin@dalatcafe.vn</p>
+                <p className="text-sm font-bold text-stone-900 whitespace-nowrap">{user.name}</p>
+                <p className="text-xs text-stone-500 whitespace-nowrap">{user.email}</p>
                 <div className="mt-2 flex items-center justify-between text-[11px] font-semibold text-amber-900 whitespace-nowrap">
-                  <span>Vai trò: Quản trị cấp cao</span>
-                  <Badge className="bg-[#5A3E2B] text-white text-[10px] whitespace-nowrap">Toàn quyền</Badge>
+                  <span>Vai trò: {roleLabels[user.role]}</span>
+                  {user.role === 'ADMIN' && <Badge className="bg-[#5A3E2B] text-white text-[10px] whitespace-nowrap">Toàn quyền</Badge>}
                 </div>
               </div>
               <DropdownMenuItem
                 className="h-10 rounded-lg px-3 gap-2.5 hover:bg-stone-100 cursor-pointer text-xs"
-                onClick={() => router.push('/admin/settings')}
+                onClick={() => router.push('/account/security')}
               >
                 <UserCheck className="size-4 text-stone-500" />
-                Cài đặt hồ sơ & Chi nhánh
+                Mật khẩu & bảo mật
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator className="bg-stone-100 my-1" />
             <DropdownMenuItem
               className="h-10 rounded-lg px-3 gap-2.5 hover:bg-rose-50 text-rose-600 cursor-pointer text-xs font-medium"
               onClick={() => {
-                toast.success('Đã đăng xuất phiên làm việc an toàn')
-                router.push('/')
+                toast.success('Đã đăng xuất')
+                void signOut()
               }}
             >
               <LogOut className="size-4 text-rose-500" />

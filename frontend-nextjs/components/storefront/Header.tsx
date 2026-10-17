@@ -16,7 +16,7 @@ import {
   ChevronRight,
 } from 'lucide-react'
 import { useCartStore } from '@/lib/store/cart-store'
-import { AccountDropdown } from './AccountDropdown'
+import { AccountDropdown, type StorefrontAccount } from './AccountDropdown'
 import { CartSheet } from './CartSheet'
 import { Button } from '@/components/ui/button'
 
@@ -34,12 +34,14 @@ export const NAV_ITEMS: NavItem[] = [
 ]
 
 export interface HeaderProps {
+  account?: StorefrontAccount | null
   favoritesCount?: number
   onSearchClick?: () => void
   onFavoritesClick?: () => void
 }
 
 export function Header({
+  account = null,
   favoritesCount = 0,
   onSearchClick,
   onFavoritesClick,
@@ -227,7 +229,7 @@ export function Header({
             </button>
 
             {/* Modular Account Dropdown */}
-            <AccountDropdown />
+            <AccountDropdown account={account} />
 
             {/* Mobile Hamburger Toggle */}
             <button
