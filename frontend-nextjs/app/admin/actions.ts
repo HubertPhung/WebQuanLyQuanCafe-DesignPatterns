@@ -19,7 +19,13 @@ import {
 } from '@/lib/db/schema'
 import { assertAdminAccess } from '@/lib/admin/access'
 import { TAX_RATE } from '@/lib/admin/format'
-import { checkout, fetchMenu, type CheckoutPayload } from '@/lib/api-client'
+import {
+  checkout,
+  createReservation as createJavaReservation,
+  fetchMenu,
+  updateTable,
+  type CheckoutPayload,
+} from '@/lib/api-client'
 import {
   updateMockOrderStatus,
   markMockOrderPaid,
@@ -28,6 +34,7 @@ import {
   createMockOrder,
   createMockMenuItem,
   getMockMenuItems,
+  createMockReservation,
   type NewMockOrderInput,
 } from '@/lib/db/mock-store'
 
@@ -267,6 +274,10 @@ export async function updateTableStatus(tableId: number, status: TableStatus, gu
     assertAdminAccess()
     if (!Number.isInteger(tableId) || !tableStatuses.includes(status)) throw new Error('Invalid table update.')
     const guests = Math.min(Math.max(Math.trunc(guestCount), 0), 20)
+
+    const remote = await updateTable(tableId, { status, guestCount: status === 'occupied' ? Math.max(guests, 1) : 0 })
+    if (!remote.ok && !remote.unreachable) return { ok: false, error: remote.error }
+
     if (!isDbConfigured || !db) {
       const res = updateMockTableStatus(tableId, status, guests)
       refresh()
@@ -287,6 +298,55 @@ export async function updateTableStatus(tableId: number, status: TableStatus, gu
     }
     refresh()
     return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+type NewReservationInput = {
+  customer: string
+  contact: string
+  email?: string
+  note?: string
+  dateTime: string
+  guests: number
+  tableId: number
+}
+
+export async function createReservation(input: NewReservationInput): Promise<ActionResult> {
+  try {
+    assertAdminAccess()
+    const customer = input.customer.trim().slice(0, 60)
+    const contact = input.contact.trim().slice(0, 30)
+    if (!customer || !contact) throw new Error('Customer name and contact are required.')
+    if (!Number.isInteger(input.guests) || input.guests < 1 || input.guests > 20) {
+      throw new Error('Guests must be a whole number between 1 and 20.')
+    }
+    if (!Number.isInteger(input.tableId)) throw new Error('Choose a table.')
+    const dateTime = new Date(input.dateTime)
+    if (Number.isNaN(dateTime.getTime())) throw new Error('Choose a valid date and time.')
+
+    const booking = {
+      customer,
+      contact,
+      email: input.email?.trim() || undefined,
+      note: input.note?.trim().slice(0, 500) || undefined,
+      dateTime: dateTime.toISOString(),
+      guests: input.guests,
+      tableId: input.tableId,
+    }
+
+    // Java runs the full validation chain (hours, capacity, availability); its verdict is final.
+    const remote = await createJavaReservation(booking)
+    if (remote.ok) {
+      refresh()
+      return { ok: true, message: `Reservation ${remote.data.id} received by the Java backend.` }
+    }
+    if (!remote.unreachable) return { ok: false, error: remote.error }
+
+    const res = createMockReservation({ ...booking, email: booking.email ?? null, note: booking.note ?? null, dateTime })
+    refresh()
+    return res.ok ? { ok: true, message: `Reservation ${res.code} saved locally.` } : { ok: false, error: res.error ?? 'Failed' }
   } catch (error) {
     return fail(error)
   }
