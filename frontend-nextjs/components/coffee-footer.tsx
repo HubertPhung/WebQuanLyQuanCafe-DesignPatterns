@@ -1,140 +1,153 @@
-import { ArrowUpRight, Clock, Mail, MapPin, Phone } from 'lucide-react'
+import { ArrowUpRight, Clock, Mail, MapPin, Navigation, Phone } from 'lucide-react'
 import { Logo } from '@/components/brand/logo'
+import { branchAddress, branches, CONTACT_EMAIL, HOTLINE, mapsUrl } from '@/lib/branches'
 
-// One type scale for the whole footer: Playfair titles (text-lg), 14px body, 12px fine print.
-// Only Tailwind classes here: the legacy unlayered .footer-top / .footer-bottom rules in
-// globals.css would override them, so those class names are not used any more.
-const title = 'font-display text-lg font-semibold text-stone-900'
+// One type scale: Playfair titles, 14px body, 12px fine print. Only Tailwind classes: the
+// legacy unlayered .footer-top / .footer-bottom rules in globals.css would override them.
 const body = 'text-sm leading-relaxed text-stone-600'
 const link = 'font-medium text-[#3E2723] underline-offset-4 transition-colors hover:text-[#B45309] hover:underline'
 
-function Row({ icon: Icon, children }: { icon: typeof Phone; children: React.ReactNode }) {
+const exploreLinks = [
+  { href: '#menu', label: 'Thực đơn' },
+  { href: '#story', label: 'Câu chuyện' },
+  { href: '#journal', label: 'Góc cà phê' },
+  { href: '/register', label: 'Tạo tài khoản tích điểm' },
+]
+
+function BranchCard({ branch, index }: { branch: (typeof branches)[number]; index: number }) {
   return (
-    <li className="flex items-start gap-3">
-      <Icon size={16} className="mt-0.5 shrink-0 text-[#B45309]" aria-hidden="true" />
-      <span>{children}</span>
-    </li>
+    <article className="group flex flex-col rounded-2xl border border-stone-300/70 bg-[#F6F1E9] p-5 transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:border-[#B45309]/40 hover:shadow-[0_12px_30px_-16px_rgba(62,39,35,0.35)] motion-reduce:hover:translate-y-0">
+      <div className="flex items-start justify-between gap-3">
+        <span className="font-display text-3xl font-semibold leading-none text-[#B45309]/80" aria-hidden="true">
+          {String(index + 1).padStart(2, '0')}
+        </span>
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800 ring-1 ring-emerald-200">
+          <Clock size={12} aria-hidden="true" />
+          {branch.hours}
+        </span>
+      </div>
+      <h4 className="font-display mt-4 text-lg font-semibold text-stone-900">Chi nhánh {branch.street.replace(/^\d+\s*/, '')}</h4>
+      <address className={`${body} mt-2 flex gap-2 not-italic`}>
+        <MapPin size={16} className="mt-0.5 shrink-0 text-[#B45309]" aria-hidden="true" />
+        <span>
+          <span className="font-medium text-stone-800">{branch.street}</span>
+          <br />
+          {branch.ward}, {branch.city}
+        </span>
+      </address>
+      <p className="mt-2 text-xs text-stone-500">{branch.note}</p>
+      <a
+        href={mapsUrl(branch)}
+        target="_blank"
+        rel="noreferrer"
+        aria-label={`Chỉ đường tới ${branchAddress(branch)}`}
+        className="mt-5 inline-flex h-10 w-fit items-center gap-2 rounded-full border border-[#3E2723]/20 bg-white px-4 text-sm font-semibold text-[#3E2723] transition-colors hover:border-[#3E2723] hover:bg-[#3E2723] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600"
+      >
+        <Navigation size={14} aria-hidden="true" />
+        Chỉ đường
+      </a>
+    </article>
   )
 }
 
 export function CoffeeFooter({ storeDomain }: { storeDomain?: string }) {
   const year = new Date().getFullYear()
   return (
-    <footer id="locations" className="border-t border-stone-300/60 bg-[#ede6db] text-stone-800">
-      <div className="section-shell grid gap-10 py-14 sm:grid-cols-2 lg:grid-cols-[1.3fr_1fr_1fr_1fr] lg:gap-12">
-        {/* Brand */}
-        <div className="space-y-4">
+    <footer id="locations" className="border-t border-stone-300/60 bg-[#EDE6DB] text-stone-800">
+      <div className="section-shell grid gap-12 py-14 lg:grid-cols-12">
+        {/* Brand and contact */}
+        <div className="space-y-5 lg:col-span-4">
           <a href="#" aria-label="Đà Lạt Cafe – về đầu trang" className="inline-block">
             <Logo tagline="Cà phê & cộng đồng" />
           </a>
-          <p className={`${body} max-w-xs`}>
-            Dành trọn tình yêu cho cà phê, cho những điều giản dị trong cuộc sống. Đến vì hương cà phê, ở lại vì sự gắn kết.
+          <p className={`${body} max-w-sm`}>
+            Đến vì hương cà phê, ở lại vì sự gắn kết. Hai không gian ấm áp giữa lòng Đà Lạt, mở cửa mỗi ngày.
           </p>
-        </div>
-
-        {/* Visit */}
-        <div className="space-y-4">
-          <h3 className={title}>Ghé quán</h3>
-          <ul className={`${body} space-y-3`}>
-            <Row icon={MapPin}>Phường Cam Ly, TP. Đà Lạt, Lâm Đồng</Row>
-            <Row icon={Clock}>
-              Mở cửa mỗi ngày
-              <br />
-              <span className="font-medium text-stone-800">07:00 – 22:00</span>
-            </Row>
-          </ul>
-          <a
-            href="https://www.google.com/maps/search/specialty+coffee+Da+Lat+Vietnam"
-            target="_blank"
-            rel="noreferrer"
-            className={`inline-flex items-center gap-1.5 text-sm ${link}`}
-          >
-            Xem bản đồ <ArrowUpRight size={14} aria-hidden="true" />
-          </a>
-        </div>
-
-        {/* Contact */}
-        <div className="space-y-4">
-          <h3 className={title}>Liên hệ</h3>
-          <ul className={`${body} space-y-3`} aria-label="Liên hệ chi nhánh">
-            <Row icon={Phone}>
-              <span className="block text-xs uppercase tracking-wider text-stone-500">Hotline</span>
-              <a href="tel:0988752291" className={`${link} tabular-nums`}>
-                0988 752 291
+          <ul className="space-y-2.5 text-sm" aria-label="Liên hệ">
+            <li>
+              <a href={`tel:${HOTLINE.tel}`} className={`inline-flex items-center gap-2.5 ${link}`}>
+                <span className="flex size-9 items-center justify-center rounded-full bg-white ring-1 ring-stone-300/70">
+                  <Phone size={15} className="text-[#B45309]" aria-hidden="true" />
+                </span>
+                <span>
+                  <span className="block text-xs font-normal text-stone-500">Hotline</span>
+                  <span className="tabular-nums">{HOTLINE.display}</span>
+                </span>
               </a>
-            </Row>
-            <Row icon={Mail}>
-              <span className="block text-xs uppercase tracking-wider text-stone-500">Email</span>
-              <a href="mailto:2312585@dlu.edu.vn" className={`${link} break-all`}>
-                2312585@dlu.edu.vn
+            </li>
+            <li>
+              <a href={`mailto:${CONTACT_EMAIL}`} className={`inline-flex items-center gap-2.5 ${link}`}>
+                <span className="flex size-9 items-center justify-center rounded-full bg-white ring-1 ring-stone-300/70">
+                  <Mail size={15} className="text-[#B45309]" aria-hidden="true" />
+                </span>
+                <span>
+                  <span className="block text-xs font-normal text-stone-500">Email</span>
+                  <span className="break-all">{CONTACT_EMAIL}</span>
+                </span>
               </a>
-            </Row>
+            </li>
           </ul>
-        </div>
-
-        {/* Explore, or the newsletter when a Shopify store is connected */}
-        <div className="space-y-4">
-          {storeDomain ? (
-            <>
-              <h3 className={title}>Nhận bản tin</h3>
-              <p className={body}>Mẻ rang mới và chuyện kể từ quầy bar, gửi tới hộp thư của bạn.</p>
-              <form
-                className="flex h-11 items-center overflow-hidden rounded-full border border-stone-300 bg-white focus-within:ring-2 focus-within:ring-amber-600/40"
-                action={`https://${storeDomain.replace(/^https?:\/\//, '').replace(/\/$/, '')}/contact#contact_form`}
-                method="post"
-                target="_blank"
+          {storeDomain && (
+            <form
+              className="flex h-11 max-w-sm items-center overflow-hidden rounded-full border border-stone-300 bg-white focus-within:ring-2 focus-within:ring-amber-600/40"
+              action={`https://${storeDomain.replace(/^https?:\/\//, '').replace(/\/$/, '')}/contact#contact_form`}
+              method="post"
+              target="_blank"
+            >
+              <input type="hidden" name="form_type" value="customer" />
+              <input type="hidden" name="utf8" value="✓" />
+              <input type="hidden" name="contact[tags]" value="newsletter" />
+              <label className="sr-only" htmlFor="newsletter-email">
+                Địa chỉ email nhận bản tin
+              </label>
+              <input
+                id="newsletter-email"
+                name="contact[email]"
+                type="email"
+                required
+                placeholder="Nhận bản tin qua email"
+                className="h-full min-w-0 flex-1 bg-transparent px-4 text-sm outline-none placeholder:text-stone-400"
+              />
+              <button
+                type="submit"
+                aria-label="Đăng ký nhận bản tin"
+                className="mr-1 flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full bg-[#3E2723] text-white transition-colors hover:bg-[#5A3E2B]"
               >
-                <input type="hidden" name="form_type" value="customer" />
-                <input type="hidden" name="utf8" value="✓" />
-                <input type="hidden" name="contact[tags]" value="newsletter" />
-                <label className="sr-only" htmlFor="newsletter-email">
-                  Địa chỉ email
-                </label>
-                <input
-                  id="newsletter-email"
-                  name="contact[email]"
-                  type="email"
-                  required
-                  placeholder="Email của bạn"
-                  className="h-full min-w-0 flex-1 bg-transparent px-4 text-sm outline-none placeholder:text-stone-400"
-                />
-                <button
-                  type="submit"
-                  aria-label="Đăng ký nhận bản tin"
-                  className="mr-1 flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full bg-[#3E2723] text-white transition-colors hover:bg-[#5A3E2B]"
-                >
-                  <ArrowUpRight size={16} aria-hidden="true" />
-                </button>
-              </form>
-              <p className="text-xs text-stone-500">Khi đăng ký, bạn đồng ý nhận bản tin định kỳ từ Đà Lạt Cafe.</p>
-            </>
-          ) : (
-            <>
-              <h3 className={title}>Khám phá</h3>
-              <ul className={`${body} space-y-2.5`}>
-                <li>
-                  <a href="#menu" className={link}>Thực đơn</a>
-                </li>
-                <li>
-                  <a href="#story" className={link}>Câu chuyện của chúng tôi</a>
-                </li>
-                <li>
-                  <a href="#journal" className={link}>Góc cà phê</a>
-                </li>
-                <li>
-                  <a href="/register" className={link}>Tạo tài khoản tích điểm</a>
-                </li>
-              </ul>
-            </>
+                <ArrowUpRight size={16} aria-hidden="true" />
+              </button>
+            </form>
           )}
+        </div>
+
+        {/* Branches */}
+        <div className="lg:col-span-8">
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#89684F]">Hệ thống chi nhánh</p>
+              <h3 className="font-display mt-2 text-2xl font-semibold text-stone-900">Ghé quán gần bạn nhất</h3>
+            </div>
+            <span className="hidden text-sm text-stone-500 sm:block">{branches.length} chi nhánh tại Đà Lạt</span>
+          </div>
+          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            {branches.map((branch, index) => (
+              <BranchCard key={branch.id} branch={branch} index={index} />
+            ))}
+          </div>
         </div>
       </div>
 
-      <div className="section-shell flex flex-col gap-3 border-t border-stone-300/60 py-6 text-xs text-stone-500 sm:flex-row sm:items-center sm:justify-between">
+      <div className="section-shell flex flex-col gap-4 border-t border-stone-300/60 py-6 text-xs text-stone-500 md:flex-row md:items-center md:justify-between">
         <span>© {year} Đà Lạt Cafe. Tận tâm chế tác, thưởng thức chậm rãi.</span>
-        <a href="/admin" className={`inline-flex items-center gap-1 ${link} text-xs`} title="Staff portal">
-          Dành cho nhân viên <span className="sr-only">Staff portal</span> <ArrowUpRight size={12} aria-hidden="true" />
-        </a>
+        <nav aria-label="Liên kết cuối trang" className="flex flex-wrap items-center gap-x-5 gap-y-2">
+          {exploreLinks.map((item) => (
+            <a key={item.href} href={item.href} className={`${link} text-xs`}>
+              {item.label}
+            </a>
+          ))}
+          <a href="/admin" className={`inline-flex items-center gap-1 ${link} text-xs`} title="Staff portal">
+            Dành cho nhân viên <span className="sr-only">Staff portal</span> <ArrowUpRight size={12} aria-hidden="true" />
+          </a>
+        </nav>
       </div>
     </footer>
   )

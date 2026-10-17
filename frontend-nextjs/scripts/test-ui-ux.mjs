@@ -190,10 +190,11 @@ async function runStorefrontTests() {
     const ok = res.status === 200 &&
       res.body.includes('href="tel:0988752291"') &&
       res.body.includes('href="mailto:2312585@dlu.edu.vn"') &&
+      res.body.includes('123 Phan Đình Phùng') && res.body.includes('456 Bùi Thị Xuân') &&
       (res.body.includes('/images/space/') || res.body.includes('%2Fimages%2Fspace%2F')) &&
       res.body.includes('aria-label="Mở giỏ hàng') &&
       !res.body.includes('>Giỏ hàng</span>')
-    recordTest('TC-SF-07', 'Branch Contact, Cafe Space Gallery & Icon-only Cart', 'Storefront', ok ? 'PASS' : 'FAIL', `Status ${res.status}`)
+    recordTest('TC-SF-07', 'Two Branches, Contact, Cafe Space Gallery & Icon-only Cart', 'Storefront', ok ? 'PASS' : 'FAIL', `Status ${res.status}`)
   } catch (err) {
     recordTest('TC-SF-07', 'Branch Contact, Cafe Space Gallery & Icon-only Cart', 'Storefront', 'FAIL', err.message)
   }

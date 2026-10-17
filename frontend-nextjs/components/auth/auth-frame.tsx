@@ -17,6 +17,7 @@ import {
 } from 'framer-motion'
 import { CalendarCheck, Gift, Receipt } from 'lucide-react'
 import { Logo } from '@/components/brand/logo'
+import { branches, HOTLINE } from '@/lib/branches'
 
 const EASE_OUT = [0.22, 1, 0.36, 1] as const
 
@@ -239,7 +240,9 @@ function BrandPanel() {
         </motion.ul>
       </div>
 
-      <p className="relative text-xs text-amber-50/55">Phường Cam Ly, TP. Đà Lạt · Hotline 0988 752 291</p>
+      <p className="relative text-xs text-amber-50/55">
+        {branches.map((branch) => branch.street).join(' · ')} · Hotline {HOTLINE.display}
+      </p>
     </aside>
   )
 }

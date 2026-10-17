@@ -53,7 +53,7 @@ Các mã dưới đây khớp chính xác với `frontend-nextjs/scripts/test-ui
 | | `TC-SF-04` | Tab danh mục & thanh công cụ |
 | | `TC-SF-05` | Thuộc tính trợ năng (ARIA) |
 | | `TC-SF-06` | Journal & chân trang |
-| | `TC-SF-07` | Hotline / email chi nhánh, ảnh không gian quán ở mục Góc cà phê, nút giỏ hàng chỉ còn biểu tượng và số món |
+| | `TC-SF-07` | Hai chi nhánh (123 Phan Đình Phùng, 456 Bùi Thị Xuân), hotline / email, ảnh không gian quán ở mục Góc cà phê, nút giỏ hàng chỉ còn biểu tượng và số món |
 | API giỏ hàng | `TC-API-01` | Thêm/bỏ món yêu thích (`/api/favorites`) |
 | | `TC-API-02` | Thêm món có tuỳ chọn vào giỏ (`/api/cart`) |
 | | `TC-API-03` | Tăng/giảm số lượng |
