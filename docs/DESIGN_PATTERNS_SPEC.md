@@ -1133,32 +1133,250 @@ public class PosCheckoutFacade {
 
 ---
 
-### 3.7. Strategy Pattern - Tính giảm giá (Issue #7)
+### 3.7. Strategy Pattern - Tính giảm giá (`DiscountContext`)
+- **Bài toán thực tế trong nghiệp vụ:**  
+  Quán áp dụng nhiều chương trình giảm giá khác nhau: mã voucher theo phần trăm có trần (`WELCOME10` giảm 10%, tối đa 50.000 VNĐ), giảm số tiền cố định, ưu đãi theo hạng thành viên (Đồng/Bạc/Vàng/VIP) hoặc không giảm. Nếu viết các nhánh `if-else` theo loại khuyến mãi ngay trong luồng chốt đơn, mỗi chương trình mới đều buộc phải sửa mã thanh toán.
+- **Giải pháp kỹ thuật (Pure Java OOP):**  
+  Áp dụng **Strategy Pattern** trong package `com.dalatcafe.patterns.strategy` (Java SE 17):
+  - `IDiscountStrategy`: `double calculateDiscount(double subtotal, Customer customer)` và `String getDiscountDescription()`.
+  - `PercentageDiscountStrategy(rate, maxCap)`: tỷ lệ từ 0 đến 1, giới hạn mức giảm tối đa.
+  - `FixedAmountDiscountStrategy(amount)`: giảm số tiền cố định, không vượt subtotal.
+  - `LoyaltyTierDiscountStrategy`: dùng `CustomerRank.getDiscountRate()` (Đồng 0%, Bạc 5%, Vàng 10%, VIP 15%); khách/hạng null giảm 0.
+  - `NoDiscountStrategy`: không giảm giá.
+  - `DiscountContext`: mặc định không giảm; constructor nhận strategy, `setStrategy`, `executeDiscount(subtotal, customer)`, `getDiscountDescription`. Có thể đổi strategy lúc chạy mà không dựng lại Order.
+  - Số tiền phải hữu hạn, không âm; sai đầu vào gây `IllegalArgumentException`. Strategy null bị từ chối. Context kiểm tra kết quả strategy và giới hạn trong `[0, subtotal]` (qua lớp tiện ích nội bộ `DiscountAmounts`).
+  - `CheckoutHandler` chọn strategy theo yêu cầu: có voucher `WELCOME10` → `PercentageDiscountStrategy(0.10, 50000)`; khách quen tra được theo số điện thoại → `LoyaltyTierDiscountStrategy`; còn lại → không giảm. `PosCheckoutFacade` chỉ làm việc với `DiscountContext`.
+- **Bảng ánh xạ thành phần (Participants Mapping):**
+  | Vai trò GoF | Class / Interface Java | Trách nhiệm cụ thể |
+  | :--- | :--- | :--- |
+  | **Strategy** | `IDiscountStrategy` | Giao diện chung của mọi thuật toán giảm giá |
+  | **Concrete Strategy A** | `PercentageDiscountStrategy` | Giảm theo phần trăm có trần tối đa (voucher) |
+  | **Concrete Strategy B** | `FixedAmountDiscountStrategy` | Giảm một số tiền cố định |
+  | **Concrete Strategy C** | `LoyaltyTierDiscountStrategy` | Giảm theo hạng thành viên `CustomerRank` |
+  | **Concrete Strategy D** | `NoDiscountStrategy` | Null Object: không giảm |
+  | **Context** | `DiscountContext` | Giữ strategy hiện tại, kẹp kết quả trong `[0, subtotal]` |
 
-- Package: `com.dalatcafe.patterns.strategy`, Java SE 17.
-- `IDiscountStrategy`: `double calculateDiscount(double subtotal, Customer customer)` và `String getDiscountDescription()`.
-- `PercentageDiscountStrategy(rate, maxCap)`: tỷ lệ từ 0 đến 1, giới hạn mức giảm tối đa.
-- `FixedAmountDiscountStrategy(amount)`: giảm số tiền cố định, không vượt subtotal.
-- `LoyaltyTierDiscountStrategy`: dùng `CustomerRank.getDiscountRate()` (Đồng 0%, Bạc 5%, Vàng 10%, VIP 15%); khách/hạng null giảm 0.
-- `NoDiscountStrategy`: không giảm giá.
-- `DiscountContext`: mặc định không giảm; constructor nhận strategy, `setStrategy`, `executeDiscount(subtotal, customer)`, `getDiscountDescription`. Có thể đổi strategy lúc chạy mà không dựng lại Order.
-- Số tiền phải hữu hạn, không âm; sai đầu vào gây `IllegalArgumentException`. Strategy null bị từ chối. Context kiểm tra kết quả strategy và giới hạn trong `[0, subtotal]`.
-- Chưa bao gồm tra cứu mã voucher, HTTP API hoặc Facade. Kiểm thử: `StrategyTest`.
+- **Sơ đồ lớp (Class Diagram):**
+```mermaid
+classDiagram
+    class IDiscountStrategy {
+        <<interface>>
+        +calculateDiscount(double subtotal, Customer customer) double
+        +getDiscountDescription() String
+    }
+
+    class PercentageDiscountStrategy {
+        <<final>>
+        -double rate
+        -double maxCap
+        +PercentageDiscountStrategy(double rate, double maxCap)
+        +calculateDiscount(double subtotal, Customer customer) double
+        +getDiscountDescription() String
+    }
+
+    class FixedAmountDiscountStrategy {
+        <<final>>
+        -double amount
+        +FixedAmountDiscountStrategy(double amount)
+        +calculateDiscount(double subtotal, Customer customer) double
+        +getDiscountDescription() String
+    }
+
+    class LoyaltyTierDiscountStrategy {
+        <<final>>
+        +calculateDiscount(double subtotal, Customer customer) double
+        +getDiscountDescription() String
+    }
+
+    class NoDiscountStrategy {
+        <<final>>
+        +calculateDiscount(double subtotal, Customer customer) double
+        +getDiscountDescription() String
+    }
+
+    class DiscountContext {
+        <<final>>
+        -IDiscountStrategy strategy
+        +DiscountContext()
+        +DiscountContext(IDiscountStrategy strategy)
+        +setStrategy(IDiscountStrategy strategy)
+        +executeDiscount(double subtotal, Customer customer) double
+        +getDiscountDescription() String
+    }
+
+    class CustomerRank {
+        <<enumeration>>
+        +getDiscountRate() double
+    }
+
+    IDiscountStrategy <|.. PercentageDiscountStrategy
+    IDiscountStrategy <|.. FixedAmountDiscountStrategy
+    IDiscountStrategy <|.. LoyaltyTierDiscountStrategy
+    IDiscountStrategy <|.. NoDiscountStrategy
+    DiscountContext o--> IDiscountStrategy : strategy
+    LoyaltyTierDiscountStrategy ..> CustomerRank : reads
+```
+
+- **Mã nguồn thực tế** (`backend-java/src/main/java/com/dalatcafe/patterns/strategy/`):
+```java
+public final class DiscountContext {
+    private IDiscountStrategy strategy;
+
+    public DiscountContext() {
+        this(new NoDiscountStrategy());
+    }
+
+    public DiscountContext(IDiscountStrategy strategy) {
+        setStrategy(strategy);
+    }
+
+    public void setStrategy(IDiscountStrategy strategy) {
+        this.strategy = Objects.requireNonNull(strategy, "Strategy must not be null");
+    }
+
+    public double executeDiscount(double subtotal, Customer customer) {
+        DiscountAmounts.requireNonNegative(subtotal, "Subtotal");
+        return DiscountAmounts.clamp(subtotal, strategy.calculateDiscount(subtotal, customer));
+    }
+
+    public String getDiscountDescription() {
+        return strategy.getDiscountDescription();
+    }
+}
+
+public final class PercentageDiscountStrategy implements IDiscountStrategy {
+    private final double rate;
+    private final double maxCap;
+
+    @Override
+    public double calculateDiscount(double subtotal, Customer customer) {
+        DiscountAmounts.requireNonNegative(subtotal, "Subtotal");
+        return DiscountAmounts.clamp(subtotal, Math.min(subtotal * rate, maxCap));
+    }
+    // constructor kiểm tra 0 <= rate <= 1 và maxCap >= 0
+}
+```
+- **Kiểm thử:** `StrategyTest`.
 
 ---
-### 3.8. Chain of Responsibility - Kiểm định đặt bàn (Issue #9)
+### 3.8. Chain of Responsibility - Kiểm định đặt bàn (`ReservationValidatorHandler`)
+- **Bài toán thực tế trong nghiệp vụ:**  
+  Một phiếu đặt bàn chỉ được nhận khi qua đủ ba bước kiểm tra theo thứ tự: giờ đến nằm trong giờ mở cửa, bàn tồn tại và đủ ghế cho số khách, bàn không bị trùng lịch. Gộp cả ba vào một phương thức dài khiến việc thêm, bớt hoặc đổi thứ tự quy tắc trở nên rủi ro.
+- **Giải pháp kỹ thuật (Pure Java OOP):**  
+  Áp dụng **Chain of Responsibility** trong package `com.dalatcafe.patterns.chain` (Java SE 17):
+  - `ReservationValidatorHandler`: `setNext(ReservationValidatorHandler)`, `validate(Reservation)` và `checkNext(Reservation)`; dừng ngay tại lỗi đầu tiên. `setNext` từ chối chuỗi có vòng lặp.
+  - `ValidationResult` bất biến: `valid()`, `invalid(String)`, `isValid()`, `getErrorMessage()`; kết quả hợp lệ có errorMessage null.
+  - `OperatingHoursValidator`: đổi Instant sang `Asia/Ho_Chi_Minh`, đọc giờ từ `SystemConfigManager`; mặc định chấp nhận thời điểm bắt đầu từ 07:00 đến 22:00 (bao gồm hai biên).
+  - `CapacityGuestValidator(ITableDao)`: bàn phải tồn tại; số khách từ 1 đến giới hạn cấu hình (mặc định 20), không vượt số ghế.
+  - `TableAvailabilityValidator(IReservationDao[, Duration])`: thời lượng mặc định 2 giờ, áp dụng chung cho mọi lịch. Khoảng `[start, end)` giao nhau trên cùng bàn bị từ chối; lịch nối tiếp được phép.
+  - PENDING, CONFIRMED, SEATED chiếm lịch; CANCELLED không chiếm lịch. Khi chỉnh sửa, chỉ bỏ qua bản ghi có cùng ID khác null; không dùng Reservation.equals().
+  - `ReservationValidationChainFactory.create(tableDao, reservationDao[, duration])` lắp chuỗi giờ hoạt động → sức chứa → lịch bàn.
+  - Lỗi dữ liệu trả thông báo tiếng Việt. Validator chỉ đọc DAO; lỗi truy cập DAO được truyền lên. Không cấm lịch tương lai dựa trên trạng thái bàn hiện tại.
+  - Không thêm điều kiện đặt trước 60 phút hoặc bắt buộc kết thúc trước giờ đóng cửa. Giữ tương thích Reservation.setGuests() tự chuyển số dưới 1 thành 1.
+  - Kiểm tra và lưu lịch chưa nguyên tử; lớp tích hợp lưu đặt bàn phải xử lý yêu cầu đồng thời.
+  - `ReservationHandler` (`POST /api/reservations`) chạy chuỗi trước khi lưu và trả `400 CHAIN_VALIDATION_FAILED` kèm thông báo của mắt xích đầu tiên thất bại.
+- **Bảng ánh xạ thành phần (Participants Mapping):**
+  | Vai trò GoF | Class / Interface Java | Trách nhiệm cụ thể |
+  | :--- | :--- | :--- |
+  | **Handler** | `ReservationValidatorHandler` | Lớp trừu tượng giữ mắt xích kế tiếp và chuyển tiếp yêu cầu |
+  | **Concrete Handler 1** | `OperatingHoursValidator` | Giờ đến phải nằm trong giờ mở cửa |
+  | **Concrete Handler 2** | `CapacityGuestValidator` | Bàn tồn tại, số khách hợp lệ và không vượt số ghế |
+  | **Concrete Handler 3** | `TableAvailabilityValidator` | Không trùng khung giờ với lịch khác trên cùng bàn |
+  | **Kết quả** | `ValidationResult` | Hợp lệ hoặc kèm thông báo lỗi |
+  | **Client / Assembler** | `ReservationValidationChainFactory`, `ReservationHandler` | Lắp chuỗi theo thứ tự và gọi `validate` |
 
-- Package: `com.dalatcafe.patterns.chain`, Java SE 17.
-- `ReservationValidatorHandler`: `setNext(ReservationValidatorHandler)`, `validate(Reservation)` và `checkNext(Reservation)`; dừng ngay tại lỗi đầu tiên.
-- `ValidationResult` bất biến: `valid()`, `invalid(String)`, `isValid()`, `getErrorMessage()`; kết quả hợp lệ có errorMessage null.
-- `OperatingHoursValidator`: đổi Instant sang `Asia/Ho_Chi_Minh`, đọc giờ từ `SystemConfigManager`; mặc định chấp nhận thời điểm bắt đầu từ 07:00 đến 22:00 (bao gồm hai biên).
-- `CapacityGuestValidator(ITableDao)`: bàn phải tồn tại; số khách từ 1 đến giới hạn cấu hình (mặc định 20), không vượt số ghế.
-- `TableAvailabilityValidator(IReservationDao[, Duration])`: thời lượng mặc định 2 giờ, áp dụng chung cho mọi lịch. Khoảng `[start, end)` giao nhau trên cùng bàn bị từ chối; lịch nối tiếp được phép.
-- PENDING, CONFIRMED, SEATED chiếm lịch; CANCELLED không chiếm lịch. Khi chỉnh sửa, chỉ bỏ qua bản ghi có cùng ID khác null; không dùng Reservation.equals().
-- `ReservationValidationChainFactory.create(tableDao, reservationDao[, duration])` lắp chuỗi giờ hoạt động → sức chứa → lịch bàn.
-- Lỗi dữ liệu trả thông báo tiếng Việt. Validator chỉ đọc DAO; lỗi truy cập DAO được truyền lên. Không cấm lịch tương lai dựa trên trạng thái bàn hiện tại.
-- Không thêm điều kiện đặt trước 60 phút hoặc bắt buộc kết thúc trước giờ đóng cửa. Giữ tương thích Reservation.setGuests() tự chuyển số dưới 1 thành 1.
-- Kiểm tra và lưu lịch chưa nguyên tử; lớp tích hợp lưu đặt bàn phải xử lý yêu cầu đồng thời. Kiểm thử: `ChainTest`.
+- **Sơ đồ lớp (Class Diagram):**
+```mermaid
+classDiagram
+    class ReservationValidatorHandler {
+        <<abstract>>
+        #ReservationValidatorHandler nextHandler
+        +setNext(ReservationValidatorHandler next)
+        +validate(Reservation reservation)* ValidationResult
+        #checkNext(Reservation reservation) ValidationResult
+    }
+
+    class OperatingHoursValidator {
+        <<final>>
+        +validate(Reservation reservation) ValidationResult
+    }
+
+    class CapacityGuestValidator {
+        <<final>>
+        -ITableDao tableDao
+        +CapacityGuestValidator(ITableDao tableDao)
+        +validate(Reservation reservation) ValidationResult
+    }
+
+    class TableAvailabilityValidator {
+        <<final>>
+        +Duration DEFAULT_DURATION$
+        -IReservationDao reservationDao
+        -Duration duration
+        +TableAvailabilityValidator(IReservationDao reservationDao)
+        +TableAvailabilityValidator(IReservationDao reservationDao, Duration duration)
+        +validate(Reservation reservation) ValidationResult
+    }
+
+    class ValidationResult {
+        <<final>>
+        -boolean valid
+        -String errorMessage
+        +valid()$ ValidationResult
+        +invalid(String message)$ ValidationResult
+        +isValid() boolean
+        +getErrorMessage() String
+    }
+
+    class ReservationValidationChainFactory {
+        <<final>>
+        +create(ITableDao tableDao, IReservationDao reservationDao)$ ReservationValidatorHandler
+        +create(ITableDao tableDao, IReservationDao reservationDao, Duration duration)$ ReservationValidatorHandler
+    }
+
+    ReservationValidatorHandler <|-- OperatingHoursValidator
+    ReservationValidatorHandler <|-- CapacityGuestValidator
+    ReservationValidatorHandler <|-- TableAvailabilityValidator
+    ReservationValidatorHandler o--> ReservationValidatorHandler : nextHandler
+    ReservationValidatorHandler ..> ValidationResult : returns
+    ReservationValidationChainFactory ..> ReservationValidatorHandler : assembles
+    OperatingHoursValidator ..> SystemConfigManager : reads hours
+```
+
+- **Mã nguồn thực tế** (`backend-java/src/main/java/com/dalatcafe/patterns/chain/`):
+```java
+public abstract class ReservationValidatorHandler {
+    protected ReservationValidatorHandler nextHandler;
+
+    public void setNext(ReservationValidatorHandler next) {
+        // Reject cycles when assembling or extending a chain.
+        for (ReservationValidatorHandler handler = next; handler != null; handler = handler.nextHandler) {
+            if (handler == this) {
+                throw new IllegalArgumentException("Validation chain must not contain a cycle");
+            }
+        }
+        nextHandler = next;
+    }
+
+    public abstract ValidationResult validate(Reservation reservation);
+
+    protected ValidationResult checkNext(Reservation reservation) {
+        return nextHandler == null ? ValidationResult.valid() : nextHandler.validate(reservation);
+    }
+}
+
+public final class ReservationValidationChainFactory {
+    public static ReservationValidatorHandler create(
+            ITableDao tableDao, IReservationDao reservationDao, Duration duration) {
+        ReservationValidatorHandler hours = new OperatingHoursValidator();
+        ReservationValidatorHandler capacity = new CapacityGuestValidator(tableDao);
+        hours.setNext(capacity);
+        capacity.setNext(new TableAvailabilityValidator(reservationDao, duration));
+        return hours;
+    }
+}
+```
+- **Kiểm thử:** `ChainTest`.
 
 ---
 ### 3.9. Observer Pattern - Tự động Tích điểm Loyalty & Đồng bộ Trạng thái Bàn (`OrderEventSubject`)
