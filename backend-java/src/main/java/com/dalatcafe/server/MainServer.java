@@ -38,6 +38,7 @@ public class MainServer {
         register("/api/customers", new CustomerHandler(daos.getCustomerDao()));
         register("/api/analytics", new AnalyticsHandler(daos.getOrderDao(), daos.getMenuDao(), daos.getTableDao()));
         register("/api/vouchers", new VoucherHandler());
+        register("/api/config", new ConfigHandler());
         register("/api/tables", new TableHandler(daos.getTableDao()));
         register("/api/reservations", new ReservationHandler(daos.getReservationDao(), daos.getTableDao(), daos.getOrderDao()));
         register("/api/checkout", new CheckoutHandler(facade, daos.getCustomerDao(), databaseHealthy));

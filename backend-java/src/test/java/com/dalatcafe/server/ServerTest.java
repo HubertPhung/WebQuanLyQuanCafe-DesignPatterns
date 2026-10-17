@@ -9,6 +9,7 @@ import com.dalatcafe.model.PaymentStatus;
 import com.dalatcafe.model.ReservationStatus;
 import com.dalatcafe.model.Table;
 import com.dalatcafe.model.TableStatus;
+import com.dalatcafe.patterns.singleton.SystemConfigManager;
 import com.dalatcafe.util.Json;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,6 +52,8 @@ class ServerTest {
     @AfterEach
     void tearDown() {
         server.stop();
+        // The config endpoint changes the Singleton; later tests expect the defaults.
+        SystemConfigManager.getInstance().resetToDefaults();
     }
 
     private HttpResponse<String> call(String method, String path, String role, String body) throws Exception {
@@ -471,6 +474,33 @@ class ServerTest {
         assertEquals(400, call("POST", "/api/orders/sync", "STAFF", "{\"orders\":[]}").statusCode());
         dbUp.set(false);
         assertEquals(503, call("POST", "/api/orders/sync", "STAFF", batch).statusCode());
+    }
+
+    @Test
+    void adminChangesStoreSettingsUsedByTheReservationChain() throws Exception {
+        assertEquals(200, call("GET", "/api/config", "STAFF", null).statusCode());
+        assertEquals(401, call("GET", "/api/config", null, null).statusCode());
+        String change = "{\"maxReservationGuests\":4,\"openingTime\":\"08:00\",\"storeName\":\"Da Lat Cafe 2\"}";
+        assertEquals(403, call("PUT", "/api/config", "MANAGER", change).statusCode());
+
+        HttpResponse<String> updated = call("PUT", "/api/config", "ADMIN", change);
+        assertEquals(200, updated.statusCode(), updated.body());
+        assertEquals("08:00", data(updated).get("openingTime"));
+        assertEquals("22:00", data(updated).get("closingTime"));
+        assertEquals("Da Lat Cafe 2", SystemConfigManager.getInstance().getStoreName());
+
+        // The Chain of Responsibility reads the Singleton: 5 guests now exceed the limit.
+        String when = LocalDate.now().plusDays(2).atTime(LocalTime.of(15, 0)).toInstant(ZoneOffset.ofHours(7)).toString();
+        HttpResponse<String> tooMany = call("POST", "/api/reservations", null, "{\"customer\":\"Lan\",\"contact\":\"0912000111\","
+                + "\"dateTime\":\"" + when + "\",\"tableId\":5,\"guests\":5}");
+        assertEquals(400, tooMany.statusCode());
+        assertEquals("CHAIN_VALIDATION_FAILED", json(tooMany).get("code"));
+
+        assertEquals(400, call("PATCH", "/api/config", "ADMIN", "{\"openingTime\":\"23:00\"}").statusCode());
+        assertEquals(400, call("PATCH", "/api/config", "ADMIN", "{\"closingTime\":\"10pm\"}").statusCode());
+        assertEquals(400, call("PATCH", "/api/config", "ADMIN", "{\"maxReservationGuests\":0}").statusCode());
+        assertEquals(400, call("PATCH", "/api/config", "ADMIN", "{\"storeName\":\"\",\"maxReservationGuests\":9}").statusCode());
+        assertEquals(4, SystemConfigManager.getInstance().getMaxReservationGuests(), "a rejected update changes nothing");
     }
 
     @Test
