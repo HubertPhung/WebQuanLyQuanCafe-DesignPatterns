@@ -1,5 +1,6 @@
-package com.dalatcafe.patterns.singleton;
+package com.dalatcafe.patterns;
 
+import com.dalatcafe.patterns.singleton.SystemConfigManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -19,7 +20,7 @@ import java.util.concurrent.Executors;
 import static org.junit.jupiter.api.Assertions.*;
 
 @DisplayName("Đà Lạt Cafe - Singleton Pattern (SystemConfigManager) Unit Tests")
-class SystemConfigManagerTest {
+class SingletonTest {
 
     private SystemConfigManager config;
 
