@@ -1,4 +1,5 @@
 import type { FloorTable, MenuItem, Order, OrderStatus, TableStatus, Variation, OrderItem, PaymentMethod, OrderType } from './schema'
+import { customizationSurcharge, describeCustomizations, type PosCustomization } from '../admin/customizations'
 
 const TAX_RATE = 0.08
 
@@ -564,6 +565,9 @@ function createInitialOrders(): Order[] {
   return orders
 }
 
+export const reservationStatuses = ['Chờ xác nhận', 'Đã đặt', 'Hoàn thành', 'Đã hủy'] as const
+export type ReservationStatusLabel = (typeof reservationStatuses)[number]
+
 export type MockReservation = {
   code: string
   customer: string
@@ -572,15 +576,72 @@ export type MockReservation = {
   note: string | null
   dateTime: Date
   guests: number
-  tableId: number
-  status: 'Chờ xác nhận'
+  tableId: number | null
+  tableName: string
+  status: ReservationStatusLabel
+  preOrders: { name: string; qty: number; price: number }[]
+}
+
+function at(daysFromToday: number, hour: number, minute = 0) {
+  // startOfDay counts days back into the past, so negate to move forward.
+  const date = startOfDay(-daysFromToday)
+  date.setHours(hour, minute, 0, 0)
+  return date
+}
+
+function createInitialReservations(): MockReservation[] {
+  return [
+    {
+      code: 'RES-001', customer: 'Nguyễn Hoàng Nam', contact: '0912 345 678', email: 'nam.nguyen@gmail.com',
+      note: 'Yêu cầu bàn gần cửa sổ, chuẩn bị trước cà phê.', dateTime: at(0, 15), guests: 2, tableId: 4, tableName: 'Table 4',
+      status: 'Đã đặt',
+      preOrders: [
+        { name: 'Cà phê Latte Vani Mịn', qty: 2, price: 55000 },
+        { name: 'Bánh Croissant Bơ Pháp', qty: 2, price: 45000 },
+      ],
+    },
+    {
+      code: 'RES-002', customer: 'Trần Thu Hà', contact: '0987 654 321', email: 'ha.tran@outlook.com',
+      note: 'Kỷ niệm ngày cưới, chuẩn bị nến nhỏ nếu có.', dateTime: at(0, 18), guests: 2, tableId: 11, tableName: 'Table 11',
+      status: 'Đã đặt', preOrders: [{ name: 'Cold Brew Cam Vàng', qty: 2, price: 55000 }],
+    },
+    {
+      code: 'RES-003', customer: 'Lê Minh Khôi', contact: '0903 111 222', email: 'khoi.le@corp.vn',
+      note: 'Họp đối tác, cần không gian thật yên tĩnh.', dateTime: at(1, 9), guests: 6, tableId: 5, tableName: 'Table 5',
+      status: 'Chờ xác nhận',
+      preOrders: [
+        { name: 'Cà phê Muối Đặc Biệt', qty: 4, price: 45000 },
+        { name: 'Bạc Xỉu Sữa Tươi', qty: 2, price: 45000 },
+      ],
+    },
+    {
+      code: 'RES-004', customer: 'Phạm Thanh Thảo', contact: '0934 888 999', email: 'thao.pham@gmail.com',
+      note: 'Bàn sinh nhật bạn bè.', dateTime: at(1, 14), guests: 3, tableId: 3, tableName: 'Table 3',
+      status: 'Chờ xác nhận', preOrders: [],
+    },
+    {
+      code: 'RES-005', customer: 'Hoàng Văn Dũng', contact: '0977 444 555', email: 'dung.hoang@gmail.com',
+      note: 'Khách thanh toán thẻ Visa.', dateTime: at(-1, 10), guests: 4, tableId: 7, tableName: 'Table 7',
+      status: 'Hoàn thành', preOrders: [],
+    },
+    {
+      code: 'RES-006', customer: 'Đặng Ngọc Mai', contact: '0918 222 333', email: 'mai.dang@gmail.com',
+      note: 'Khách quen chi nhánh.', dateTime: at(-2, 16, 30), guests: 2, tableId: 1, tableName: 'Table 1',
+      status: 'Hoàn thành', preOrders: [],
+    },
+    {
+      code: 'RES-007', customer: 'Bùi Anh Tuấn', contact: '0922 666 777', email: 'tuan.bui@gmail.com',
+      note: 'Khách báo bận đột xuất.', dateTime: at(-3, 19), guests: 4, tableId: 8, tableName: 'Table 8',
+      status: 'Đã hủy', preOrders: [],
+    },
+  ]
 }
 
 type StoreState = {
   tables: FloorTable[]
   menuItems: MenuItem[]
   orders: Order[]
-  reservations?: MockReservation[]
+  reservations: MockReservation[]
 }
 
 const globalForMock = globalThis as unknown as { __daLatCafeStore?: StoreState }
@@ -591,8 +652,11 @@ function getStore(): StoreState {
       tables: createInitialTables(),
       menuItems: createInitialMenuItems(),
       orders: createInitialOrders(),
+      reservations: createInitialReservations(),
     }
   }
+  // Stores created by an older build in the same dev process lack the reservation list.
+  globalForMock.__daLatCafeStore.reservations ??= createInitialReservations()
   return globalForMock.__daLatCafeStore
 }
 
@@ -661,7 +725,7 @@ export function setMockItemInStock(itemId: number, inStock: boolean): { ok: bool
 }
 
 export type NewMockOrderInput = {
-  lines: { menuItemId: number; qty: number; variation?: string }[]
+  lines: { menuItemId: number; qty: number; variation?: string; customizations?: PosCustomization[] }[]
   customer: string
   tableId: number | null
   orderType: OrderType
@@ -682,11 +746,12 @@ export function createMockOrder(input: NewMockOrderInput): { ok: boolean; messag
       return { ok: false, error: 'One of the items is no longer available.' }
     }
     const variation = line.variation ? item.variations.find((v: Variation) => v.name === line.variation) : undefined
+    const customizations = line.customizations ?? []
     items.push({
       name: item.name,
       qty: line.qty,
-      price: item.sellPrice + (variation?.price ?? 0),
-      variation: variation?.name,
+      price: item.sellPrice + (variation?.price ?? 0) + customizationSurcharge(customizations),
+      variation: [variation?.name, describeCustomizations(customizations)].filter(Boolean).join(' · ') || undefined,
     })
     // Deduct stock
     item.stockQty = Math.max(0, item.stockQty - line.qty)
@@ -726,7 +791,9 @@ export function createMockOrder(input: NewMockOrderInput): { ok: boolean; messag
   return { ok: true, message: `Order sent to the bar for ${newOrder.customer}.` }
 }
 
-export type NewMockReservationInput = Omit<MockReservation, 'code' | 'status'>
+export type NewMockReservationInput = Omit<MockReservation, 'code' | 'status' | 'tableName' | 'preOrders' | 'tableId'> & {
+  tableId: number
+}
 
 // Local stand-in for POST /api/reservations while the Java backend is offline.
 // Only the checks that need no backend state run here; the full Chain of Responsibility lives in Java.
@@ -736,15 +803,71 @@ export function createMockReservation(input: NewMockReservationInput): { ok: boo
   if (!table) return { ok: false, error: 'Table not found.' }
   if (input.guests > table.seats) return { ok: false, error: `${table.name} seats at most ${table.seats} guests.` }
 
-  const reservations = (store.reservations ??= [])
+  const localCount = store.reservations.filter((r) => r.code.startsWith('RES-L')).length
   // The L marks a local booking so it is never mistaken for a backend-issued RES-0001.
-  const code = `RES-L${String(reservations.length + 1).padStart(4, '0')}`
-  reservations.push({ ...input, code, status: 'Chờ xác nhận' })
+  const code = `RES-L${String(localCount + 1).padStart(4, '0')}`
+  store.reservations.push({ ...input, code, tableName: table.name, status: 'Chờ xác nhận', preOrders: [] })
   return { ok: true, code }
 }
 
 export function getMockReservations(): MockReservation[] {
-  return [...(getStore().reservations ?? [])]
+  return [...getStore().reservations].sort((a, b) => b.dateTime.getTime() - a.dateTime.getTime())
+}
+
+export type ExternalOrderInput = {
+  orderCode: string
+  customer: string
+  tableId: number | null
+  items: OrderItem[]
+  guests?: number
+}
+
+// Records an order whose lines were priced elsewhere (Java Adapter, or the local Adapter below),
+// so the KDS and floor plan show it. Unpaid, dine-in, pending: what a seated reservation becomes.
+export function createMockOrderFromItems(input: ExternalOrderInput): { ok: boolean; message?: string; error?: string } {
+  const store = getStore()
+  const subtotal = Math.round(input.items.reduce((s, it) => s + it.price * it.qty, 0) * 100) / 100
+  const nextId = store.orders.reduce((max, o) => Math.max(max, o.id), 0) + 1
+  store.orders.unshift({
+    id: nextId,
+    orderCode: input.orderCode,
+    customer: input.customer.trim().slice(0, 60) || 'Walk-in',
+    tableId: input.tableId,
+    orderType: 'dine-in',
+    items: input.items,
+    subtotal,
+    total: Math.round(subtotal * (1 + TAX_RATE) * 100) / 100,
+    paymentMethod: 'cash',
+    paymentStatus: 'unpaid',
+    status: 'pending',
+    createdAt: new Date(),
+    completedAt: null,
+  })
+  if (input.tableId) updateMockTableStatus(input.tableId, 'occupied', input.guests ?? 1)
+  return { ok: true, message: `Order ${input.orderCode} opened for ${input.customer}.` }
+}
+
+// Frontend mirror of ReservationToOrderAdapter.toPosOrder(): the reservation code becomes the
+// order code and the pre-ordered dishes are copied, so the booking itself is never modified
+// except for its status.
+export function transferMockReservation(code: string): { ok: boolean; orderCode?: string; error?: string } {
+  const store = getStore()
+  const reservation = store.reservations.find((r) => r.code === code)
+  if (!reservation) return { ok: false, error: 'Reservation not found.' }
+  if (reservation.status === 'Hoàn thành') return { ok: false, error: 'This reservation has already been seated.' }
+  if (reservation.status === 'Đã hủy') return { ok: false, error: 'A cancelled reservation cannot be seated.' }
+  if (store.orders.some((o) => o.orderCode === reservation.code)) return { ok: false, error: 'An order already exists for this reservation.' }
+
+  const res = createMockOrderFromItems({
+    orderCode: reservation.code,
+    customer: reservation.customer || reservation.contact,
+    tableId: reservation.tableId,
+    items: reservation.preOrders.map((item) => ({ name: item.name, qty: item.qty, price: item.price })),
+    guests: reservation.guests,
+  })
+  if (!res.ok) return { ok: false, error: res.error }
+  reservation.status = 'Hoàn thành'
+  return { ok: true, orderCode: reservation.code }
 }
 
 export type NewMockItemInput = {

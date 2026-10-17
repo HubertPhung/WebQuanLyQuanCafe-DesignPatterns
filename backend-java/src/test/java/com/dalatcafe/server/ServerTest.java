@@ -3,6 +3,9 @@ package com.dalatcafe.server;
 import com.dalatcafe.dao.DaoFactory;
 import com.dalatcafe.dao.InMemoryDatabase;
 import com.dalatcafe.model.MenuItem;
+import com.dalatcafe.model.ReservationStatus;
+import com.dalatcafe.model.Table;
+import com.dalatcafe.model.TableStatus;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -125,6 +128,54 @@ class ServerTest {
         assertEquals(201, response.statusCode(), response.body());
         assertEquals(Boolean.TRUE, json(response).get("ok"));
         assertEquals(200, call("GET", "/api/reservations", "STAFF", null).statusCode());
+    }
+
+    private String createReservation(int tableId, int guests) throws Exception {
+        String when = LocalDate.now().plusDays(2).atTime(LocalTime.of(10, 0)).toInstant(ZoneOffset.ofHours(7)).toString();
+        String body = "{\"customer\":\"Binh\",\"contact\":\"0911222333\",\"dateTime\":\"" + when + "\",\"tableId\":" + tableId
+                + ",\"guests\":" + guests + ",\"preOrders\":[{\"name\":\"Latte\",\"qty\":2,\"price\":55000}]}";
+        HttpResponse<String> created = call("POST", "/api/reservations", null, body);
+        assertEquals(201, created.statusCode(), created.body());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> data = (Map<String, Object>) json(created).get("data");
+        return (String) data.get("id");
+    }
+
+    @Test
+    void transferTurnsReservationIntoPosOrderThroughAdapter() throws Exception {
+        String code = createReservation(9, 3);
+
+        HttpResponse<String> response = call("POST", "/api/reservations/" + code + "/transfer-pos", "STAFF", null);
+        assertEquals(200, response.statusCode(), response.body());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> order = (Map<String, Object>) json(response).get("data");
+        assertEquals(code, order.get("orderCode"));
+        assertEquals("pending", order.get("status"));
+        assertEquals("unpaid", order.get("paymentStatus"));
+        assertEquals(110_000.0, ((Number) order.get("subtotal")).doubleValue());
+        assertEquals(1, ((List<?>) order.get("items")).size());
+
+        DaoFactory daos = DaoFactory.getInstance();
+        assertTrue(daos.getOrderDao().findByOrderCode(code).isPresent());
+        assertEquals(ReservationStatus.SEATED, daos.getReservationDao().findByReservationCode(code).orElseThrow().getStatus());
+        Table table = daos.getTableDao().findById(9).orElseThrow();
+        assertEquals(TableStatus.OCCUPIED, table.getStatus());
+        assertEquals(3, table.getGuestCount());
+    }
+
+    @Test
+    void transferRejectsRepeatsUnknownCodesAndMissingRole() throws Exception {
+        String code = createReservation(10, 2);
+        String path = "/api/reservations/" + code + "/transfer-pos";
+        assertEquals(401, call("POST", path, null, null).statusCode());
+        assertEquals(405, call("GET", path, "STAFF", null).statusCode());
+        assertEquals(200, call("POST", path, "STAFF", null).statusCode());
+
+        HttpResponse<String> again = call("POST", path, "STAFF", null);
+        assertEquals(409, again.statusCode());
+        assertEquals("RESOURCE_CONFLICT", json(again).get("code"));
+        assertEquals(404, call("POST", "/api/reservations/RES-NOPE/transfer-pos", "STAFF", null).statusCode());
+        assertEquals(404, call("POST", "/api/reservations/" + code + "/unknown", "STAFF", null).statusCode());
     }
 
     @Test

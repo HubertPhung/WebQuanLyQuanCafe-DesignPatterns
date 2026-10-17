@@ -20,9 +20,16 @@ import {
 import { assertAdminAccess } from '@/lib/admin/access'
 import { TAX_RATE } from '@/lib/admin/format'
 import {
+  customizationSurcharge,
+  describeCustomizations,
+  isPosCustomization,
+  normalizeCustomizations,
+} from '@/lib/admin/customizations'
+import {
   checkout,
   createReservation as createJavaReservation,
   fetchMenu,
+  transferReservation as transferJavaReservation,
   updateTable,
   type CheckoutPayload,
 } from '@/lib/api-client'
@@ -35,6 +42,9 @@ import {
   createMockMenuItem,
   getMockMenuItems,
   createMockReservation,
+  createMockOrderFromItems,
+  transferMockReservation,
+  type ExternalOrderInput,
   type NewMockOrderInput,
 } from '@/lib/db/mock-store'
 
@@ -94,7 +104,7 @@ export async function markOrderPaid(orderId: number): Promise<ActionResult> {
 }
 
 type NewOrderInput = {
-  lines: { menuItemId: number; qty: number; variation?: string }[]
+  lines: { menuItemId: number; qty: number; variation?: string; customizations?: string[] }[]
   customer: string
   tableId: number | null
   orderType: string
@@ -126,7 +136,8 @@ function normalizeName(name: string) {
 
 // The two stores number their menus independently, so lines are matched by name.
 // A line the backend cannot price (unknown item, paid variation) keeps the order local.
-async function toJavaLines(lines: NewOrderInput['lines'], localMenu: LocalMenuItem[]) {
+// Size L and toppings are sent as Java customizations, priced there by the Decorators.
+async function toJavaLines(lines: LocalOrderInput['lines'], localMenu: LocalMenuItem[]) {
   const javaMenu = await fetchMenu()
   if (!javaMenu.ok) return null
   const javaIdByName = new Map(javaMenu.data.map((item) => [normalizeName(item.name), item.id]))
@@ -140,7 +151,7 @@ async function toJavaLines(lines: NewOrderInput['lines'], localMenu: LocalMenuIt
     if (variation && variation.price > 0) return null
     const javaId = javaIdByName.get(normalizeName(local.name))
     if (javaId === undefined) return null
-    javaLines.push({ menuItemId: javaId, qty: line.qty })
+    javaLines.push({ menuItemId: javaId, qty: line.qty, customizations: line.customizations ?? [] })
   }
   return javaLines
 }
@@ -179,7 +190,13 @@ async function recordOrderLocally(input: LocalOrderInput, quantities: Map<number
       if (!item || item.kind !== 'menu' || !item.inStock) throw new Error('One of the items is no longer available.')
       const variation = line.variation ? item.variations.find((option: Variation) => option.name === line.variation) : undefined
       if (line.variation && !variation) throw new Error(`Invalid option for ${item.name}.`)
-      return { name: item.name, qty: line.qty, price: item.sellPrice + (variation?.price ?? 0), variation: variation?.name }
+      const customizations = line.customizations ?? []
+      return {
+        name: item.name,
+        qty: line.qty,
+        price: item.sellPrice + (variation?.price ?? 0) + customizationSurcharge(customizations),
+        variation: [variation?.name, describeCustomizations(customizations)].filter(Boolean).join(' · ') || undefined,
+      }
     })
 
     const subtotal = Math.round(items.reduce((sum, item) => sum + item.price * item.qty, 0) * 100) / 100
@@ -231,16 +248,22 @@ export async function createOrder(input: NewOrderInput): Promise<ActionResult> {
     if (input.lines.length === 0 || input.lines.length > 40) throw new Error('Add between 1 and 40 lines.')
 
     const quantities = new Map<number, number>()
+    const lines: LocalOrderInput['lines'] = []
     for (const line of input.lines) {
       if (!Number.isInteger(line.menuItemId) || !Number.isInteger(line.qty) || line.qty < 1 || line.qty > 50) {
         throw new Error('Each line needs a whole quantity between 1 and 50.')
       }
+      const requested = line.customizations ?? []
+      if (!Array.isArray(requested) || !requested.every(isPosCustomization) || new Set(requested).size !== requested.length) {
+        throw new Error('Choose valid size and topping options.')
+      }
       quantities.set(line.menuItemId, (quantities.get(line.menuItemId) ?? 0) + line.qty)
+      lines.push({ menuItemId: line.menuItemId, qty: line.qty, variation: line.variation, customizations: normalizeCustomizations(requested) })
     }
     if ([...quantities.values()].some((qty) => qty > 50)) throw new Error('Maximum 50 of any item per order.')
 
     const order: LocalOrderInput = {
-      lines: input.lines,
+      lines,
       customer: input.customer,
       tableId: orderType === 'dine-in' && input.tableId && Number.isInteger(input.tableId) ? input.tableId : null,
       orderType,
@@ -250,7 +273,7 @@ export async function createOrder(input: NewOrderInput): Promise<ActionResult> {
 
     // Check availability locally first so the backend never charges for an order we cannot record.
     const localMenu = await loadLocalMenu([...quantities.keys()])
-    const unavailable = input.lines.some((line) => {
+    const unavailable = lines.some((line) => {
       const item = localMenu.find((candidate) => candidate.id === line.menuItemId)
       return !item || item.kind !== 'menu' || !item.inStock
     })
@@ -347,6 +370,79 @@ export async function createReservation(input: NewReservationInput): Promise<Act
     const res = createMockReservation({ ...booking, email: booking.email ?? null, note: booking.note ?? null, dateTime })
     refresh()
     return res.ok ? { ok: true, message: `Reservation ${res.code} saved locally.` } : { ok: false, error: res.error ?? 'Failed' }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+// Mirrors an order opened elsewhere (Java Adapter) into the frontend store so KDS and the floor plan show it.
+async function recordExternalOrder(input: ExternalOrderInput): Promise<ActionResult> {
+  if (!isDbConfigured || !db) {
+    const res = createMockOrderFromItems(input)
+    return res.ok ? { ok: true, message: res.message } : { ok: false, error: res.error ?? 'Failed' }
+  }
+  try {
+    const subtotal = Math.round(input.items.reduce((sum, item) => sum + item.price * item.qty, 0) * 100) / 100
+    await db.transaction(async (tx) => {
+      await tx.insert(adminOrders).values({
+        orderCode: input.orderCode,
+        customer: input.customer.trim().slice(0, 60) || 'Walk-in',
+        tableId: input.tableId,
+        orderType: 'dine-in',
+        items: input.items,
+        subtotal,
+        total: Math.round(subtotal * (1 + TAX_RATE) * 100) / 100,
+        paymentMethod: 'cash',
+        paymentStatus: 'unpaid',
+        status: 'pending',
+      })
+      if (input.tableId) {
+        await tx
+          .update(adminTables)
+          .set({
+            status: 'occupied',
+            guestCount: Math.max(input.guests ?? 1, 1),
+            occupiedSince: sql`coalesce(${adminTables.occupiedSince}, now())`,
+            updatedAt: new Date(),
+          })
+          .where(eq(adminTables.id, input.tableId))
+      }
+    })
+    return { ok: true, message: `Order ${input.orderCode} opened for ${input.customer}.` }
+  } catch {
+    const res = createMockOrderFromItems(input)
+    return res.ok ? { ok: true, message: res.message } : { ok: false, error: res.error ?? 'Failed' }
+  }
+}
+
+// "Chuyển sang POS": a backend reservation goes through POST /api/reservations/{code}/transfer-pos
+// (ReservationToOrderAdapter in Java); a reservation that only exists locally uses the frontend mirror.
+export async function transferReservationToPos(code: string, source: 'java' | 'local', guests = 1): Promise<ActionResult> {
+  try {
+    assertAdminAccess()
+    if (typeof code !== 'string' || !/^[A-Za-z0-9-]{1,40}$/.test(code)) throw new Error('Invalid reservation code.')
+
+    if (source === 'local') {
+      const res = transferMockReservation(code)
+      refresh()
+      return res.ok ? { ok: true, message: `Order ${res.orderCode} opened at the POS.` } : { ok: false, error: res.error ?? 'Failed' }
+    }
+
+    const remote = await transferJavaReservation(code)
+    if (!remote.ok) {
+      // The booking lives in Java, so there is nothing local to fall back to.
+      return { ok: false, error: remote.unreachable ? 'Java backend is unreachable; try again shortly.' : remote.error }
+    }
+    const order = remote.data
+    const res = await recordExternalOrder({
+      orderCode: order.orderCode,
+      customer: order.customer,
+      tableId: order.tableId,
+      items: order.items.map((item) => ({ name: item.name, qty: item.qty, price: item.price })),
+      guests: Math.min(Math.max(Math.trunc(guests), 1), 20),
+    })
+    refresh()
+    return res.ok ? { ok: true, message: `Order ${order.orderCode} opened by the Java backend.` } : res
   } catch (error) {
     return fail(error)
   }

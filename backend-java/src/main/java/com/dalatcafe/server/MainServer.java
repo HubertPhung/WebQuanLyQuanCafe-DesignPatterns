@@ -34,7 +34,7 @@ public class MainServer {
         server = HttpServer.create(new InetSocketAddress(port), 0);
         register("/api/menu", new MenuHandler(daos.getMenuDao()));
         register("/api/tables", new TableHandler(daos.getTableDao()));
-        register("/api/reservations", new ReservationHandler(daos.getReservationDao(), daos.getTableDao()));
+        register("/api/reservations", new ReservationHandler(daos.getReservationDao(), daos.getTableDao(), daos.getOrderDao()));
         register("/api/checkout", new CheckoutHandler(facade, daos.getCustomerDao(), databaseHealthy));
         server.setExecutor(Executors.newFixedThreadPool(8));
     }

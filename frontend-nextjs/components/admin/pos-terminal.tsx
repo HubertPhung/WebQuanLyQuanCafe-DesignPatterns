@@ -19,6 +19,12 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { createOrder } from '@/app/admin/actions'
 import { TAX_RATE, formatCurrency, paymentLabels, tableStatusLabels } from '@/lib/admin/format'
+import {
+  customizationSurcharge,
+  normalizeCustomizations,
+  posCustomizations,
+  type PosCustomization,
+} from '@/lib/admin/customizations'
 import type { FloorTable, MenuItem, OrderType, PaymentMethod } from '@/lib/db/schema'
 import { cn } from '@/lib/utils'
 
@@ -27,9 +33,18 @@ type Line = {
   menuItemId: number
   name: string
   variation?: string
-  unitPrice: number
+  basePrice: number
+  customizations: PosCustomization[]
   qty: number
   note?: string
+}
+
+function lineKey(menuItemId: number, customizations: PosCustomization[]) {
+  return `${menuItemId}:${normalizeCustomizations(customizations).join(',')}`
+}
+
+function unitPrice(line: Line) {
+  return line.basePrice + customizationSurcharge(line.customizations)
 }
 
 const keypadKeys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '000', '0', 'del']
@@ -39,11 +54,10 @@ export function PosTerminal({ menu, tables }: { menu: MenuItem[]; tables: FloorT
   const categories = ['Tất cả', ...new Set(sellable.map((item) => item.category))]
   const [category, setCategory] = useState('Tất cả')
   const [lines, setLines] = useState<Line[]>([
-    { key: '1:std', menuItemId: 1, name: 'Cà phê Muối Đặc Biệt', unitPrice: 45000, qty: 1, note: 'Ít đá, béo nhiều' },
+    { key: lineKey(1, []), menuItemId: 1, name: 'Cà phê Muối Đặc Biệt', basePrice: 45000, customizations: [], qty: 1, note: 'Ít đá, béo nhiều' },
   ])
   const [customerPhone, setCustomerPhone] = useState('0908 123 456')
   const [customerName, setCustomerName] = useState('Phùng Hoài Bo (Hạng Vàng - 350 Điểm)')
-  const [usePoints, setUsePoints] = useState(false)
   const [orderType, setOrderType] = useState<OrderType>('dine-in')
   const [tableId, setTableId] = useState<string>('4')
   const [payment, setPayment] = useState<PaymentMethod>('cash')
@@ -51,18 +65,36 @@ export function PosTerminal({ menu, tables }: { menu: MenuItem[]; tables: FloorT
   const [pending, startTransition] = useTransition()
 
   const visible = category === 'Tất cả' ? sellable : sellable.filter((item) => item.category === category)
-  const subtotal = useMemo(() => lines.reduce((sum, line) => sum + line.unitPrice * line.qty, 0), [lines])
-  const pointsDiscount = usePoints ? 20000 : 0
+  const subtotal = useMemo(() => lines.reduce((sum, line) => sum + unitPrice(line) * line.qty, 0), [lines])
   const tax = Math.round(subtotal * TAX_RATE)
-  const total = Math.max(0, subtotal + tax - pointsDiscount)
+  const total = subtotal + tax
   const change = Number(tendered || 0) - total
 
   function addLine(item: MenuItem) {
-    const key = `${item.id}:std`
+    const key = lineKey(item.id, [])
     setLines((current) => {
       const existing = current.find((line) => line.key === key)
       if (existing) return current.map((line) => (line.key === key ? { ...line, qty: line.qty + 1 } : line))
-      return [...current, { key, menuItemId: item.id, name: item.name, unitPrice: item.sellPrice, qty: 1 }]
+      return [...current, { key, menuItemId: item.id, name: item.name, basePrice: item.sellPrice, customizations: [], qty: 1 }]
+    })
+  }
+
+  function toggleCustomization(key: string, customization: PosCustomization) {
+    setLines((current) => {
+      const line = current.find((candidate) => candidate.key === key)
+      if (!line) return current
+      const customizations = normalizeCustomizations(
+        line.customizations.includes(customization)
+          ? line.customizations.filter((id) => id !== customization)
+          : [...line.customizations, customization]
+      )
+      const nextKey = lineKey(line.menuItemId, customizations)
+      const target = current.find((candidate) => candidate.key === nextKey)
+      if (!target) return current.map((candidate) => (candidate.key === key ? { ...candidate, key: nextKey, customizations } : candidate))
+      // The same drink with this exact set is already on the bill: merge the quantities.
+      return current
+        .filter((candidate) => candidate.key !== key)
+        .map((candidate) => (candidate.key === nextKey ? { ...candidate, qty: candidate.qty + line.qty } : candidate))
     })
   }
 
@@ -85,7 +117,7 @@ export function PosTerminal({ menu, tables }: { menu: MenuItem[]; tables: FloorT
   function submit(paid: boolean) {
     startTransition(async () => {
       const result = await createOrder({
-        lines: lines.map((l) => ({ menuItemId: l.menuItemId, qty: l.qty, variation: l.variation })),
+        lines: lines.map((l) => ({ menuItemId: l.menuItemId, qty: l.qty, variation: l.variation, customizations: l.customizations })),
         customer: customerName || 'Khách tại bàn',
         tableId: tableId ? Number(tableId) : null,
         orderType,
@@ -96,7 +128,9 @@ export function PosTerminal({ menu, tables }: { menu: MenuItem[]; tables: FloorT
         toast.error(result.error)
         return
       }
-      toast.success(paid ? 'Thanh toán & in hóa đơn thành công!' : 'Đã gửi đơn xuống quầy pha chế!')
+      toast.success(paid ? 'Thanh toán & in hóa đơn thành công!' : 'Đã gửi đơn xuống quầy pha chế!', {
+        description: result.message,
+      })
       setLines([])
       setTendered('')
     })
@@ -207,20 +241,19 @@ export function PosTerminal({ menu, tables }: { menu: MenuItem[]; tables: FloorT
 
         {/* Member loyalty banner if phone matches */}
         {customerPhone && (
-          <div className="flex items-center justify-between p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-xs">
-            <div className="flex items-center gap-2 text-amber-900">
+          <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-xs">
+            <div className="flex min-w-0 items-center gap-2 text-amber-900">
               <Sparkles className="size-4 text-amber-600 shrink-0" />
               <span className="font-semibold truncate">{customerName}</span>
             </div>
+            {/* Point redemption is not supported by the backend yet (POST /api/checkout rejects useLoyaltyPoints). */}
             <button
               type="button"
-              onClick={() => setUsePoints(!usePoints)}
-              className={cn(
-                'px-2.5 py-1 rounded-md text-[11px] font-bold transition-colors cursor-pointer',
-                usePoints ? 'bg-[#5A3E2B] text-white' : 'bg-stone-200 text-stone-800 hover:bg-stone-300'
-              )}
+              disabled
+              title="Chưa hỗ trợ đổi điểm khi thanh toán"
+              className="shrink-0 whitespace-nowrap px-2.5 py-1 rounded-md text-[11px] font-bold bg-stone-100 text-stone-500 cursor-not-allowed"
             >
-              {usePoints ? 'Đã trừ 20k' : 'Dùng 20 điểm'}
+              Chưa đổi điểm
             </button>
           </div>
         )}
@@ -238,7 +271,7 @@ export function PosTerminal({ menu, tables }: { menu: MenuItem[]; tables: FloorT
                   <div className="flex-1 min-w-0 pr-2">
                     <strong className="text-stone-900 font-bold block truncate">{line.name}</strong>
                     <span className="text-[#5A3E2B] font-mono tabular-nums font-bold">
-                      {(line.unitPrice * line.qty).toLocaleString('vi-VN')} đ
+                      {(unitPrice(line) * line.qty).toLocaleString('vi-VN')} đ
                     </span>
                   </div>
                   {/* Quantity controls */}
@@ -261,6 +294,29 @@ export function PosTerminal({ menu, tables }: { menu: MenuItem[]; tables: FloorT
                   </div>
                 </div>
 
+                {/* Size L & toppings: priced by the Java Decorators */}
+                <div className="flex flex-wrap gap-1.5" role="group" aria-label={`Tùy chọn cho ${line.name}`}>
+                  {posCustomizations.map((option) => {
+                    const active = line.customizations.includes(option.id)
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => toggleCustomization(line.key, option.id)}
+                        className={cn(
+                          'h-7 px-2 rounded-md text-[11px] font-semibold border transition-colors cursor-pointer',
+                          active
+                            ? 'bg-[#5A3E2B] text-white border-[#5A3E2B]'
+                            : 'bg-white text-stone-600 border-stone-200 hover:text-stone-900'
+                        )}
+                      >
+                        {option.label} +{(option.price / 1000).toLocaleString('vi-VN')}k
+                      </button>
+                    )
+                  })}
+                </div>
+
                 {/* Ghi chú từng món */}
                 <input
                   value={line.note || ''}
@@ -279,12 +335,6 @@ export function PosTerminal({ menu, tables }: { menu: MenuItem[]; tables: FloorT
             <span>Tạm tính</span>
             <span className="font-mono text-stone-800 tabular-nums">{subtotal.toLocaleString('vi-VN')} đ</span>
           </div>
-          {usePoints && (
-            <div className="flex justify-between text-emerald-800 font-semibold">
-              <span>Điểm thưởng hội viên</span>
-              <span className="font-mono tabular-nums">-20.000 đ</span>
-            </div>
-          )}
           <div className="flex justify-between text-stone-500">
             <span>Thuế VAT (8%)</span>
             <span className="font-mono text-stone-800 tabular-nums">{tax.toLocaleString('vi-VN')} đ</span>

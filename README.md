@@ -1,70 +1,47 @@
 # Đà Lạt Cafe — Hệ thống Quản lý và Vận hành Quán Cà phê Đa kênh
 ### Coffee Shop Management & Operations System (GoF Design Patterns Edition)
 
----
-
 ![Next.js 16](https://img.shields.io/badge/Frontend-Next.js%2016.4-black?style=for-the-badge&logo=next.js)
-![React 19](https://img.shields.io/badge/React-19.0-blue?style=for-the-badge&logo=react)
-![Tailwind CSS v4](https://img.shields.io/badge/Styling-Tailwind%20v4-38bdf8?style=for-the-badge&logo=tailwindcss)
-![Java SE 17+](https://img.shields.io/badge/Backend-Pure%20Java%20OOP-orange?style=for-the-badge&logo=openjdk)
+![React 19](https://img.shields.io/badge/React-19-blue?style=for-the-badge&logo=react)
+![Java SE 17](https://img.shields.io/badge/Backend-Pure%20Java%20SE%2017-orange?style=for-the-badge&logo=openjdk)
 ![Design Patterns](https://img.shields.io/badge/Architecture-9%20GoF%20Patterns-success?style=for-the-badge)
 [![CI/CD Pipeline](https://github.com/HubertPhung/WebQuanLyQuanCafe-DesignPatterns/actions/workflows/ci.yml/badge.svg)](https://github.com/HubertPhung/WebQuanLyQuanCafe-DesignPatterns/actions/workflows/ci.yml)
-![Test Status](https://img.shields.io/badge/Test%20Suite-25%2F25%20PASS-brightgreen?style=for-the-badge)
+![Tests](https://img.shields.io/badge/Tests-168%20JUnit%20%2B%2025%20UI-brightgreen?style=for-the-badge)
 
 ---
 
-## 1. Giới thiệu Đề tài & Mục tiêu
+## 1. Giới thiệu
 
-Dự án **Đà Lạt Cafe** là giải pháp phần mềm chuyển đổi số toàn diện cho quán cà phê hiện đại, phục vụ học phần **Thiết kế Mẫu & Kiến trúc Phần mềm (Design Patterns & Software Architecture)**.
+**Đà Lạt Cafe** là đồ án học phần **Thiết kế Mẫu & Kiến trúc Phần mềm**. Hệ thống gồm hai phần:
+1. **Frontend Next.js 16** (React 19, Tailwind v4): Storefront cho khách đặt món, và khu quản trị gồm POS, bếp KDS, sơ đồ bàn, đặt bàn, kho, CRM, báo cáo.
+2. **Backend Java SE 17 thuần**: cài đặt đủ **9 mẫu thiết kế GoF**, không dùng Spring Boot / Spring Security / Spring Data JPA.
 
-Hệ thống kết hợp giữa:
-1. **Frontend Fullstack Hiện đại (Next.js 16 + React 19 + Tailwind v4):** Cung cấp trải nghiệm mượt mà cho khách hàng đặt món online (Storefront) và toàn bộ nghiệp vụ quản trị vận hành quán cà phê (POS bán hàng tại quầy, Bếp pha chế KDS, Sơ đồ bàn Floor Plan, Quản lý đặt bàn, Quản lý kho, CRM tích điểm và Biểu đồ doanh thu).
-2. **Backend Hướng đối tượng Thuần túy (Pure Java SE OOP):** Triển khai trọn vẹn **9 mẫu thiết kế Gang of Four (GoF)** kinh điển bằng ngôn ngữ Java SE thuần túy (không sử dụng framework Spring Boot, Spring Security hay Spring Data JPA), đảm bảo tính cô lập, dễ kiểm thử đơn vị và phục vụ mục tiêu học thuật chuyên sâu.
-
-### Các Phân hệ Nghiệp vụ Chính:
-- **Cổng Khách hàng (Storefront):** Duyệt thực đơn theo phân loại, lọc theo độ rang/mức giá, đánh dấu yêu thích, modal tùy biến đồ uống (Size, đá, đường, sữa), giỏ hàng trượt và áp dụng voucher giảm giá.
-- **Bán hàng tại quầy (POS Terminal):** Chọn món nhanh, bàn phím số tính tiền thừa, tích hợp thuế VAT (8%), trừ điểm tích lũy thành viên, chọn bàn và đẩy đơn sang quầy pha chế.
-- **Màn hình Bếp pha chế (Kitchen Display System - KDS):** Theo dõi tiến trình pha chế qua các cột `Pending` ➔ `Brewing` ➔ `Ready` ➔ `Completed`, tự động cảnh báo đổi màu viền khi đơn trễ quá 10 phút.
-- **Sơ đồ Bàn thời gian thực (Floor Plan):** Quản lý 15 bàn chia theo 3 khu vực (Main Floor, Patio, Coffee Bar) với 4 màu trạng thái trực quan (`Available`, `Occupied`, `Reserved`, `Cleaning`), hỗ trợ thanh toán tại bàn.
-- **Quản lý Đặt bàn trước (Reservations):** Tiếp nhận danh sách khách hẹn trước, số lượng khách, ghi chú, danh sách món gọi trước và nút chuyển đổi phiếu đặt bàn sang đơn POS.
-- **Quản lý Kho & Thực đơn (Inventory & Menu):** Kiểm soát số lượng tồn kho nguyên liệu/món, cảnh báo tồn kho thấp (Low stock alert), công tắc bật/tắt bán và modal thêm món mới.
-- **Khách hàng thân thiết (CRM & Loyalty):** Bảng xếp hạng khách hàng theo chi tiêu, cơ chế tự động tích lũy điểm thưởng (10.000 VNĐ = 1 điểm; quy đổi 1 điểm = 1.000 VNĐ khi trừ vào bill).
-- **Báo cáo Phân tích (Analytics Dashboard):** Biểu đồ doanh thu 7 ngày qua, cơ cấu phương thức thanh toán (Tiền mặt, QR MoMo/VNPay, Thẻ) và tỷ trọng món bán chạy nhất.
+Frontend chạy được một mình, nhờ kho dữ liệu trong bộ nhớ. Khi Backend Java đang chạy, các nghiệp vụ POS được chuyển sang Java xử lý: chốt đơn (kể cả Size L / topping), đổi trạng thái bàn, tạo đặt bàn và chuyển đặt bàn sang POS. Chi tiết tại [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Danh mục tính năng và trạng thái triển khai xem [docs/PROJECT_MANAGEMENT.md](docs/PROJECT_MANAGEMENT.md).
 
 ---
 
 ## 2. Thành viên Nhóm Thực hiện (Team Members)
 
-| MSSV | Họ và tên | GitHub | Phân công nhiệm vụ & Design Patterns phụ trách |
+| MSSV | Họ và tên | GitHub | Phụ trách |
 | :---: | :--- | :--- | :--- |
-| `2312585` | **Phùng Nguyễn Hoài Bo** | [@HubertPhung](https://github.com/HubertPhung) | • **Kiến trúc hệ thống & Điều phối tổng thể**<br>• **Facade Pattern** (`PosCheckoutFacade`: điều phối quy trình chốt đơn POS đa kênh)<br>• **Singleton Pattern** (`SystemConfigManager`: quản lý tham số & cấu hình toàn cục quán) |
-| `2312590` | **Nguyễn Ngọc Trường Dân** | [@0Yaam](https://github.com/0Yaam) | • **Tùy biến món & Xử lý thanh toán đa kênh**<br>• **Decorator Pattern** (`BeverageDecorator`: tính giá topping, kem cheese, nâng size L)<br>• **Factory Method Pattern** (`PaymentProcessorFactory`: bộ xử lý Tiền mặt, QR MoMo, Thẻ) |
-| `2312756` | **Nguyễn Hưng Thịnh** | [@elgthinhnguyen](https://github.com/elgthinhnguyen) | • **Đóng gói đơn hàng & Cơ chế lắng nghe sự kiện**<br>• **Builder Pattern** (`OrderBuilder`: khởi tạo thực thể đơn hàng phức tạp với nhiều tùy chọn)<br>• **Observer Pattern** (`OrderEventSubject`: tự động tích điểm loyalty CRM và giải phóng bàn) |
-| `2312639` | **Vũ Thế Huỳnh** | [@1convitt](https://github.com/1convitt) | • **Chuỗi kiểm định nghiệp vụ & Chiến lược khuyến mãi**<br>• **Chain of Responsibility** (`ReservationValidatorHandler`: chuỗi kiểm định đặt bàn 3 bước giờ mở cửa → sức chứa → lịch bàn)<br>• **Strategy Pattern** (`DiscountContext`: giảm theo %, số tiền cố định, hạng thành viên) |
-| `2312802` | **Phan Khánh Vương** | [@vuong123s](https://github.com/vuong123s) | • **Chuyển đổi dữ liệu & Bộ kiểm thử đơn vị**<br>• **Adapter Pattern** (`ReservationToOrderAdapter`: ánh xạ cấu trúc phiếu đặt bàn sang đơn POS)<br>• **State / DAO Pattern** & Viết bộ kiểm thử đơn vị **JUnit 5** toàn diện cho 9 Design Patterns |
+| `2312585` | **Phùng Nguyễn Hoài Bo** (Trưởng nhóm) | [@HubertPhung](https://github.com/HubertPhung) | Kiến trúc và POJO lõi, **Singleton** (`SystemConfigManager`), **Facade** (`PosCheckoutFacade`), HttpServer, tích hợp Next.js ↔ Java |
+| `2312590` | **Nguyễn Ngọc Trường Dân** | [@0Yaam](https://github.com/0Yaam) | **Factory Method** (`PaymentProcessorFactory`), **Decorator** (`BeverageDecorator`), tích hợp Next.js ↔ Java |
+| `2312756` | **Nguyễn Hưng Thịnh** | [@elgthinhnguyen](https://github.com/elgthinhnguyen) | **Builder** (`OrderBuilder`), **Observer** (`OrderEventSubject`), REST handler, báo cáo E2E |
+| `2312639` | **Vũ Thế Huỳnh** | [@1convitt](https://github.com/1convitt) | **Strategy** (`DiscountContext`), **Chain of Responsibility** (`ReservationValidatorHandler`), test JUnit 5 |
+| `2312802` | **Phan Khánh Vương** | [@vuong123s](https://github.com/vuong123s) | Tầng DAO (In-Memory / JDBC), **Adapter** (`ReservationToOrderAdapter`), test JUnit 5 |
+
+Cả nhóm cùng tham gia kiểm thử E2E và hoàn thiện báo cáo (#15). Quy trình nhánh và PR xem [docs/PROJECT_MANAGEMENT.md §4](docs/PROJECT_MANAGEMENT.md#4-quy-trình-git--pull-request).
 
 ---
 
 ## 3. Công nghệ Sử dụng
 
-### 3.1. Frontend (`frontend-nextjs`)
-- **Framework:** Next.js 16.4.0 (App Router, Turbopack, Server Actions, Route Handlers).
-- **Core Library:** React 19 / React DOM 19, TypeScript 5.7.3.
-- **Giao diện & Styling:** Tailwind CSS v4 (`@tailwindcss/postcss`), Radix UI (`dialog`, `dropdown-menu`), Base UI, Lucide React Icons, `class-variance-authority`, `tw-animate-css`.
-- **Hoạt họa, Theme & Thông báo:** Framer Motion 14, `next-themes` (Dark/Light mode), Sonner Toaster (toast notifications), `@vercel/analytics`.
-- **State Management & Data Fetching:** Zustand 5.0 (Global Cart Store), SWR 2.5 (Client revalidation).
-- **Biểu đồ:** Recharts 3.8 (Doanh thu cột & Donut chart).
-- **Lưu trữ & Fallback:** Drizzle ORM 0.45 (`pg` 8.23) + In-memory Mock Store (`mock-store.ts`) tự phục hồi không crash + Shopify Client (`shopify.ts`) kèm dữ liệu mẫu.
-
-### 3.2. Backend (`backend-java`)
-- **Nền tảng:** Java SE 17 LTS (Pure Java OOP).
-- **Kiến trúc:** Phân tầng thuần OOP (Server Handler, Model POJO, DAO Layer, Patterns Package).
-- **Mẫu thiết kế áp dụng:** Đầy đủ 9 mẫu thiết kế GoF:
-  - *Creational:* Singleton (`SystemConfigManager`), Factory Method (`PaymentProcessorFactory`), Builder (`OrderBuilder`).
-  - *Structural:* Decorator (`BeverageDecorator`), Adapter (`ReservationToOrderAdapter`), Facade (`PosCheckoutFacade`).
-  - *Behavioral:* Strategy (`DiscountContext`), Chain of Responsibility (`ReservationValidatorHandler`), Observer (`OrderEventSubject`).
-- **Giao thức:** Java SE `HttpServer` (`com.sun.net.httpserver.HttpServer`) REST JSON trên cổng `8080`.
-- **Ràng buộc quan trọng:** Tuyệt đối không dùng Spring Boot, không Spring Security, không Spring Data JPA.
+| Phần | Công nghệ (phiên bản theo `package.json` / `pom.xml`) |
+| :--- | :--- |
+| Frontend | Next.js **16.4.0** (App Router, Server Actions, Route Handlers), React 19, TypeScript 5.7.3, Tailwind CSS 4, Radix UI / Base UI, Lucide, Framer Motion 14, Sonner, Zustand 5, SWR 2.5, Recharts 3.8 |
+| Lưu trữ frontend | Drizzle ORM 0.45 + `pg` 8.23 (khi có `DATABASE_URL`), mock store trong bộ nhớ (`lib/db/mock-store.ts`), dữ liệu Shopify mẫu (`lib/shopify.ts`) |
+| Backend | Java SE **17**, `com.sun.net.httpserver.HttpServer` (cổng 8080), Maven, JUnit **5.10.2**, PostgreSQL JDBC **42.7.14** |
+| CI | GitHub Actions (`.github/workflows/ci.yml`): Node 22 + `npm ci`, JDK 17 Temurin + `mvn clean test` |
 
 ---
 
@@ -72,161 +49,86 @@ Hệ thống kết hợp giữa:
 
 ```text
 WebQuanLyQuanCafe-DesignPatterns/
-├── README.md                       # Tài liệu tổng quan dự án (file này)
-├── LICENSE                         # Giấy phép mã nguồn mở MIT
-├── docs/                           # Thư mục tài liệu kỹ thuật chi tiết
-│   ├── ARCHITECTURE.md             # Kiến trúc phân tầng, luồng dữ liệu & tích hợp
-│   ├── API_SPEC.md                 # Đặc tả chi tiết các RESTful API endpoints
-│   ├── DATABASE.md                 # Thiết kế cơ sở dữ liệu, ERD & script DDL
-│   ├── FEATURES.md                 # Danh mục chức năng chi tiết & phân chia issue
-│   ├── ISSUE_GUIDELINES.md         # Quy chuẩn đặt tên, gán label & tạo issue
-│   ├── ISSUE_EXECUTION_PLAN.md     # Kế hoạch phân chia 16 Issues & thứ tự không conflict
-│   └── DESIGN_PATTERNS_SPEC.md     # Đặc tả chuyên sâu 9 GoF Design Patterns
-├── frontend-nextjs/                # Ứng dụng Next.js Fullstack
-│   ├── app/                        # App Router: Storefront, Admin POS/KDS/Tables, API
-│   │   ├── admin/actions.ts        # Server Actions (createOrder, updateStatus...)
-│   │   └── api/                    # Route Handlers (/api/cart, /api/favorites)
-│   ├── components/                 # Component UI: admin/, storefront/, ui/
-│   ├── lib/                        # Tiện ích, Mock Store, Drizzle Schema, Zustand Store
-│   ├── scripts/test-ui-ux.mjs      # Bộ kiểm thử tự động 25 test cases UI/UX
-│   ├── package.json
-│   └── next.config.mjs
-└── backend-java/                   # Thư mục mã nguồn Backend Java thuần OOP (Chuẩn GoF - Cấu trúc sẵn sàng triển khai)
-    └── src/com/coffeeshop/         # Gói mã nguồn Java SE (server, model, dao, patterns)
+├── README.md, LICENSE
+├── docs/                    # Tài liệu kỹ thuật (xem mục 7)
+│   └── e2e/                 # Ảnh minh chứng kiểm thử E2E
+├── frontend-nextjs/         # Next.js: app/, components/, lib/, scripts/test-ui-ux.mjs
+├── backend-java/            # Java SE: src/main/java/com/dalatcafe/{server,model,dao,patterns}
+└── .github/workflows/ci.yml # CI cho cả hai phần
 ```
 
----
-
-## 5. Yêu cầu Môi trường
-
-Để cài đặt và chạy toàn bộ dự án, máy tính cần cài sẵn:
-- **Node.js:** Phiên bản `>= 18.18.0` (Khuyến nghị **Node.js 20 LTS**).
-- **Trình quản lý gói Node:** `pnpm` (dự án định nghĩa `pnpm@12.3.4` qua `packageManager`, tương thích tốt từ pnpm 9+) hoặc `npm` / `yarn`.
-- **Java Development Kit (JDK):** **JDK 17 LTS** hoặc JDK 21.
-- **Hệ điều hành:** Hỗ trợ tốt trên Windows, macOS và Linux.
+Cây thư mục chi tiết xem [docs/DESIGN_PATTERNS_SPEC.md §1.3](docs/DESIGN_PATTERNS_SPEC.md#13-cấu-trúc-cây-thư-mục-dự-án).
 
 ---
 
-## 6. Hướng dẫn Cài đặt & Khởi động Dự án
+## 5. Cài đặt & Khởi chạy
 
-### 6.1. Khởi động Frontend Next.js
+**Yêu cầu:**
+- Node.js **≥ 20.9** (theo yêu cầu của Next 16; CI dùng Node 22).
+- npm. CI dùng `npm ci` với `package-lock.json`; repo cũng có sẵn `pnpm-lock.yaml`.
+- JDK **17+** và Maven **3.9+**.
 
-1. Mở cửa sổ dòng lệnh (Terminal / PowerShell) và điều hướng vào thư mục Frontend:
-   ```bash
-   cd frontend-nextjs
-   ```
-
-2. Cài đặt các thư viện phụ thuộc:
-   ```bash
-   pnpm install
-   # Hoặc nếu dùng npm:
-   # npm install
-   ```
-
-3. Khởi động máy chủ phát triển (Development Server):
-   ```bash
-   pnpm dev
-   # Hoặc nếu dùng npm:
-   # npm run dev
-   ```
-
-4. Truy cập ứng dụng trên trình duyệt:
-   - **Giao diện Khách hàng (Storefront):** [http://localhost:3000](http://localhost:3000)
-   - **Giao diện Quản trị Vận hành (Admin):** [http://localhost:3000/admin](http://localhost:3000/admin)
-   - **Màn hình Bán hàng tại quầy (POS):** [http://localhost:3000/admin/pos](http://localhost:3000/admin/pos)
-   - **Màn hình Bếp pha chế (KDS):** [http://localhost:3000/admin/pos?tab=kitchen](http://localhost:3000/admin/pos?tab=kitchen)
-   - **Sơ đồ Bàn thời gian thực:** [http://localhost:3000/admin/tables](http://localhost:3000/admin/tables)
-   - **Quản lý Đặt bàn trước:** [http://localhost:3000/admin/reservations](http://localhost:3000/admin/reservations)
-
-> [!TIP]
-> **Chế độ Zero-Crash Standalone:** Frontend được tích hợp sẵn cơ chế In-Memory Mock Store (`mock-store.ts`) và Catalog mẫu. Ứng dụng chạy mượt mà ngay lập tức mà không yêu cầu phải cài đặt trước database PostgreSQL bên ngoài.
-
----
-
-### 6.2. Chạy Bộ Kiểm thử Tự động (Automated Test Suite)
-
-Dự án có sẵn bộ test tích hợp 25 kịch bản kiểm thử toàn diện mọi luồng UI/UX và logic nghiệp vụ. 
-
-> [!NOTE]
-> Bộ test kịch bản tự động kiểm tra trực tiếp qua HTTP endpoint trên máy chủ cục bộ. Hãy đảm bảo máy chủ Next.js đang chạy trên cổng 3000 (`pnpm dev`) trước khi chạy lệnh test.
-
+### 5.1. Frontend Next.js
 ```bash
 cd frontend-nextjs
-pnpm test
-# Hoặc:
-# node scripts/test-ui-ux.mjs
+npm install
+npm run dev            # http://localhost:3000
 ```
-Kết quả kiểm thử mong đợi: **25 / 25 Test Cases Passed (100% Đạt)**.
+Các trang chính:
+- Storefront: `/`
+- Admin: `/admin`
+- POS: `/admin/pos`
+- Bếp KDS: `/admin/pos?tab=kitchen`
+- Sơ đồ bàn: `/admin/tables`
+- Đặt bàn: `/admin/reservations`
+
+Frontend chạy ngay mà không cần database. Nếu đặt `DATABASE_URL` (PostgreSQL), dữ liệu admin sẽ được lưu qua Drizzle.
+
+### 5.2. Backend Java
+```bash
+cd backend-java
+mvn clean test                                            # 168 test JUnit 5
+mvn -q compile
+java -cp target/classes com.dalatcafe.server.MainServer   # cổng 8080, chế độ In-Memory
+```
+- Muốn đổi cổng thì truyền số cổng làm đối số đầu tiên, ví dụ `... MainServer 9090`.
+- Khi `DATABASE_URL` có giá trị và kết nối được, `DaoFactory` chuyển sang chế độ JDBC. Chế độ này cần thêm driver vào classpath:
+  ```bash
+  mvn -q dependency:build-classpath -Dmdep.outputFile=cp.txt
+  java -cp "target/classes;$(cat cp.txt)" com.dalatcafe.server.MainServer   # Windows (Git Bash); macOS/Linux dùng ':'
+  ```
+
+### 5.3. Kết nối Frontend với Backend
+Chạy Java trước, rồi chạy frontend với:
+```bash
+JAVA_BACKEND_URL=http://localhost:8080   # giá trị mặc định; đặt "off" để tắt
+```
+Danh sách thao tác được chuyển sang Java và quy tắc dự phòng khi Java lỗi: [docs/ARCHITECTURE.md §2](docs/ARCHITECTURE.md#2-tích-hợp-frontend-nextjs--backend-java).
 
 ---
 
-### 6.3. Khởi động Backend Java thuần OOP
-
-Yêu cầu JDK 17+ và Maven 3.9+.
-
-1. Điều hướng vào thư mục:
-   ```bash
-   cd backend-java
-   ```
-
-2. Biên dịch và chạy bộ kiểm thử JUnit 5:
-   ```bash
-   mvn clean test
-   ```
-
-3. Khởi chạy máy chủ HTTP (chế độ In-Memory, không cần database):
-   ```bash
-   mvn -q compile
-   java -cp target/classes com.dalatcafe.server.MainServer        # cổng mặc định 8080
-   java -cp target/classes com.dalatcafe.server.MainServer 9090   # hoặc chỉ định cổng khác
-   ```
-   Khi đặt biến môi trường `DATABASE_URL` (PostgreSQL/Supabase) và kết nối thành công, `DaoFactory` chuyển sang chế độ JDBC; nếu không kết nối được, máy chủ tự quay về In-Memory. Chế độ JDBC cần thêm driver PostgreSQL vào classpath:
-   ```bash
-   mvn -q dependency:build-classpath -Dmdep.outputFile=cp.txt
-   java -cp "target/classes;$(cat cp.txt)" com.dalatcafe.server.MainServer   # Windows (Git Bash); macOS/Linux dùng dấu ':'
-   ```
-   Máy chủ Java sẽ lắng nghe các request RESTful JSON tại `http://localhost:8080`.
-
----
-
-### 6.4. Kết nối Frontend với Backend Java (API Proxy)
-
-Server Actions trong `frontend-nextjs/app/admin/actions.ts` chuyển tiếp yêu cầu sang Java qua `lib/api-client.ts`:
-
-| Server Action | Endpoint Java | Ghi chú |
-|---|---|---|
-| `createOrder` | `POST /api/checkout` | Chỉ đơn **đã thanh toán**; món được ghép theo tên vì hai kho đánh số món độc lập |
-| `updateTableStatus` | `PUT /api/tables/{id}` | Java kiểm tra số khách theo sức chứa bàn |
-| `createReservation` | `POST /api/reservations` | Java chạy chuỗi kiểm tra Chain of Responsibility |
-
-Địa chỉ backend cấu hình qua biến môi trường (mặc định `http://localhost:8080`, đặt `off` để tắt):
+## 6. Kiểm thử
 
 ```bash
-JAVA_BACKEND_URL=http://localhost:8080
+cd frontend-nextjs && npm test     # 25 test UI/UX (tự khởi động next dev nếu chưa có server)
+cd backend-java && mvn clean test  # 168 test JUnit 5
 ```
-
-- **Java từ chối (4xx):** lỗi nghiệp vụ được trả về cho nhân viên, không ghi dữ liệu.
-- **Java không phản hồi (lỗi mạng, quá 2,5 giây, 5xx):** tự động lưu vào Mock Store cục bộ, giao diện không bị crash.
-- **Món Java không có hoặc tuỳ chọn có phụ thu:** đơn được lưu cục bộ thay vì gửi sang Java với giá sai.
+Danh mục test, báo cáo E2E và các giới hạn đã biết: [docs/TESTING.md](docs/TESTING.md).
 
 ---
 
-## 7. Tra cứu Tài liệu Kỹ thuật Chi tiết
+## 7. Tài liệu Kỹ thuật
 
-Toàn bộ tài liệu phân tích kỹ thuật của dự án được lưu trữ trong thư mục `docs/`:
-
-| Tài liệu | Mô tả nội dung chính |
+| Tài liệu | Nội dung |
 | :--- | :--- |
-| **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** | Kiến trúc phân tầng, cơ chế giao tiếp Next.js – Java Backend, bảo mật & luồng dữ liệu |
-| **[docs/API_SPEC.md](docs/API_SPEC.md)** | Danh mục đặc tả toàn bộ RESTful API endpoints, request/response JSON & mã lỗi |
-| **[docs/DATABASE.md](docs/DATABASE.md)** | Thiết kế cơ sở dữ liệu, sơ đồ ERD, bảng trường dữ liệu & script DDL SQL |
-| **[docs/FEATURES.md](docs/FEATURES.md)** | Ma trận tính năng theo phân hệ, đối chiếu hiện trạng và phân chia backlog issue |
-| **[docs/ISSUE_GUIDELINES.md](docs/ISSUE_GUIDELINES.md)** | Quy chuẩn tạo Issue, đặt tiêu đề, phân loại labels, độ ưu tiên & checklist nghiệm thu |
-| **[docs/ISSUE_EXECUTION_PLAN.md](docs/ISSUE_EXECUTION_PLAN.md)** | Kế hoạch phân chia 16 Issues chi tiết, thứ tự trước sau & chiến lược chống xung đột Git |
-| **[docs/DESIGN_PATTERNS_SPEC.md](docs/DESIGN_PATTERNS_SPEC.md)** | Đặc tả chi tiết 9 mẫu thiết kế GoF chuẩn Java SE OOP kèm sơ đồ Mermaid & code mẫu |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Kiến trúc, tích hợp Next.js ↔ Java, quy tắc dự phòng, phân quyền, luồng dữ liệu |
+| [docs/API_SPEC.md](docs/API_SPEC.md) | Endpoint REST (đã / chưa triển khai), request/response, mã lỗi |
+| [docs/DATABASE.md](docs/DATABASE.md) | Hai schema (Drizzle và JDBC), ERD, giá trị enum, giới hạn |
+| [docs/DESIGN_PATTERNS_SPEC.md](docs/DESIGN_PATTERNS_SPEC.md) | Báo cáo 9 mẫu GoF: sơ đồ lớp Mermaid, mã nguồn thật, đề xuất mở rộng |
+| [docs/PROJECT_MANAGEMENT.md](docs/PROJECT_MANAGEMENT.md) | Danh mục tính năng và trạng thái, lịch sử 15 issue, quy ước issue, quy trình Git |
+| [docs/TESTING.md](docs/TESTING.md) | Bộ test JUnit và UI, báo cáo E2E, giới hạn đã biết |
 
 ---
 
 ## 8. Giấy phép (License)
-Dự án được phân phối dưới giấy phép mã nguồn mở [MIT License](LICENSE).
-
+Dự án được phân phối theo giấy phép [MIT](LICENSE).

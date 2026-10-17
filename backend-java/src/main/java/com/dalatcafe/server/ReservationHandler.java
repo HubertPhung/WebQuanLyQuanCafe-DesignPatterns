@@ -1,11 +1,16 @@
 package com.dalatcafe.server;
 
+import com.dalatcafe.dao.IOrderDao;
 import com.dalatcafe.dao.IReservationDao;
 import com.dalatcafe.dao.ITableDao;
+import com.dalatcafe.model.Order;
 import com.dalatcafe.model.OrderItem;
 import com.dalatcafe.model.Reservation;
 import com.dalatcafe.model.ReservationStatus;
 import com.dalatcafe.model.Table;
+import com.dalatcafe.model.TableStatus;
+import com.dalatcafe.patterns.adapter.IPosOrderTarget;
+import com.dalatcafe.patterns.adapter.ReservationToOrderAdapter;
 import com.dalatcafe.patterns.chain.ReservationValidationChainFactory;
 import com.dalatcafe.patterns.chain.ReservationValidatorHandler;
 import com.dalatcafe.patterns.chain.ValidationResult;
@@ -22,23 +27,37 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * GET|POST /api/reservations. A booking is validated by the Chain of Responsibility
- * (operating hours, capacity, table availability) before being stored.
+ * GET|POST /api/reservations and POST /api/reservations/{code}/transfer-pos.
+ * A booking is validated by the Chain of Responsibility (operating hours, capacity,
+ * table availability) before being stored; a seated booking becomes a POS order through
+ * the {@link ReservationToOrderAdapter}.
  */
 public class ReservationHandler extends ApiHandler {
+    private static final String TRANSFER = "transfer-pos";
+
     private final IReservationDao reservationDao;
     private final ITableDao tableDao;
+    private final IOrderDao orderDao;
     private final ReservationValidatorHandler validationChain;
 
-    public ReservationHandler(IReservationDao reservationDao, ITableDao tableDao) {
+    public ReservationHandler(IReservationDao reservationDao, ITableDao tableDao, IOrderDao orderDao) {
         this.reservationDao = Objects.requireNonNull(reservationDao, "Reservation DAO must not be null");
         this.tableDao = Objects.requireNonNull(tableDao, "Table DAO must not be null");
+        this.orderDao = Objects.requireNonNull(orderDao, "Order DAO must not be null");
         this.validationChain = ReservationValidationChainFactory.create(tableDao, reservationDao);
     }
 
     @Override
     protected void route(HttpExchange exchange) throws IOException {
-        if (segments(exchange).size() != 2) {
+        List<String> parts = segments(exchange);
+        if (parts.size() == 4 && parts.get(3).equals(TRANSFER)) {
+            if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+                throw methodNotAllowed(exchange);
+            }
+            transferToPos(exchange, parts.get(2));
+            return;
+        }
+        if (parts.size() != 2) {
             throw ApiException.notFound("Unknown reservation resource");
         }
         switch (exchange.getRequestMethod().toUpperCase(Locale.ROOT)) {
@@ -92,6 +111,57 @@ public class ReservationHandler extends ApiHandler {
         data.put("id", reservation.getReservationCode());
         data.put("status", reservation.getStatus().getDescription());
         sendOk(exchange, 201, data, "Reservation received");
+    }
+
+    private void transferToPos(HttpExchange exchange, String code) throws IOException {
+        Reservation reservation = reservationDao.findByReservationCode(code)
+                .orElseThrow(() -> ApiException.notFound("Reservation not found: " + code));
+        ReservationStatus status = reservation.getStatus();
+        if (status == ReservationStatus.SEATED || status == ReservationStatus.CANCELLED) {
+            throw new ApiException(409, "RESOURCE_CONFLICT",
+                    "Reservation " + code + " cannot be transferred: " + status.getDescription());
+        }
+        if (orderDao.findByOrderCode(reservation.getReservationCode()).isPresent()) {
+            throw new ApiException(409, "RESOURCE_CONFLICT", "An order already exists for reservation " + code);
+        }
+
+        IPosOrderTarget target = new ReservationToOrderAdapter(reservation);
+        Order order = target.toPosOrder();
+        if (!orderDao.save(order)) {
+            throw new ApiException(500, "INTERNAL_SERVER_ERROR", "Could not save the POS order for " + code);
+        }
+        if (reservation.getId() != null) {
+            reservationDao.updateStatus(reservation.getId(), ReservationStatus.SEATED);
+        }
+        int tableId = target.getAssignedTableId();
+        if (tableId > 0) {
+            tableDao.findById(tableId).ifPresent(table ->
+                    tableDao.updateStatus(tableId, TableStatus.OCCUPIED, Math.min(reservation.getGuests(), table.getSeats())));
+        }
+        sendOk(exchange, 200, orderJson(order, target.getCustomerIdentifier()), "Reservation " + code + " transferred to POS");
+    }
+
+    private static Map<String, Object> orderJson(Order order, String customer) {
+        Map<String, Object> json = new LinkedHashMap<>();
+        json.put("orderCode", order.getOrderCode());
+        json.put("customer", customer);
+        json.put("tableId", order.getTableId());
+        json.put("orderType", order.getOrderType().name().toLowerCase(Locale.ROOT).replace('_', '-'));
+        json.put("status", order.getStatus().name().toLowerCase(Locale.ROOT));
+        json.put("paymentStatus", order.getPaymentStatus().name().toLowerCase(Locale.ROOT));
+        List<Object> items = new ArrayList<>();
+        for (OrderItem item : order.getItems()) {
+            Map<String, Object> line = new LinkedHashMap<>();
+            line.put("name", item.getName());
+            line.put("qty", item.getQty());
+            line.put("price", item.getPrice());
+            items.add(line);
+        }
+        json.put("items", items);
+        json.put("subtotal", order.getSubtotal());
+        json.put("vatAmount", order.getVatAmount());
+        json.put("total", order.getTotal());
+        return json;
     }
 
     private void resolveTable(Map<String, Object> body, Reservation reservation) {

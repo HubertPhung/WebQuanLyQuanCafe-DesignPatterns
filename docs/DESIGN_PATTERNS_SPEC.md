@@ -14,11 +14,8 @@
 ## MỤC LỤC
 1. [Tổng quan Đề tài & Kiến trúc Hệ thống](#1-tổng-quan-đề-tài--kiến-trúc-hệ-thống)
    - 1.1. Tên đề tài, mục tiêu và các phân hệ nghiệp vụ chính
-   - 1.2. Tech Stack chi tiết và Đối chiếu Thực tế Mã nguồn
-   - 1.3. Kiến trúc Tổng thể Hệ thống (Next.js Hybrid & Pure Java OOP Backend)
-   - 1.4. Cấu trúc Cây Thư mục Dự án Thực tế & Định hướng Kiến trúc
-   - 1.5. Cơ chế Giao tiếp Frontend – Backend & Xử lý Dữ liệu
-   - 1.6. Cơ chế Xác thực & Phân quyền (Authentication & Authorization)
+   - 1.2. Công nghệ, kiến trúc, tích hợp & phân quyền (liên kết)
+   - 1.3. Cấu trúc Cây Thư mục Dự án
 2. [Bảng tổng hợp các Design Patterns GoF](#2-bảng-tổng-hợp-các-design-patterns-gof)
 3. [Đặc tả chi tiết từng Design Pattern (Chuẩn GoF Java SE OOP)](#3-đặc-tả-chi-tiết-từng-design-pattern-chuẩn-gof-java-se-oop)
    - 3.1. Singleton Pattern - Quản lý Cấu hình Vận hành Quán Cà phê (`SystemConfigManager`)
@@ -41,229 +38,62 @@
 
 ## 1.1. Tên đề tài, mục tiêu và các phân hệ nghiệp vụ chính
 - **Tên đề tài:** Hệ thống Quản lý và Vận hành Quán Cà phê Đa kênh (Đà Lạt Cafe Shop Management & Operations System).
-- **Mục tiêu ứng dụng:** Xây dựng nền tảng chuyển đổi số toàn diện cho quán cà phê, kết hợp giao diện Web hiện đại bằng **Next.js (App Router, React 19)** với tầng xử lý nghiệp vụ Backend viết bằng **Java hướng đối tượng thuần túy (Pure Java OOP)** áp dụng chuẩn mực 9 mẫu thiết kế Gang of Four (GoF):
-  - Tối ưu hóa năng lực bán hàng tại quầy thu ngân (POS Terminal) và hiển thị đơn pha chế thời gian thực (Kitchen Display System - KDS).
-  - Cung cấp cổng đặt hàng trực tuyến (Online Storefront) cho phép khách hàng duyệt menu, tùy biến đồ uống (Size, đá, đường, sữa), quản lý giỏ hàng và danh sách món yêu thích.
-  - Quản lý đặt bàn trước (Table Reservations), sơ đồ tầng (Floor Plan) theo thời gian thực và chuyển đổi liền mạch sang đơn bán hàng POS khi khách đến nhận bàn.
-  - Quản lý kho hàng (Inventory), cảnh báo nguyên liệu sắp hết, phân nhóm thực đơn và tự động điều chỉnh tồn kho khi bán hàng.
-  - Quản lý khách hàng thân thiết (CRM & Loyalty Points), tự động quy đổi giá trị đơn thành điểm thưởng và chiết khấu linh hoạt bằng voucher ưu đãi.
-  - Trực quan hóa doanh thu, đơn hàng và các chỉ số kinh doanh qua biểu đồ phân tích chuyên sâu (Analytics Dashboard).
+- **Mục tiêu:** kết hợp giao diện Web **Next.js (App Router, React 19)** với tầng nghiệp vụ **Java SE hướng đối tượng thuần**, trong đó cài đặt 9 mẫu thiết kế GoF.
+- **Các phân hệ nghiệp vụ:**
+  - Storefront: menu, tìm kiếm, tuỳ biến món, giỏ hàng, voucher, checkout.
+  - POS: lên đơn, chọn bàn, VAT 8%, thanh toán đa kênh.
+  - KDS: Kanban `Pending → Brewing → Ready → Completed`, cảnh báo đơn trễ quá 10 phút.
+  - Sơ đồ 15 bàn.
+  - Đặt bàn trước: món đặt trước, xuất CSV.
+  - Kho & thực đơn.
+  - CRM: 10.000 VNĐ = 1 điểm.
+  - Báo cáo doanh thu.
 
-- **Các phân hệ nghiệp vụ chính:**
-  1. **Storefront (Khách hàng duyệt menu & đặt món):** Header thông minh, Hero section, Catalog phân loại đồ uống (Espresso, Cold Brew, Pour Over, Pastries, Whole Bean), tìm kiếm & lọc giá/độ rang, wishlist yêu thích, modal tùy biến món, giỏ hàng trượt (Slide-out Cart Bag), áp dụng mã giảm giá và checkout.
-  2. **Quản trị Bán hàng tại quầy (POS Terminal):** Chọn món nhanh, bàn phím số tính tiền khách đưa, tính thuế VAT (8%), trừ điểm tích lũy thành viên, chọn bàn và hình thức (Dine-in, Takeaway, Delivery), in hóa đơn và đẩy đơn sang quầy pha chế.
-  3. **Màn hình Bếp/Pha chế (Kitchen Display System - KDS):** Theo dõi tiến trình pha chế qua các cột trạng thái (`Pending` ➔ `Brewing` ➔ `Ready` ➔ `Completed`), cảnh báo trễ đơn khi vượt quá thời gian tiêu chuẩn (> 10 phút).
-  4. **Sơ đồ Bàn thời gian thực (Floor Plan & Table Grid):** Quản lý bàn theo các khu vực (Main Floor, Patio, Coffee Bar), hiển thị trạng thái trực quan bằng màu sắc (`Available`, `Occupied`, `Reserved`, `Cleaning`), xem chi tiết hóa đơn đang phục vụ và thanh toán tại bàn.
-  5. **Quản lý Đặt bàn trước (Reservations):** Tiếp nhận danh sách khách đặt bàn trước, số lượng khách, ghi chú, các món gọi trước (`preOrders`), chuyển tiếp phiếu đặt bàn sang màn hình POS khi khách đến quán, hỗ trợ xuất file CSV.
-  6. **Quản lý Kho & Thực đơn (Inventory & Menu):** Kiểm soát số lượng tồn kho (`stockQty`), ngưỡng cảnh báo sắp hết (`lowStockThreshold`), công tắc bật/tắt bán (`inStock`), modal thêm món mới, phân loại đồ uống và nguyên liệu.
-  7. **Khách hàng thân thiết (Customer CRM & Loyalty):** Bảng xếp hạng khách hàng theo chi tiêu tích lũy, quản lý số điểm thưởng loyalty (10.000 VNĐ = 1 điểm, quy đổi trừ bill 1.000 VNĐ/điểm).
-  8. **Báo cáo & Phân tích (Analytics Dashboard):** Biểu đồ doanh thu 7 ngày qua, cơ cấu phương thức thanh toán (Tiền mặt, QR MoMo/VNPay, Thẻ), Top đồ uống bán chạy nhất và chỉ số vận hành bình quân.
+  Trạng thái triển khai của từng tính năng nằm tại [PROJECT_MANAGEMENT §1](PROJECT_MANAGEMENT.md#1-danh-mục-tính-năng-feature-matrix).
 
----
+## 1.2. Công nghệ, kiến trúc, tích hợp & phân quyền
+Để tránh lặp, các nội dung này chỉ được mô tả ở một nơi:
+- **Công nghệ và phiên bản:** [README §3](../README.md#3-công-nghệ-sử-dụng). Backend là **Java SE 17 thuần**, không dùng Spring Boot / Spring Security / Spring Data JPA.
+- **Kiến trúc tổng thể, tích hợp Next.js ↔ Java, phân quyền RBAC, luồng dữ liệu:** [ARCHITECTURE.md](ARCHITECTURE.md).
+- **REST API:** [API_SPEC.md](API_SPEC.md).
+- **Cơ sở dữ liệu:** [DATABASE.md](DATABASE.md).
+- **Kiểm thử:** [TESTING.md](TESTING.md).
 
-## 1.2. Tech Stack chi tiết và Đối chiếu Thực tế Mã nguồn
+## 1.3. Cấu trúc Cây Thư mục Dự án
 
-Để phản ánh chính xác 100% hiện trạng dự án, bảng sau đối chiếu giữa **Mã nguồn thực tế được xác minh trong kho lưu trữ** và **Đặc tả kiến trúc chuẩn của dự án**:
-
-| Tầng (Layer) | Thành phần / Thư viện | Phiên bản thực tế | Vai trò kỹ thuật & Hiện trạng mã nguồn |
-| :--- | :--- | :--- | :--- |
-| **Frontend Framework** | **Next.js** | **16.4.0** | Nền tảng ứng dụng Fullstack hiện đại, sử dụng **App Router** (`app/`), hỗ trợ Server Components, Server Actions (`app/admin/actions.ts`) và Route Handlers (`app/api/`) |
-| **Core UI Library** | **React / React DOM** | **^19.0.0** | Thư viện giao diện cốt lõi render cây thành phần, hook trạng thái và quản lý chu kỳ sống component |
-| **Ngôn ngữ Frontend** | **TypeScript** | **5.7.3** | Đảm bảo tính an toàn kiểu dữ liệu (Strict Typing) cho toàn bộ DTO, Schema, State và Component Props |
-| **Styling & Icons** | **Tailwind CSS** | **^4.3.3** (`@tailwindcss/postcss`) | Utility-first CSS Engine v4 cấu hình qua `@import "tailwindcss";`, thiết kế giao diện responsive và hỗ trợ chuyển đổi Dark/Light mode |
-| | **Lucide React** | **^1.16.0** | Bộ icon SVG sắc nét cho POS, menu, bàn ghế, trạng thái đơn hàng và các thao tác quản trị |
-| **UI Components** | **Radix UI / Base UI** | `@radix-ui/react-dialog` ^1.3.0<br>`@radix-ui/react-dropdown-menu` ^2.2.0<br>`@base-ui/react` ^1.5.0 | Các khối giao diện headless chuẩn Accessibility (WAI-ARIA): Modal dialog tùy biến đồ uống, menu thả xuống |
-| | **Sonner** | **^2.0.8** | Thư viện hiển thị Toast thông báo trạng thái tức thời (thêm giỏ hàng, chốt đơn, cảnh báo lỗi) |
-| | **Framer Motion** | **^14.1.0** | Thư viện hoạt họa (animations/transitions) cho Drawer giỏ hàng và danh sách món |
-| **State Management** | **Zustand** | **^5.0.15** | Quản lý State toàn cục ở Client-side cho Giỏ hàng (`lib/store/cart-store.ts`) |
-| | **SWR** | **^2.5.1** | Quản lý đồng bộ dữ liệu Client, revalidation giỏ hàng (`/api/cart`) và mục yêu thích (`/api/favorites`) |
-| **Data Visualization** | **Recharts** | **^3.8.0** | Vẽ biểu đồ doanh thu theo ngày (`RevenueChart.tsx`) và donut top đồ uống bán chạy (`TopDrinksDonut.tsx`) |
-| **Client-side Storage / ORM** | **Drizzle ORM & pg** | `drizzle-orm` ^0.45.4<br>`pg` ^8.23.1 | Tầng truy vấn PostgreSQL (`lib/db/index.ts`, `lib/db/schema.ts`) khi cấu hình biến môi trường `DATABASE_URL` |
-| | **In-memory Mock Store** | *Nội bộ dự án* (`lib/db/mock-store.ts`) | Cơ chế tự phục hồi (Self-healing fallback) lưu trữ RAM sẵn có giúp ứng dụng chạy 100% không crash khi chưa kết nối Database bên ngoài |
-| | **Shopify Client** | *Nội bộ dự án* (`lib/shopify.ts`) | Tích hợp GraphQL Storefront API cho e-commerce, kèm kho dữ liệu mẫu (`demoProducts`) tự động kích hoạt |
-| **HTTP Client** | **Fetch API (Native)** | Chuẩn Web API | Next.js sử dụng native `fetch()` trong Server Actions, Route Handlers và SWR. *(Ghi chú: Thư viện `axios` ^1.20.0 có khai báo trong `package.json` nhưng chưa được sử dụng trực tiếp trong code)* |
-| **Backend Java** | **Java SE (JDK)** | **17 LTS / Chuẩn OOP** | **Đặc tả kiến trúc chuẩn (Pure Java OOP):** Toàn bộ 9 Design Patterns GoF được thiết kế bằng ngôn ngữ Java thuần túy, tuyệt đối **không sử dụng Spring Boot, không Spring Security, không Spring Data JPA** |
-| | *Hiện trạng `backend-java/`* | *Thư mục hiện hữu* | Thư mục `backend-java` đã được tạo sẵn ở thư mục gốc của dự án, đang trong trạng thái chờ hoàn thiện các file mã nguồn Java thuần theo đúng bản đặc tả kỹ thuật này |
-| **Cơ sở dữ liệu** | **PostgreSQL / In-Memory** | 8.x / RAM | Frontend hỗ trợ kết nối PostgreSQL qua Drizzle ORM hoặc chạy trên In-Memory Store; Backend Java thuần được thiết kế để sử dụng cơ chế lưu trữ In-Memory hoặc JDBC Driver tiêu chuẩn |
-
-> [!IMPORTANT]
-> **Điểm cần nhấn mạnh về Backend:** Mã nguồn dự án tuân thủ nghiêm ngặt định hướng **Java SE thuần túy (Pure OOP)** nhằm phục vụ mục tiêu học tập và đánh giá đồ án môn Thiết kế Mẫu. Các tài liệu trước đây đề cập đến Spring Boot, Spring Security và Spring Data JPA là nội dung phỏng đoán không chính xác và đã được loại bỏ hoàn toàn trong bản đặc tả này.
-
----
-
-## 1.3. Kiến trúc Tổng thể Hệ thống
-
-Hệ thống được thiết kế theo mô hình phân tầng rõ ràng (Multi-tier Architecture), trong đó:
-- **Tầng Client & Server Next.js (Port 3000):** Đảm nhiệm trải nghiệm người dùng Storefront và bảng điều khiển quản trị Admin (POS, KDS, Floor Plan, Inventory, CRM, Analytics). Nhờ kiến trúc Next.js App Router, tầng này vừa đóng vai trò giao diện tương tác (Client Components) vừa có khả năng xử lý nghiệp vụ nhẹ phía máy chủ (Server Actions & Route Handlers).
-- **Tầng Backend Java thuần (Pure Java SE OOP Architecture):** Đóng vai trò lõi xử lý nghiệp vụ trung tâm (Core Business Domain), nơi cài đặt trọn vẹn 9 mẫu thiết kế Gang of Four (GoF) mà không bị phụ thuộc vào bất kỳ framework bên ngoài nào.
-- **Tầng Lưu trữ (Persistence Layer):** Hỗ trợ cơ chế chuyển đổi linh hoạt giữa lưu trữ cơ sở dữ liệu quan hệ (qua kết nối JDBC tiêu chuẩn) và bộ lưu trữ trong bộ nhớ (In-memory storage) phục vụ kiểm thử đơn vị độc lập.
-
-```mermaid
-graph TB
-    subgraph Frontend_NextJS ["Tầng Frontend & Máy chủ Ứng dụng: Next.js 16 (Port 3000)"]
-        subgraph Client_Components ["Giao diện Khách hàng & Quản trị (React 19)"]
-            StorefrontUI["Storefront UI (Hero, DrinkMenu, Customization Modal)"]
-            AdminUI["Admin Operations (POS Terminal, KDS Board, Floor Plan, Reservations)"]
-            CartState["Zustand Cart Store (lib/store/cart-store.ts)"]
-            SWRClient["SWR Cache Revalidator (lib/shopify.ts / API SWR)"]
-            
-            StorefrontUI --> CartState
-            CartState --> SWRClient
-            AdminUI --> AdminActions["Next.js Server Actions (app/admin/actions.ts)"]
-        end
-
-        subgraph NextJS_Backend ["Tầng Xử lý & API Nội bộ Next.js"]
-            RouteHandlers["Next.js Route Handlers (/api/cart, /api/favorites)"]
-            AccessControl["Admin Access Guard (lib/admin/access.ts)"]
-            DrizzleLayer["Drizzle ORM & Postgres (lib/db/index.ts)"]
-            MockStore["In-memory Mock Store Fallback (lib/db/mock-store.ts)"]
-
-            AdminActions --> AccessControl
-            AccessControl --> DrizzleLayer
-            AccessControl -.->|Fallback khi không có DB| MockStore
-            SWRClient --> RouteHandlers
-            RouteHandlers -.->|Demo Fallback| MockStore
-        end
-    end
-
-    subgraph Backend_Pure_Java ["Tầng Nghiệp vụ Lõi: Backend Java thuần (Pure Java SE OOP)"]
-        JavaServer["Java SE HTTP Dispatcher (com.sun.net.httpserver.HttpServer)"]
-        
-        subgraph GoF_Patterns_Package ["⭐ Lõi 9 Design Patterns GoF (com.dalatcafe.patterns)"]
-            Singleton_Pattern["Singleton: SystemConfigManager"]
-            Chain_Pattern["Chain of Resp.: ReservationValidator Chain"]
-            Decorator_Pattern["Decorator: IBeverage & Topping Decorators"]
-            Strategy_Pattern["Strategy: IDiscountStrategy & DiscountContext"]
-            Factory_Pattern["Factory Method: PaymentProcessorFactory"]
-            Builder_Pattern["Builder: OrderBuilder"]
-            Adapter_Pattern["Adapter: ReservationToOrderAdapter"]
-            Facade_Pattern["Facade: PosCheckoutFacade"]
-            Observer_Pattern["Observer: OrderEventSubject & Observers"]
-        end
-
-        JavaModel["Domain POJO Entities (Order, Table, Reservation, MenuItem)"]
-        JavaDAO["Java SE Data Access Layer (JDBC / In-Memory Storage)"]
-
-        JavaServer --> Facade_Pattern
-        JavaServer --> Chain_Pattern
-        JavaServer --> Adapter_Pattern
-        
-        Facade_Pattern --> Decorator_Pattern
-        Facade_Pattern --> Builder_Pattern
-        Facade_Pattern --> Strategy_Pattern
-        Facade_Pattern --> Factory_Pattern
-        Facade_Pattern --> Observer_Pattern
-        
-        GoF_Patterns_Package --> JavaModel
-        JavaModel --> JavaDAO
-    end
-
-    subgraph Persistence_Layer ["Tầng Lưu trữ Bền vững"]
-        DB[("Database (PostgreSQL / MySQL)")]
-        DrizzleLayer -.->|DATABASE_URL| DB
-        JavaDAO -.->|JDBC Driver| DB
-    end
-
-    AdminActions -.->|Giao tiếp REST/JSON Mục tiêu| JavaServer
-```
-
----
-
-## 1.4. Cấu trúc Cây Thư mục Dự án Thực tế & Định hướng Kiến trúc
-
-### 1.4.1. Cấu trúc Cây Thư mục Frontend Next.js Hiện có (`frontend-nextjs`)
-Đây là cây thư mục thực tế 100% được quét trực tiếp từ mã nguồn dự án:
+### 1.3.1. Frontend Next.js (`frontend-nextjs`)
 
 ```text
 frontend-nextjs/
-├── package.json                    # Cấu hình phụ thuộc Next.js 16.4.0, React 19, Tailwind v4
-├── next.config.mjs                 # Cấu hình bảo mật HTTP headers, unoptimized images
-├── tsconfig.json                   # Cấu hình TypeScript 5.7.3 & path alias '@/*'
-├── components.json                 # Cấu hình thư viện UI component shadcn/ui
-├── postcss.config.mjs              # Plugin PostCSS kết hợp @tailwindcss/postcss
-├── TEST_CASES_UI_UX.md             # Bộ 25 test cases kiểm thử tự động UI/UX Storefront & Admin
-├── scripts/
-│   └── test-ui-ux.mjs              # Test runner tự động kiểm tra toàn bộ luồng chức năng
-├── hooks/
-│   └── use-mobile.ts               # Hook nhận biết thiết bị di động (Responsive Breakpoint)
-├── app/                            # ⭐ NEXT.JS APP ROUTER DIRECTORY
-│   ├── globals.css                 # CSS toàn cục & định nghĩa màu Tailwind
-│   ├── layout.tsx                  # Root Layout cấu hình font chữ, Toaster sonner, Theme
-│   ├── page.tsx                    # Trang chủ Storefront & điều phối vai trò người dùng
-│   ├── account/                    # Phân hệ quản lý tài khoản khách hàng
-│   │   ├── page.tsx
-│   │   └── [...slug]/page.tsx
-│   ├── cart/                       # Trang xem chi tiết giỏ hàng
-│   │   └── page.tsx
-│   ├── checkout/                   # Trang xử lý thanh toán giỏ hàng
-│   │   └── page.tsx
-│   ├── api/                        # Route Handlers phục vụ API nội bộ
-│   │   ├── cart/
-│   │   │   └── route.ts            # Xử lý giỏ hàng (GET, POST: add, quantity, discount, note)
-│   │   └── favorites/
-│   │       └── route.ts            # Xử lý danh sách yêu thích lưu qua cookie bảo mật
-│   └── admin/                      # Phân hệ Quản trị Vận hành Quán Cà phê
-│       ├── actions.ts              # ⭐ Next.js Server Actions: createOrder, updateStatus...
-│       ├── layout.tsx              # Khung giao diện Admin kèm AdminSidebar và AdminHeader
-│       ├── page.tsx                # Admin Dashboard tổng quan chỉ số & dòng đơn hàng sống
-│       ├── pos/page.tsx            # Bán hàng tại quầy POS Terminal & Bếp pha chế KDS
-│       ├── tables/page.tsx         # Sơ đồ tầng Floor Plan & Quản lý trạng thái bàn
-│       ├── reservations/page.tsx   # Tiếp nhận và quản lý đơn đặt bàn trước
-│       ├── menu/page.tsx           # Quản lý danh mục món & chỉnh sửa giá bán
-│       ├── inventory/page.tsx      # Quản lý kho nguyên liệu & cảnh báo tồn kho thấp
-│       ├── orders/page.tsx         # Quản lý lịch sử và trạng thái tất cả đơn hàng
-│       ├── customers/page.tsx      # Danh sách khách hàng CRM & điểm tích lũy
-│       ├── analytics/page.tsx      # Báo cáo biểu đồ doanh thu và cơ cấu thanh toán
-│       ├── schedule/page.tsx       # Lịch phân ca làm việc của nhân viên
-│       ├── staff/page.tsx          # Quản lý danh sách nhân sự quán
-│       └── settings/page.tsx       # Cấu hình thông tin quán, thuế VAT và đổi theme
-├── components/                     # THƯ VIỆN GIAO DIỆN REACT COMPONENT
-│   ├── coffee-footer.tsx           # Chân trang Storefront với bài viết Journal
-│   ├── role-switcher-view.tsx      # Component điều phối hiển thị Storefront hoặc lối tắt Admin
-│   ├── storefront.tsx              # Component bao bọc trang bán hàng cho khách
-│   ├── theme-provider.tsx          # Provider chuyển đổi giao diện Dark / Light Mode
-│   ├── storefront/                 # Các component chuyên biệt cho khách hàng
-│   │   ├── Header.tsx              # Thanh điều hướng trên cùng, logo, giỏ hàng, wishlist
-│   │   ├── Hero.tsx                # Banner giới thiệu chính và nút kêu gọi hành động (CTA)
-│   │   ├── DrinkMenu.tsx           # Lưới món nước, bộ lọc tabs, modal tùy biến (Size, đá, sữa)
-│   │   ├── CartSheet.tsx           # Ngăn kéo giỏ hàng trượt từ cạnh phải (Slide-out)
-│   │   ├── CartDrawer.tsx          # Component phụ trợ ngăn kéo giỏ hàng
-│   │   ├── AccountDropdown.tsx     # Menu tài khoản và lối tắt sang Staff Portal
-│   │   └── index.ts
-│   ├── admin/                      # Các component chuyên biệt cho phân hệ quản trị
-│   │   ├── admin-header.tsx        # Thanh tiêu đề Admin, nút đổi theme, avatar quản lý
-│   │   ├── admin-sidebar.tsx       # Menu điều hướng bên trái phân hệ Admin
-│   │   ├── pos-terminal.tsx        # Giao diện bán hàng POS, bàn phím số, chọn bàn, trừ điểm
-│   │   ├── kds-board.tsx           # Màn hình điều phối bếp pha chế KDS nhiều cột
-│   │   ├── floor-plan.tsx          # Sơ đồ bàn theo khu vực (Main, Patio, Bar)
-│   │   ├── reservations-management.tsx # Danh sách đặt bàn, chuyển đơn sang POS, xuất CSV
-│   │   ├── inventory-table.tsx     # Bảng quản lý kho, công tắc bật/tắt bán, tồn kho
-│   │   ├── add-item-dialog.tsx     # Modal thêm món ăn/thức uống mới vào menu
-│   │   ├── RevenueChart.tsx        # Biểu đồ cột doanh thu 7 ngày qua (Recharts)
-│   │   ├── TopDrinksDonut.tsx      # Biểu đồ tròn cơ cấu món bán chạy nhất
-│   │   ├── dashboard-widgets.tsx   # Thẻ chỉ số KPI (Doanh thu, Đơn hàng, Tỷ lệ bàn...)
-│   │   ├── dashboard-charts.tsx    # Nhóm biểu đồ phân tích trên dashboard
-│   │   ├── shared.tsx              # PageHeading và các component dùng chung trong Admin
-│   │   └── index.ts
-│   └── ui/                         # Bộ linh kiện giao diện nền tảng (Design System)
-│       ├── button.tsx, badge.tsx, card.tsx, dialog.tsx, sheet.tsx, table.tsx...
-└── lib/                            # TẦNG TIỆN ÍCH, LOGIC NGHIỆP VỤ & LƯU TRỮ DỮ LIỆU
-    ├── utils.ts                    # Tiện ích nối class Tailwind (`cn = clsx + twMerge`)
-    ├── shopify.ts                  # Tích hợp Shopify Storefront GraphQL & Mock Demo Catalog
-    ├── admin/
-    │   ├── access.ts               # Kiểm soát quyền truy cập Admin qua biến môi trường
-    │   ├── format.ts               # Định dạng tiền tệ VND, tỷ lệ thuế VAT (8%), nhãn trạng thái
-    │   └── queries.ts              # Các hàm lấy dữ liệu Admin (Overview, Tables, Menu, Orders)
-    ├── store/
-    │   └── cart-store.ts           # Global Store Zustand cho giỏ hàng, áp mã ưu đãi
-    └── db/
-        ├── index.ts                # Khởi tạo kết nối Drizzle ORM với PostgreSQL
-        ├── schema.ts               # Định nghĩa Schema: adminTables, adminMenuItems, adminOrders
-        └── mock-store.ts           # Cơ chế In-memory Fallback Store hoàn chỉnh tự phục hồi
+├── app/
+│   ├── layout.tsx, page.tsx, globals.css     # Storefront (trang chủ)
+│   ├── cart/, checkout/, account/[...slug]/   # Giỏ hàng, thanh toán, tài khoản
+│   ├── api/cart/route.ts                      # Route Handler giỏ hàng
+│   ├── api/favorites/route.ts                 # Route Handler yêu thích (cookie)
+│   └── admin/
+│       ├── actions.ts                         # Server Actions (gọi Java qua lib/api-client.ts)
+│       ├── layout.tsx, page.tsx               # Dashboard
+│       └── analytics/, customers/, inventory/, menu/, orders/, pos/,
+│           reservations/, schedule/, settings/, staff/, tables/
+├── components/
+│   ├── storefront/   Header, Hero, DrinkMenu, CartSheet, CartDrawer, AccountDropdown
+│   ├── admin/        pos-terminal, kds-board, floor-plan, TableGrid, reservations-management,
+│   │                 inventory-table, menu-management, add-item-dialog, online-orders,
+│   │                 staff-management, schedule-management, dashboard-*, KpiMetrics,
+│   │                 RevenueChart, TopDrinksDonut, admin-header, admin-sidebar, shared
+│   ├── ui/           Thành phần shadcn/ui
+│   └── storefront.tsx, coffee-footer.tsx, role-switcher-view.tsx, theme-provider.tsx
+├── lib/
+│   ├── api-client.ts       # Proxy có kiểu tới Backend Java (JAVA_BACKEND_URL)
+│   ├── admin/              access.ts, format.ts (VAT 8%), queries.ts
+│   ├── db/                 index.ts (Drizzle), schema.ts, mock-store.ts
+│   ├── store/cart-store.ts # Zustand
+│   └── shopify.ts, utils.ts
+└── scripts/test-ui-ux.mjs  # 25 test UI/UX
 ```
 
-### 1.4.2. Cấu trúc Cây Thư mục Backend Java thuần OOP Quy chuẩn (`backend-java`)
-Dưới đây là cấu trúc gói Maven **Java SE thuần túy (Không dùng Spring Boot)** thực tế của dự án. Mỗi pattern nằm trong một package riêng dưới `com.dalatcafe.patterns`, kèm một lớp kiểm thử JUnit 5 cùng tên trong `src/test/java/com/dalatcafe/patterns/`:
+### 1.3.2. Backend Java (`backend-java`)
+Đây là cấu trúc gói Maven **Java SE thuần (không dùng Spring Boot)** thực tế của dự án. Mỗi pattern có package riêng dưới `com.dalatcafe.patterns`, và một lớp kiểm thử JUnit 5 cùng tên trong `src/test/java/com/dalatcafe/patterns/`:
 
 ```text
 backend-java/
@@ -306,64 +136,6 @@ backend-java/
 
 ---
 
-## 1.5. Cơ chế Giao tiếp Frontend – Backend & Xử lý Dữ liệu
-
-### 1.5.1. Hiện trạng Thực tế trong Mã nguồn Frontend Next.js
-Frontend Next.js vẫn tự chạy được khi không có Backend Java (Self-contained) nhờ hai cơ chế xử lý dữ liệu dưới đây; khi Backend Java hoạt động, các thao tác POS được chuyển tiếp như mô tả tại mục 1.5.2:
-1. **Next.js Server Actions (`frontend-nextjs/app/admin/actions.ts`):**
-   - Đảm nhận toàn bộ các thao tác ghi dữ liệu của phân hệ Admin: `createOrder` (tạo đơn hàng từ POS), `updateOrderStatus` (đổi trạng thái đơn trong KDS), `markOrderPaid` (chốt thanh toán tại bàn), `toggleItemInStock` (bật/tắt bán món), `createMenuItem` (thêm món mới).
-   - Cơ chế hoạt động: Chạy trực tiếp trên Server Next.js, gọi trực tiếp vào Drizzle ORM (nếu cấu hình PostgreSQL) hoặc tự động chuyển hướng sang In-memory Mock Store (`lib/db/mock-store.ts`). Sau khi thao tác thành công, Server Action gọi `revalidatePath('/admin', 'layout')` để tự động làm mới giao diện người dùng mà không cần reload trang.
-2. **Next.js Route Handlers (`frontend-nextjs/app/api/`):**
-   - `/api/cart` (`GET`, `POST`): Quản lý giỏ hàng của khách hàng. Hỗ trợ các action: `add` (thêm món kèm lựa chọn size/sữa/đá/đường), `quantity` (cập nhật số lượng), `discount` (áp dụng mã ưu đãi `WELCOME10` giảm 10%), `note` (ghi chú cho barista).
-   - `/api/favorites` (`GET`, `POST`): Lưu trữ và truy xuất danh sách mã sản phẩm yêu thích thông qua HTTP Cookie bảo mật (`dalatcafe-favorites`).
-3. **Cơ chế chịu lỗi (Fault-Tolerance & Resilience):**
-   - Nếu không có cơ sở dữ liệu bên ngoài (`process.env.DATABASE_URL` rỗng hoặc kết nối DB thất bại), toàn bộ hệ thống tự động kích hoạt `mock-store.ts` với đầy đủ dữ liệu mẫu (15 bàn phục vụ, 14 món thực đơn, lịch sử đơn hàng và khách hàng) đảm bảo tỷ lệ lỗi crash là 0%.
-
-### 1.5.2. Kiến trúc Giao tiếp Tích hợp với Backend Java thuần (Issue #14)
-Server Actions chuyển tiếp nghiệp vụ POS sang Backend Java SE qua lớp proxy `frontend-nextjs/lib/api-client.ts` theo chuẩn RESTful HTTP:
-- **Giao thức trao đổi:** HTTP 1.1 / JSON (MIME type: `application/json; charset=UTF-8`), envelope `{ ok, data, message }` hoặc `{ ok: false, error, code }`.
-- **Địa chỉ máy chủ Java Backend:** `http://localhost:8080` mặc định, cấu hình qua biến môi trường `JAVA_BACKEND_URL` (giá trị `off` để tắt). Mỗi request gửi header `X-User-Role: STAFF` và hết hạn sau 2,5 giây.
-- **Ánh xạ Server Action → Endpoint Java:**
-  - `createOrder` → `POST /api/checkout` (chỉ đơn đã thanh toán): kích hoạt **PosCheckoutFacade** (Decorator, Builder, Strategy, Factory, Observer). Món được ghép theo **tên** qua `GET /api/menu` vì hai kho đánh số món độc lập; đơn thành công được ghi lại cục bộ với mã đơn do Java cấp để KDS và sơ đồ bàn hiển thị.
-  - `updateTableStatus` → `PUT /api/tables/{id}`: Java kiểm tra số khách theo sức chứa bàn.
-  - `createReservation` → `POST /api/reservations`: chạy chuỗi **Chain of Responsibility** trước khi ghi nhận.
-- **Quy tắc chịu lỗi (Zero-Crash):** Java trả 4xx → báo lỗi nghiệp vụ cho nhân viên, không ghi dữ liệu. Java không phản hồi (lỗi mạng, quá hạn, 5xx) → tự động ghi vào Mock Store cục bộ. Món Java không có hoặc tuỳ chọn có phụ thu → giữ đơn ở kho cục bộ thay vì gửi sang Java với giá sai.
-
----
-
-## 1.6. Cơ chế Xác thực & Phân quyền (Authentication & Authorization)
-
-### 1.6.1. Xác minh Thực tế từ Mã nguồn Dự án
-- Qua rà soát toàn bộ cây thư mục `frontend-nextjs/`, cơ chế kiểm soát truy cập hiện tại được định nghĩa tập trung tại file `frontend-nextjs/lib/admin/access.ts`:
-  ```typescript
-  // Staff sign-in can be configured with REQUIRE_ADMIN_AUTH in production.
-  // By default, admin access is enabled for development and preview.
-  export function isAdminAccessAllowed() {
-    if (process.env.REQUIRE_ADMIN_AUTH === 'true') {
-      return false
-    }
-    return true
-  }
-
-  export function assertAdminAccess() {
-    if (!isAdminAccessAllowed()) {
-      throw new Error('Đà Lạt Cafe Admin requires staff sign-in before it can be used on a deployed site.')
-    }
-  }
-  ```
-- **Kết luận:** Trong mã nguồn thực tế, **chưa triển khai Spring Security, chưa có bộ lọc JWT (`JwtAuthenticationFilter`), chưa có Secret Key hay cơ chế phân quyền RBAC đa cấp độ trong code**. Việc truy cập vào phân hệ Admin hiện được kiểm soát thông qua biến cờ môi trường `REQUIRE_ADMIN_AUTH`.
-
-### 1.6.2. Đặc tả Thiết kế Định hướng cho Phân quyền RBAC (Pure Java Security Design)
-Để hoàn thiện mục tiêu học thuật của đồ án, mô hình phân quyền bảo mật thuần Java được đặc tả thiết kế như sau:
-- **Nhóm quyền (Roles):**
-  1. `ROLE_ADMIN` (Chủ quán): Toàn quyền truy cập mọi phân hệ, quản lý tài chính, nhân sự và cấu hình hệ thống.
-  2. `ROLE_MANAGER` (Quản lý ca): Quản lý sơ đồ bàn, duyệt đặt bàn, kiểm soát kho và xuất báo cáo ca.
-  3. `ROLE_STAFF` (Nhân viên thu ngân / Barista): Thao tác trên màn hình POS bán hàng và màn hình KDS bếp pha chế.
-  4. `ROLE_CUSTOMER` (Khách hàng): Xem menu, đặt món trực tuyến và tích lũy điểm thưởng thành viên.
-- **Giải pháp triển khai trên Java thuần:** Sử dụng giải pháp Token-based đơn giản hoặc Session Store tự tạo bằng `ConcurrentHashMap<String, UserSession>` trong JVM, kiểm tra quyền truy cập thông qua Filter của `HttpServer` mà không phụ thuộc vào Spring Security.
-
----
-
 # 2. Bảng tổng hợp các Design Patterns GoF
 
 Dự án áp dụng trọn vẹn **9 Design Patterns chuẩn Gang of Four (GoF)** chia đều cho cả 3 nhóm (Creational, Structural, Behavioral) bằng ngôn ngữ **Java SE thuần túy (Pure OOP)**, đối chiếu tương ứng với các chức năng trên giao diện Frontend Next.js:
@@ -373,12 +145,12 @@ Dự án áp dụng trọn vẹn **9 Design Patterns chuẩn Gang of Four (GoF)*
 | **01** | **Singleton** | Creational | Quản lý thông số vận hành toàn cục (giờ mở/đóng cửa, tỷ lệ tích điểm, thời gian tự động hủy bàn) với duy nhất 1 thể hiện trong JVM. | `SystemConfigManager` | Màn hình `Settings` (`/admin/settings`) và logic tính điểm POS. | Đã cài đặt (#03), `SingletonTest` |
 | **02** | **Factory Method** | Creational | Khởi tạo bộ xử lý thanh toán theo phương thức khách chọn (`Tiền mặt`, `QR MoMo`, `Thẻ POS`) không dùng `if-else` cứng. | `IPaymentProcessor`<br>`PaymentProcessorFactory`<br>`CashPaymentProcessor`<br>`MomoQrPaymentProcessor`<br>`CardPosPaymentProcessor` | Nút chọn phương thức thanh toán tại quầy POS (`pos-terminal.tsx`). | Đã cài đặt (#04), `FactoryTest` |
 | **03** | **Builder** | Creational | Xây dựng từng bước đối tượng Đơn hàng (`Order`) có nhiều trường tùy chọn (bàn, khách, loại đơn, món, thanh toán, giảm giá, ghi chú). | `OrderBuilder`<br>`Order`<br>`OrderItem` | Thao tác lên đơn và thanh toán trên POS (`pos-terminal.tsx`). | Đã cài đặt (#06), `BuilderTest` |
-| **04** | **Decorator** | Structural | Bọc món nước cơ sở để cộng dồn giá tiền và mô tả khi khách chọn thêm Topping (Trân châu, Cheese Foam) hoặc nâng Size L. | `IBeverage`<br>`BaseCoffee`<br>`BeverageDecorator`<br>`LargeSizeDecorator`<br>`CheeseFoamDecorator`<br>`PearlToppingDecorator` | Modal tùy biến đồ uống `DrinkMenu.tsx` & chọn biến thể trên POS. | Đã cài đặt (#05), `DecoratorTest` |
-| **05** | **Adapter** | Structural | Chuyển đổi Phiếu đặt bàn trước (`Reservation`) sang Đơn hàng POS (`Order`) khi khách đến nhận bàn mà không sửa code cũ. | `IPosOrderTarget`<br>`ReservationToOrderAdapter` | Nút "Chuyển sang POS" trong `reservations-management.tsx`. | Đã cài đặt (#10), `AdapterTest` |
+| **04** | **Decorator** | Structural | Bọc món nước cơ sở để cộng dồn giá tiền và mô tả khi khách chọn thêm Topping (Trân châu, Cheese Foam) hoặc nâng Size L. | `IBeverage`<br>`BaseCoffee`<br>`BeverageDecorator`<br>`LargeSizeDecorator`<br>`CheeseFoamDecorator`<br>`PearlToppingDecorator` | Modal tuỳ biến đồ uống `DrinkMenu.tsx` (Storefront). Chọn Size L / Topping trên POS (`pos-terminal.tsx`), Java tính giá qua Decorator. | Đã cài đặt (#05), `DecoratorTest` |
+| **05** | **Adapter** | Structural | Chuyển đổi Phiếu đặt bàn trước (`Reservation`) sang Đơn hàng POS (`Order`) khi khách đến nhận bàn mà không sửa code cũ. | `IPosOrderTarget`<br>`ReservationToOrderAdapter` | Nút "Sang POS" trong `reservations-management.tsx` gọi `POST /api/reservations/{code}/transfer-pos`. | Đã cài đặt (#10), `AdapterTest` |
 | **06** | **Facade** | Structural | Một lời gọi `checkout(CheckoutRequest)` gom toàn bộ quy trình: tính giá, giảm giá, giữ kho, thanh toán, lưu đơn, phát sự kiện. | `PosCheckoutFacade`<br>`CheckoutRequest`<br>`CheckoutResult` | Nút thanh toán trên POS (`pos-terminal.tsx`) qua `POST /api/checkout`. | Đã cài đặt (#11), `FacadeTest` |
 | **07** | **Strategy** | Behavioral | Hoán đổi thuật toán giảm giá (`Phần trăm có trần`, `Số tiền cố định`, `Hạng thành viên`, `Không giảm`) tại thời điểm chạy. | `IDiscountStrategy`<br>`PercentageDiscountStrategy`<br>`FixedAmountDiscountStrategy`<br>`LoyaltyTierDiscountStrategy`<br>`NoDiscountStrategy`<br>`DiscountContext` | Mã giảm giá `WELCOME10` và ưu đãi khách quen khi checkout. | Đã cài đặt (#07), `StrategyTest` |
 | **08** | **Chain of Resp.** | Behavioral | Chuỗi kiểm tra phiếu đặt bàn: Giờ mở cửa ➔ Bàn tồn tại & sức chứa (1–20 khách) ➔ Không trùng lịch bàn. | `ReservationValidatorHandler`<br>`OperatingHoursValidator`<br>`CapacityGuestValidator`<br>`TableAvailabilityValidator`<br>`ReservationValidationChainFactory` | Đặt bàn qua `POST /api/reservations` và màn hình `reservations-management.tsx`. | Đã cài đặt (#09), `ChainTest` |
-| **09** | **Observer** | Behavioral | Khi đơn hàng hoàn tất, tự động cộng điểm thành viên, chuyển bàn sang `Cleaning` và báo bếp gỡ phiếu. | `IOrderObserver`<br>`OrderEventSubject`<br>`LoyaltyPointObserver`<br>`TableStatusSyncObserver`<br>`KitchenNotificationObserver` | Sơ đồ bàn `FloorPlan.tsx`, KDS và xếp hạng khách hàng `customers/page.tsx`. | Đã cài đặt (#08), `ObserverTest` |
+| **09** | **Observer** | Behavioral | Khi đơn hàng hoàn tất, tự động cộng điểm thành viên, chuyển bàn sang `Cleaning` và báo bếp gỡ phiếu. | `IOrderObserver`<br>`OrderEventSubject`<br>`LoyaltyPointObserver`<br>`TableStatusSyncObserver`<br>`KitchenNotificationObserver` | Sơ đồ bàn `floor-plan.tsx`, KDS và xếp hạng khách hàng `customers/page.tsx`. | Đã cài đặt (#08), `ObserverTest` |
 
 ---
 
@@ -1299,7 +1071,7 @@ public final class ReservationValidationChainFactory {
 - **Bài toán thực tế trong nghiệp vụ:**  
   Khi đơn hàng được thanh toán hoàn tất tại quầy POS, hệ thống cần kích hoạt đồng thời nhiều tác vụ phụ thuộc:
   1. Tự động quy đổi giá trị hóa đơn thành điểm thưởng thành viên (cứ 10.000 VNĐ tích 1 điểm vào hồ sơ khách hàng quen trong CRM).
-  2. Đồng bộ trạng thái bàn trên sơ đồ tầng (`FloorPlan.tsx`): Nếu khách thanh toán xong và rời quán, bàn được chuyển sang trạng thái `cleaning` để nhân viên dọn bàn.
+  2. Đồng bộ trạng thái bàn trên sơ đồ tầng (`floor-plan.tsx`): Nếu khách thanh toán xong và rời quán, bàn được chuyển sang trạng thái `cleaning` để nhân viên dọn bàn.
   3. Báo cho màn hình bếp (KDS) gỡ phiếu của đơn đã hoàn tất.
   Nếu lớp Đơn hàng trực tiếp gọi tới các Service này, mã nguồn sẽ bị phụ thuộc chéo (Tight Coupling), vi phạm nguyên tắc Single Responsibility Principle.
 - **Giải pháp kỹ thuật (Pure Java OOP):**  
@@ -1413,7 +1185,7 @@ public class LoyaltyPointObserver implements IOrderObserver {
 
 ### 4.1. State Pattern - Quản lý Vòng đời Trạng thái Đơn hàng & Bàn
 - **Mục tiêu áp dụng:**  
-  Trong màn hình Bếp pha chế (KDS Board) và Quản lý bàn (`FloorPlan.tsx`), các thực thể trải qua chu kỳ trạng thái nghiêm ngặt:
+  Trong màn hình Bếp pha chế (KDS Board) và Quản lý bàn (`floor-plan.tsx`), các thực thể trải qua chu kỳ trạng thái nghiêm ngặt:
   - Đơn hàng: `Pending` ➔ `Brewing` ➔ `Ready` ➔ `Completed`.
   - Bàn phục vụ: `Available` ➔ `Reserved` ➔ `Occupied` ➔ `Cleaning` ➔ `Available`.
 - **Giải pháp:** Áp dụng **State Pattern** đóng gói hành vi tương ứng với từng trạng thái thành các lớp riêng biệt (`PendingOrderState`, `BrewingOrderState`, `AvailableTableState`...). Điều này loại bỏ hoàn toàn các câu lệnh kiểm tra điều kiện phức tạp khi chuyển trạng thái và ngăn chặn việc nhảy trạng thái không hợp lệ (ví dụ: không thể chuyển từ `Pending` thẳng sang `Completed` mà chưa qua pha chế).
@@ -1440,7 +1212,7 @@ public class LoyaltyPointObserver implements IOrderObserver {
 | **Thư mục Backend Java** | Hoàn thành #01–#12: POJO, DAO (In-Memory/JDBC), 9 pattern, HttpServer cổng 8080 | Cấu trúc Maven Java SE OOP tại `src/main/java/com/dalatcafe/` (mục 1.4.2) |
 | **Khung công nghệ Backend** | Không dùng Spring Boot / Security / Data JPA | Thiết kế hướng đối tượng thuần túy Java SE 17+ (Pure Java OOP) |
 | **9 GoF Design Patterns** | Đã cài đặt đủ 9 pattern, mỗi pattern có lớp test JUnit 5 riêng (#13) | Sơ đồ lớp Mermaid và mã nguồn tại Mục 3 được vẽ lại theo code thực tế |
-| **Kiểm thử tự động** | 166 test JUnit 5 (`mvn test`) và 25 test UI/UX (`npm test`) chạy trên GitHub Actions | Kết quả E2E ghi tại `docs/E2E_TEST_REPORT.md` (#15) |
+| **Kiểm thử tự động** | 168 test JUnit 5 (`mvn test`) và 25 test UI/UX (`npm test`) chạy trên GitHub Actions | Kết quả E2E ghi tại [TESTING.md](TESTING.md) (#15) |
 
 ### 5.2. Lộ trình Thực hiện Backend Java Thuần (`backend-java`)
 1. **Khởi tạo cấu trúc gói Java tiêu chuẩn (Hoàn thành 🟢, #01):** Cấu trúc thư mục `src/main/java/com/dalatcafe/` theo chuẩn Maven.

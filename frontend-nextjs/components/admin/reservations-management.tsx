@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Calendar,
@@ -23,130 +23,34 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from 'sonner'
+import { createReservation, transferReservationToPos } from '@/app/admin/actions'
+import type { ReservationView } from '@/lib/admin/queries'
+import type { FloorTable } from '@/lib/db/schema'
+import type { ReservationStatusLabel } from '@/lib/db/mock-store'
 import { cn } from '@/lib/utils'
 
-export type ReservationStatus = 'Chờ xác nhận' | 'Đã đặt' | 'Hoàn thành' | 'Đã hủy'
+export type ReservationStatus = ReservationStatusLabel
+type Reservation = ReservationView
 
-interface PreOrderItem {
-  name: string
-  qty: number
-  price: number
-}
+const emptyForm = { customer: '', contact: '', email: '', date: '', time: '10:00', guests: '2', tableId: '', note: '' }
 
-interface Reservation {
-  id: string
-  customer: string
-  contact: string
-  email: string
-  dateTime: string
-  table: string
-  guests: number
-  status: ReservationStatus
-  note: string
-  preOrders: PreOrderItem[]
-}
-
-const initialReservations: Reservation[] = [
-  {
-    id: 'RES-001',
-    customer: 'Nguyễn Hoàng Nam',
-    contact: '0912 345 678',
-    email: 'nam.nguyen@gmail.com',
-    dateTime: '13/10/2026 · 15:06 - 17:07',
-    table: 'Bàn 04',
-    guests: 4,
-    status: 'Đã đặt',
-    note: 'Yêu cầu bàn gần cửa sổ, chuẩn bị trước cà phê.',
-    preOrders: [
-      { name: 'Cà phê Latte Vani Mịn', qty: 2, price: 55000 },
-      { name: 'Bánh Croissant bơ Pháp', qty: 2, price: 45000 },
-    ],
-  },
-  {
-    id: 'RES-002',
-    customer: 'Trần Thu Hà',
-    contact: '0987 654 321',
-    email: 'ha.tran@outlook.com',
-    dateTime: '13/10/2026 · 18:00 - 20:00',
-    table: 'Bàn 07',
-    guests: 2,
-    status: 'Đã đặt',
-    note: 'Kỷ niệm ngày cưới, chuẩn bị nến nhỏ nếu có.',
-    preOrders: [
-      { name: 'Cold Brew Cam Vàng', qty: 2, price: 55000 },
-    ],
-  },
-  {
-    id: 'RES-003',
-    customer: 'Lê Minh Khôi',
-    contact: '0903 111 222',
-    email: 'khoi.le@corp.vn',
-    dateTime: '14/10/2026 · 09:00 - 11:30',
-    table: 'Phòng họp VIP',
-    guests: 6,
-    status: 'Chờ xác nhận',
-    note: 'Họp đối tác, cần không gian thật yên tĩnh.',
-    preOrders: [
-      { name: 'Cà phê Muối Đặc Biệt', qty: 4, price: 45000 },
-      { name: 'Bạc Xỉu Sữa Tươi Sài Gòn', qty: 2, price: 45000 },
-    ],
-  },
-  {
-    id: 'RES-004',
-    customer: 'Phạm Thanh Thảo',
-    contact: '0934 888 999',
-    email: 'thao.pham@gmail.com',
-    dateTime: '14/10/2026 · 14:00 - 16:00',
-    table: 'Bàn 02',
-    guests: 3,
-    status: 'Chờ xác nhận',
-    note: 'Bàn sinh nhật bạn bè.',
-    preOrders: [],
-  },
-  {
-    id: 'RES-005',
-    customer: 'Hoàng Văn Dũng',
-    contact: '0977 444 555',
-    email: 'dung.hoang@gmail.com',
-    dateTime: '12/10/2026 · 10:00 - 12:00',
-    table: 'Sân vườn 01',
-    guests: 5,
-    status: 'Hoàn thành',
-    note: 'Khách thanh toán thẻ Visa.',
-    preOrders: [],
-  },
-  {
-    id: 'RES-006',
-    customer: 'Đặng Ngọc Mai',
-    contact: '0918 222 333',
-    email: 'mai.dang@gmail.com',
-    dateTime: '11/10/2026 · 16:30 - 18:30',
-    table: 'Bàn 01',
-    guests: 2,
-    status: 'Hoàn thành',
-    note: 'Khách quen chi nhánh.',
-    preOrders: [],
-  },
-  {
-    id: 'RES-007',
-    customer: 'Bùi Anh Tuấn',
-    contact: '0922 666 777',
-    email: 'tuan.bui@gmail.com',
-    dateTime: '10/10/2026 · 19:00 - 21:00',
-    table: 'Bàn 08',
-    guests: 4,
-    status: 'Đã hủy',
-    note: 'Khách báo bận đột xuất.',
-    preOrders: [],
-  },
-]
-
-export function ReservationsManagement() {
+export function ReservationsManagement({
+  reservations: initial,
+  tables,
+  javaOnline,
+}: {
+  reservations: ReservationView[]
+  tables: FloorTable[]
+  javaOnline: boolean
+}) {
   const router = useRouter()
-  const [reservations, setReservations] = useState<Reservation[]>(initialReservations)
+  const [reservations, setReservations] = useState<Reservation[]>(initial)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [selectedRes, setSelectedRes] = useState<Reservation | null>(null)
+  const [creating, setCreating] = useState(false)
+  const [form, setForm] = useState(emptyForm)
+  const [pending, startTransition] = useTransition()
 
   // Status counters: Tổng (7), Chờ xác nhận (2), Đã xác nhận/đặt (2), Hoàn thành (2), Đã hủy (3)
   const totalCount = reservations.length
@@ -172,9 +76,48 @@ export function ReservationsManagement() {
   }
 
   const handleTransferToPOS = (res: Reservation) => {
-    toast.success(`Đã chuyển đơn đặt bàn của "${res.customer}" sang quầy POS với ${res.preOrders.length} món đặt trước!`)
-    setSelectedRes(null)
-    router.push('/admin/pos')
+    startTransition(async () => {
+      // ReservationToOrderAdapter (Java, or its frontend mirror for local bookings) opens the POS order.
+      const result = await transferReservationToPos(res.id, res.source, res.guests)
+      if (!result.ok) {
+        toast.error(result.error)
+        return
+      }
+      toast.success(`Đã chuyển phiếu của "${res.customer}" sang quầy POS (${res.preOrders.length} món đặt trước).`, {
+        description: result.message,
+      })
+      setSelectedRes(null)
+      router.push('/admin/pos?tab=kitchen')
+    })
+  }
+
+  const handleCreate = () => {
+    const tableId = Number(form.tableId)
+    const guests = Number(form.guests)
+    if (!form.customer.trim() || !form.contact.trim() || !form.date || !form.time || !tableId) {
+      toast.error('Nhập đủ tên, số điện thoại, ngày giờ và bàn.')
+      return
+    }
+    startTransition(async () => {
+      const result = await createReservation({
+        customer: form.customer,
+        contact: form.contact,
+        email: form.email,
+        note: form.note,
+        // Local time at the café (UTC+7), as the Java OperatingHoursValidator expects.
+        dateTime: new Date(`${form.date}T${form.time}:00+07:00`).toISOString(),
+        guests,
+        tableId,
+      })
+      if (!result.ok) {
+        toast.error(result.error)
+        return
+      }
+      toast.success('Đã tiếp nhận phiếu đặt bàn.', { description: result.message })
+      setCreating(false)
+      setForm(emptyForm)
+      router.refresh()
+    })
   }
 
   const handleExportCSV = () => {
@@ -257,8 +200,22 @@ export function ReservationsManagement() {
               <Download className="size-4 text-[#5A3E2B]" />
               <span>Xuất CSV</span>
             </Button>
+
+            <Button
+              onClick={() => setCreating(true)}
+              className="h-10 rounded-lg px-4 bg-[#5A3E2B] hover:bg-[#684732] text-white text-xs md:text-sm font-bold gap-2 shadow-xs"
+            >
+              <CalendarCheck className="size-4" />
+              <span>Tạo phiếu đặt bàn</span>
+            </Button>
           </div>
         </div>
+
+        {!javaOnline && (
+          <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            Không kết nối được Backend Java: đang hiển thị phiếu lưu cục bộ. Phiếu mới sẽ được lưu cục bộ.
+          </p>
+        )}
 
         {/* 3. Bảng đặt bàn */}
         <div className="overflow-x-auto rounded-lg border border-stone-200/90 bg-white">
@@ -277,7 +234,12 @@ export function ReservationsManagement() {
               {filtered.map((r) => (
                 <tr key={r.id} className="hover:bg-stone-50/60 transition-colors">
                   <td className="py-3.5 px-3">
-                    <span className="font-mono text-[11px] text-stone-400 block">{r.id}</span>
+                    <span className="font-mono text-[11px] text-stone-400 block">
+                      {r.id}
+                      <span className="ml-1.5 font-sans font-semibold text-[10px] text-stone-500">
+                        {r.source === 'java' ? '· Java' : '· Cục bộ'}
+                      </span>
+                    </span>
                     <strong className="font-bold text-stone-900 text-sm">{r.customer}</strong>
                     {r.preOrders.length > 0 && (
                       <span className="inline-flex items-center gap-1 text-[10px] text-amber-800 font-semibold mt-0.5">
@@ -329,6 +291,7 @@ export function ReservationsManagement() {
                       </Button>
                       <Button
                         size="sm"
+                        disabled={pending || r.status === 'Hoàn thành' || r.status === 'Đã hủy'}
                         onClick={() => handleTransferToPOS(r)}
                         className="h-8 px-2.5 rounded-md text-xs bg-[#5A3E2B] hover:bg-[#684732] text-white font-bold gap-1.5 shadow-xs"
                       >
@@ -423,6 +386,7 @@ export function ReservationsManagement() {
                 Đóng
               </Button>
               <Button
+                disabled={pending || selectedRes.status === 'Hoàn thành' || selectedRes.status === 'Đã hủy'}
                 onClick={() => handleTransferToPOS(selectedRes)}
                 className="h-10 rounded-lg bg-[#5A3E2B] hover:bg-[#684732] text-white font-bold text-xs gap-1.5"
               >
@@ -432,6 +396,73 @@ export function ReservationsManagement() {
             </DialogFooter>
           </DialogContent>
         )}
+      </Dialog>
+
+      {/* MODAL: TẠO PHIẾU ĐẶT BÀN (POST /api/reservations, Chain of Responsibility) */}
+      <Dialog open={creating} onOpenChange={setCreating}>
+        <DialogContent className="max-w-md rounded-xl border-stone-200 bg-white text-stone-900 p-6 font-sans shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-stone-900">Tạo phiếu đặt bàn</DialogTitle>
+            <DialogDescription className="text-xs text-stone-500">
+              Phiếu được kiểm tra giờ mở cửa (07:00–22:00), sức chứa bàn và lịch trùng trước khi ghi nhận.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="grid grid-cols-2 gap-3 text-xs pt-1"
+            onSubmit={(e) => {
+              e.preventDefault()
+              handleCreate()
+            }}
+          >
+            <label className="col-span-2 space-y-1">
+              <span className="font-semibold text-stone-600">Tên khách</span>
+              <input required aria-label="Tên khách" value={form.customer} onChange={(e) => setForm({ ...form, customer: e.target.value })} className="w-full h-9 rounded-lg border border-stone-200 px-2.5 focus:outline-none focus:border-[#5A3E2B]" />
+            </label>
+            <label className="space-y-1">
+              <span className="font-semibold text-stone-600">Số điện thoại</span>
+              <input required inputMode="tel" aria-label="Số điện thoại" value={form.contact} onChange={(e) => setForm({ ...form, contact: e.target.value })} className="w-full h-9 rounded-lg border border-stone-200 px-2.5 font-mono focus:outline-none focus:border-[#5A3E2B]" />
+            </label>
+            <label className="space-y-1">
+              <span className="font-semibold text-stone-600">Email</span>
+              <input type="email" aria-label="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full h-9 rounded-lg border border-stone-200 px-2.5 focus:outline-none focus:border-[#5A3E2B]" />
+            </label>
+            <label className="space-y-1">
+              <span className="font-semibold text-stone-600">Ngày</span>
+              <input required type="date" aria-label="Ngày" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="w-full h-9 rounded-lg border border-stone-200 px-2.5 focus:outline-none focus:border-[#5A3E2B]" />
+            </label>
+            <label className="space-y-1">
+              <span className="font-semibold text-stone-600">Giờ đến</span>
+              <input required type="time" aria-label="Giờ đến" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} className="w-full h-9 rounded-lg border border-stone-200 px-2.5 focus:outline-none focus:border-[#5A3E2B]" />
+            </label>
+            <label className="space-y-1">
+              <span className="font-semibold text-stone-600">Bàn</span>
+              <select required aria-label="Bàn" value={form.tableId} onChange={(e) => setForm({ ...form, tableId: e.target.value })} className="w-full h-9 rounded-lg border border-stone-200 bg-white px-2 focus:outline-none focus:border-[#5A3E2B]">
+                <option value="">Chọn bàn…</option>
+                {tables.map((t) => (
+                  <option key={t.id} value={String(t.id)}>
+                    {t.name.replace('Table', 'Bàn')} ({t.seats} chỗ)
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1">
+              <span className="font-semibold text-stone-600">Số khách</span>
+              <input required type="number" min={1} max={20} aria-label="Số khách" value={form.guests} onChange={(e) => setForm({ ...form, guests: e.target.value })} className="w-full h-9 rounded-lg border border-stone-200 px-2.5 tabular-nums focus:outline-none focus:border-[#5A3E2B]" />
+            </label>
+            <label className="col-span-2 space-y-1">
+              <span className="font-semibold text-stone-600">Ghi chú</span>
+              <input aria-label="Ghi chú" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} className="w-full h-9 rounded-lg border border-stone-200 px-2.5 focus:outline-none focus:border-[#5A3E2B]" />
+            </label>
+            <DialogFooter className="col-span-2 pt-2 flex gap-2">
+              <Button type="button" variant="ghost" onClick={() => setCreating(false)} className="h-10 rounded-lg text-xs text-stone-500">
+                Huỷ
+              </Button>
+              <Button type="submit" disabled={pending} className="h-10 rounded-lg bg-[#5A3E2B] hover:bg-[#684732] text-white font-bold text-xs">
+                Lưu phiếu
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
       </Dialog>
     </div>
   )
