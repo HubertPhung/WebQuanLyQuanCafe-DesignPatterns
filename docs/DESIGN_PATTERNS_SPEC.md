@@ -909,115 +909,99 @@ public class UpsizeLargeDecorator extends ToppingDecorator {
 - **Bài toán thực tế trong nghiệp vụ:**  
   Trên màn hình Quản lý Đặt bàn (`reservations-management.tsx`), khi khách đã đặt chỗ trước đến quán, nhân viên thu ngân nhấn nút "Chuyển đơn sang POS" (`handleTransferToPOS`). Đối tượng Phiếu đặt bàn (`Reservation`) có các thuộc tính: `customer`, `contact`, `table`, `dateTime`, `guests`, và danh sách món gọi trước `preOrders`. Trong khi đó, màn hình POS chỉ làm việc với giao diện chuẩn `IOrderTarget` (chứa `getOrderCode()`, `getCustomerName()`, `getTableId()`, `getLineItems()`, `calculateInitialTotal()`). Cấu trúc hai bên không tương thích trực tiếp.
 - **Giải pháp kỹ thuật (Pure Java OOP):**  
-  Áp dụng **Adapter Pattern**. Lớp `ReservationToOrderAdapter` triển khai giao diện mục tiêu `IOrderTarget` và bọc lấy thực thể nguồn `Reservation` (Adaptee). Adapter tự động trích xuất mã bàn dạng số từ chuỗi tên bàn, ánh xạ danh sách `PreOrderItem` sang danh sách `OrderItem` của đơn POS mà không cần thay đổi bất kỳ dòng code nào của lớp `Reservation`.
+  Áp dụng **Object Adapter Pattern**. Màn hình POS chỉ làm việc với giao diện đích `IPosOrderTarget`. Lớp `ReservationToOrderAdapter` giữ một `Reservation` (Adaptee, không nhận `null`) và chuyển đổi khi được gọi: mã đặt bàn trở thành mã đơn, các món đặt trước (`preOrders`) được **sao chép** thành `OrderItem` mới, đơn mới có loại `DINE_IN`, trạng thái `PENDING`, thanh toán `UNPAID` và tổng tiền được tính lại. Adapter chỉ đọc Adaptee, không sửa `Reservation` hay `Order` gốc.
 - **Bảng ánh xạ thành phần (Participants Mapping):**
   | Vai trò GoF | Class / Interface Java | Trách nhiệm cụ thể |
   | :--- | :--- | :--- |
-  | **Target Interface** | `IOrderTarget` | Giao diện chuẩn mà hệ thống POS hiểu và yêu cầu |
-  | **Adaptee** | `Reservation` | Đối tượng nguồn của phân hệ Đặt bàn trước với cấu trúc dữ liệu riêng |
-  | **Adapter** | `ReservationToOrderAdapter` | Triển khai `IOrderTarget`, chuyển đổi tương thích từ `Reservation` |
-  | **Client** | `PosTerminal`, `PosCheckoutFacade` | Tiêu thụ đơn hàng thông qua `IOrderTarget` mà không bận tâm xuất xứ |
+  | **Target** | `IPosOrderTarget` | Giao diện POS mong đợi: `toPosOrder()`, `getAssignedTableId()`, `getCustomerIdentifier()` |
+  | **Adaptee** | `Reservation` | Phiếu đặt bàn: khách, liên hệ, bàn, ghi chú, danh sách món đặt trước |
+  | **Adapter** | `ReservationToOrderAdapter` | Chuyển `Reservation` thành `Order` POS đang hoạt động |
+  | **Client** | Luồng tiếp nhận khách tại quầy POS | Gọi `toPosOrder()` khi khách đặt trước đến nhận bàn |
 
 - **Sơ đồ lớp (Class Diagram):**
 ```mermaid
 classDiagram
-    class IOrderTarget {
+    class IPosOrderTarget {
         <<interface>>
-        +getOrderCode() String
-        +getCustomerName() String
-        +getTableId() Integer
-        +getItems() List~OrderItem~
-        +calculateTotal() double
-    }
-
-    class Reservation {
-        -String id
-        -String customer
-        -String contact
-        -String table
-        -int guests
-        -List~PreOrderItem~ preOrders
-        +getId() String
-        +getCustomer() String
-        +getTable() String
-        +getPreOrders() List~PreOrderItem~
+        +toPosOrder() Order
+        +getAssignedTableId() int
+        +getCustomerIdentifier() String
     }
 
     class ReservationToOrderAdapter {
         -Reservation reservation
         +ReservationToOrderAdapter(Reservation reservation)
-        +getOrderCode() String
-        +getCustomerName() String
-        +getTableId() Integer
-        +getItems() List~OrderItem~
-        +calculateTotal() double
+        +toPosOrder() Order
+        +getAssignedTableId() int
+        +getCustomerIdentifier() String
+        -copyOf(OrderItem item)$ OrderItem
     }
 
-    IOrderTarget <|.. ReservationToOrderAdapter
-    ReservationToOrderAdapter o--> Reservation : adapts
+    class Reservation {
+        -String reservationCode
+        -String customer
+        -String contact
+        -Integer tableId
+        -String note
+        -List~OrderItem~ preOrders
+        +getPreOrders() List~OrderItem~
+    }
+
+    class Order {
+        -String orderCode
+        -Integer tableId
+        -OrderType orderType
+        -OrderStatus status
+        -PaymentStatus paymentStatus
+        +addItem(OrderItem item)
+        +recalculateTotals()
+    }
+
+    IPosOrderTarget <|.. ReservationToOrderAdapter
+    ReservationToOrderAdapter o--> Reservation : adaptee
+    ReservationToOrderAdapter ..> Order : creates
 ```
 
-- **Mã nguồn minh họa (Pure Java):**
+- **Mã nguồn thực tế** (`backend-java/src/main/java/com/dalatcafe/patterns/adapter/ReservationToOrderAdapter.java`):
 ```java
-package com.dalatcafe.patterns.adapter;
-
-import java.util.ArrayList;
-import java.util.List;
-
-public interface IOrderTarget {
-    String getOrderCode();
-    String getCustomerName();
-    Integer getTableId();
-    List<OrderItem> getItems();
-    double calculateTotal();
-}
-
-public class ReservationToOrderAdapter implements IOrderTarget {
+public class ReservationToOrderAdapter implements IPosOrderTarget {
     private final Reservation reservation;
 
     public ReservationToOrderAdapter(Reservation reservation) {
-        this.reservation = reservation;
+        this.reservation = Objects.requireNonNull(reservation, "reservation must not be null");
     }
 
     @Override
-    public String getOrderCode() {
-        return "ORD-FROM-" + reservation.getId();
-    }
-
-    @Override
-    public String getCustomerName() {
-        return reservation.getCustomer() + " (" + reservation.getContact() + ")";
-    }
-
-    @Override
-    public Integer getTableId() {
-        String tableName = reservation.getTable(); // Vd: "Bàn 04" -> trích xuất số 4
-        try {
-            return Integer.parseInt(tableName.replaceAll("[^0-9]", ""));
-        } catch (Exception e) {
-            return null;
+    public Order toPosOrder() {
+        Order order = new Order(null, reservation.getReservationCode(), getCustomerIdentifier(),
+                reservation.getTableId(), OrderType.DINE_IN);
+        order.setStatus(OrderStatus.PENDING);
+        order.setPaymentStatus(PaymentStatus.UNPAID);
+        order.setNote(reservation.getNote());
+        if (reservation.getPreOrders() != null) {
+            for (OrderItem source : reservation.getPreOrders()) {
+                if (source != null) {
+                    order.addItem(copyOf(source));
+                }
+            }
         }
+        order.recalculateTotals();
+        return order;
     }
 
     @Override
-    public List<OrderItem> getItems() {
-        List<OrderItem> list = new ArrayList<>();
-        for (PreOrderItem pre : reservation.getPreOrders()) {
-            list.add(new OrderItem(pre.getName(), pre.getQty(), pre.getPrice()));
-        }
-        return list;
+    public int getAssignedTableId() {
+        return reservation.getTableId() != null ? reservation.getTableId() : -1;
     }
 
     @Override
-    public double calculateTotal() {
-        double sum = 0;
-        for (PreOrderItem pre : reservation.getPreOrders()) {
-            sum += pre.getPrice() * pre.getQty();
-        }
-        return sum;
+    public String getCustomerIdentifier() {
+        String name = reservation.getCustomer();
+        return name != null && !name.isBlank() ? name : reservation.getContact();
     }
 }
 ```
+- **Kiểm thử:** `AdapterTest` (chuyển đổi đầy đủ dữ liệu, sao chép món độc lập với phiếu gốc, phiếu không có bàn trả `-1`, từ chối `null`).
 
 ---
 
