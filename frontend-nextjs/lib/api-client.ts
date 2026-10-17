@@ -264,3 +264,10 @@ export type JavaCustomerSummary = JavaCustomer & { lastVisit: string | null }
 export function fetchCustomers(): Promise<JavaResult<JavaCustomerSummary[]>> {
   return request<JavaCustomerSummary[]>('/api/customers', { method: 'GET' })
 }
+
+export type VoucherVerdict = { code: string; valid: boolean; discountAmount: number; description: string }
+
+// POST /api/vouchers/validate (public): previews a voucher with the Strategy checkout uses.
+export function validateVoucher(code: string, subtotal: number): Promise<JavaResult<VoucherVerdict>> {
+  return request<VoucherVerdict>('/api/vouchers/validate', { method: 'POST', body: { code, subtotal } })
+}
