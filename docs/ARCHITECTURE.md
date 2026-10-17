@@ -89,16 +89,18 @@ Lưu ý: kho của frontend và kho của Java là hai bộ dữ liệu riêng, 
 
 | Server Action | Endpoint Java | Điều kiện gửi sang Java | Sau khi Java trả lời |
 | :--- | :--- | :--- | :--- |
-| `createOrder` | `POST /api/checkout` | Đơn **đã thanh toán**; mọi món đều có trong menu Java (ghép theo **tên**, vì hai kho đánh số món khác nhau); không có biến thể tính phụ thu | Ghi một bản sao vào kho frontend, mang mã đơn của Java, để KDS và sơ đồ bàn hiển thị |
+| `createOrder` | `POST /api/checkout` | Đơn **đã thanh toán**; mọi món đều có trong menu Java (ghép theo **tên**, vì hai kho đánh số món khác nhau); không có biến thể tính phụ thu. Size L / topping được gửi dưới dạng `customizations` | Ghi một bản sao vào kho frontend, mang mã đơn của Java, để KDS và sơ đồ bàn hiển thị |
 | `updateTableStatus` | `PUT /api/tables/{id}` | Luôn gửi | Cập nhật kho frontend |
 | `createReservation` | `POST /api/reservations` | Luôn gửi | Java chạy chuỗi kiểm định, kết quả của Java là quyết định cuối cùng |
+| `getReservations` (trang Đặt bàn) | `GET /api/reservations` | Luôn gửi | Gộp phiếu Java với phiếu cục bộ; Java không phản hồi thì chỉ hiện phiếu cục bộ |
+| `transferReservationToPos` | `POST /api/reservations/{code}/transfer-pos` | Phiếu có nguồn Java | Ghi bản sao đơn vào kho frontend; phiếu cục bộ dùng bản sao Adapter phía frontend (`transferMockReservation`) |
 
 ### 2.3. Quy tắc chịu lỗi (Zero-Crash & An toàn tiền)
 - **Java từ chối (4xx):** trả lỗi nghiệp vụ cho nhân viên, không ghi dữ liệu ở đâu cả.
 - **Java không phản hồi:** Server Action ghi vào kho frontend (Drizzle hoặc Mock Store). Giao diện không crash.
 - **Đơn chưa thanh toán:** chỉ lưu ở frontend, vì `/api/checkout` luôn thu tiền.
 - **Món Java không có, hoặc biến thể có phụ thu:** đơn lưu ở frontend thay vì gửi sang Java với giá sai.
-- **Chế độ JDBC mất kết nối:** Java trả `503 DATABASE_UNAVAILABLE` và không thu tiền. *Giới hạn hiện tại:* frontend đang xếp mọi lỗi 5xx vào loại `unreachable` (xem [TESTING §5](TESTING.md#5-giới-hạn-đã-biết)).
+- **Chế độ JDBC mất kết nối:** Java trả `503 DATABASE_UNAVAILABLE` và không thu tiền. `api-client` xếp mã này vào loại `rejected` (không phải `unreachable`), nên nhân viên nhận lỗi và đơn **không** bị ghi cục bộ như đã thanh toán. Các lỗi 5xx khác vẫn được coi là `unreachable`.
 
 ---
 
@@ -202,7 +204,10 @@ sequenceDiagram
         Handler-->>WebUI: 400 CHAIN_VALIDATION_FAILED
     end
 
-    Note over Customer,PosUI: Khách đến quán nhận bàn (bước chuyển sang POS: Chưa triển khai endpoint)
-    PosUI->>Adapter: new ReservationToOrderAdapter(reservation)
-    Adapter-->>PosUI: toPosOrder() → Order DINE_IN, PENDING, UNPAID kèm món đặt trước
+    Note over Customer,PosUI: Khách đến quán nhận bàn: bấm "Sang POS"
+    PosUI->>Handler: POST /api/reservations/{code}/transfer-pos
+    Handler->>Adapter: new ReservationToOrderAdapter(reservation).toPosOrder()
+    Adapter-->>Handler: Order DINE_IN, PENDING, UNPAID kèm món đặt trước
+    Handler->>Handler: Lưu đơn, phiếu → SEATED, bàn → OCCUPIED
+    Handler-->>PosUI: 200 { orderCode, items, total } → đơn hiện trên KDS
 ```

@@ -6,7 +6,7 @@
 ![Java SE 17](https://img.shields.io/badge/Backend-Pure%20Java%20SE%2017-orange?style=for-the-badge&logo=openjdk)
 ![Design Patterns](https://img.shields.io/badge/Architecture-9%20GoF%20Patterns-success?style=for-the-badge)
 [![CI/CD Pipeline](https://github.com/HubertPhung/WebQuanLyQuanCafe-DesignPatterns/actions/workflows/ci.yml/badge.svg)](https://github.com/HubertPhung/WebQuanLyQuanCafe-DesignPatterns/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/Tests-166%20JUnit%20%2B%2025%20UI-brightgreen?style=for-the-badge)
+![Tests](https://img.shields.io/badge/Tests-168%20JUnit%20%2B%2025%20UI-brightgreen?style=for-the-badge)
 
 ---
 
@@ -16,7 +16,7 @@
 1. **Frontend Next.js 16** (React 19, Tailwind v4): Storefront cho khách đặt món, và khu quản trị gồm POS, bếp KDS, sơ đồ bàn, đặt bàn, kho, CRM, báo cáo.
 2. **Backend Java SE 17 thuần**: cài đặt đủ **9 mẫu thiết kế GoF**, không dùng Spring Boot / Spring Security / Spring Data JPA.
 
-Frontend chạy được một mình, nhờ kho dữ liệu trong bộ nhớ. Khi Backend Java đang chạy, các nghiệp vụ POS (chốt đơn, đổi trạng thái bàn, đặt bàn) được chuyển sang Java xử lý. Chi tiết tại [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Danh mục tính năng và trạng thái triển khai xem [docs/PROJECT_MANAGEMENT.md](docs/PROJECT_MANAGEMENT.md).
+Frontend chạy được một mình, nhờ kho dữ liệu trong bộ nhớ. Khi Backend Java đang chạy, các nghiệp vụ POS được chuyển sang Java xử lý: chốt đơn (kể cả Size L / topping), đổi trạng thái bàn, tạo đặt bàn và chuyển đặt bàn sang POS. Chi tiết tại [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Danh mục tính năng và trạng thái triển khai xem [docs/PROJECT_MANAGEMENT.md](docs/PROJECT_MANAGEMENT.md).
 
 ---
 
@@ -87,7 +87,7 @@ Frontend chạy ngay mà không cần database. Nếu đặt `DATABASE_URL` (Pos
 ### 5.2. Backend Java
 ```bash
 cd backend-java
-mvn clean test                                            # 166 test JUnit 5
+mvn clean test                                            # 168 test JUnit 5
 mvn -q compile
 java -cp target/classes com.dalatcafe.server.MainServer   # cổng 8080, chế độ In-Memory
 ```
@@ -111,7 +111,7 @@ Danh sách thao tác được chuyển sang Java và quy tắc dự phòng khi J
 
 ```bash
 cd frontend-nextjs && npm test     # 25 test UI/UX (tự khởi động next dev nếu chưa có server)
-cd backend-java && mvn clean test  # 166 test JUnit 5
+cd backend-java && mvn clean test  # 168 test JUnit 5
 ```
 Danh mục test, báo cáo E2E và các giới hạn đã biết: [docs/TESTING.md](docs/TESTING.md).
 

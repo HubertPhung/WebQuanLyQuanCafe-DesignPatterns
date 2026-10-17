@@ -45,10 +45,10 @@ Cột *Frontend* là `frontend-nextjs/`, cột *Java* là `backend-java/`. Cột
 | `FEAT-POS-01` | Lên đơn nhanh, chọn bàn hoặc mang đi | **Builder** | 🟢 `pos-terminal.tsx` | 🟢 `OrderBuilder` | 🟢 |
 | `FEAT-POS-02` | Nhập tiền khách đưa, tính tiền thừa | — | 🟢 `pos-terminal.tsx` | 🟢 `changeDue` | ⚪ |
 | `FEAT-POS-03` | VAT 8% trên phần sau giảm giá | — | 🟢 `lib/admin/format.ts` | 🟢 `Order.recalculateTotals` | 🟢 |
-| `FEAT-POS-04` | Đổi điểm thành viên trừ vào hoá đơn | **Singleton** | ⚪ Nút hiển thị nhưng không gửi điểm | ⚪ `useLoyaltyPoints` bị từ chối | ⚪ |
+| `FEAT-POS-04` | Đổi điểm thành viên trừ vào hoá đơn | **Singleton** | ⚪ Nút bị vô hiệu ("chưa hỗ trợ") | ⚪ `useLoyaltyPoints` bị từ chối | ⚪ |
 | `FEAT-POS-05` | Chốt đơn & thanh toán đa kênh (Tiền mặt / QR / Thẻ) | **Facade, Factory** | 🟢 `createOrder` | 🟢 `POST /api/checkout` | 🟢 Chỉ đơn đã thanh toán |
 | `FEAT-POS-06` | Quản lý đơn online | — | 🟢 `online-orders.tsx` | ⚪ Không có endpoint đơn | ⚪ |
-| `FEAT-POS-07` | Chọn Size L / Topping cho từng dòng đơn POS | **Decorator** | ⚪ | 🟢 `Customization` + Decorator | ⚪ |
+| `FEAT-POS-07` | Chọn Size L / Topping cho từng dòng đơn POS | **Decorator** | 🟢 `pos-terminal.tsx` + `lib/admin/customizations.ts` | 🟢 `Customization` + Decorator | 🟢 gửi `customizations` |
 
 ### 1.4. Màn hình bếp (KDS)
 
@@ -71,9 +71,9 @@ Cột *Frontend* là `frontend-nextjs/`, cột *Java* là `backend-java/`. Cột
 
 | Mã | Tính năng | Pattern | Frontend | Java | Tích hợp |
 | :--- | :--- | :---: | :---: | :---: | :---: |
-| `FEAT-RES-01` | Tiếp nhận phiếu đặt bàn | — | ⚪ Chưa có form; danh sách là dữ liệu mẫu phía client | 🟢 `GET/POST /api/reservations` | 🟡 Có Server Action `createReservation`, chưa có giao diện gọi |
+| `FEAT-RES-01` | Tiếp nhận phiếu đặt bàn | — | 🟢 Form "Tạo phiếu đặt bàn"; danh sách gộp phiếu Java và phiếu cục bộ | 🟢 `GET/POST /api/reservations` | 🟢 `createReservation`, `getReservations` |
 | `FEAT-RES-02` | Kiểm định: giờ mở cửa → sức chứa → lịch bàn | **Chain of Resp.** | — | 🟢 `ReservationValidatorHandler` | 🟢 qua `createReservation` |
-| `FEAT-RES-03` | Chuyển phiếu đặt bàn sang đơn POS | **Adapter** | ⚪ Nút chỉ hiện thông báo | 🟡 `ReservationToOrderAdapter` có, chưa có endpoint | ⚪ |
+| `FEAT-RES-03` | Chuyển phiếu đặt bàn sang đơn POS | **Adapter** | 🟢 Nút "Sang POS" (`transferReservationToPos`) | 🟢 `POST /api/reservations/{code}/transfer-pos` | 🟢 (phiếu cục bộ dùng bản sao Adapter phía frontend) |
 | `FEAT-RES-04` | Xuất CSV danh sách đặt bàn | 🔷 Template Method | 🟢 `handleExportCSV` | — | — |
 
 ### 1.7. Kho, CRM & Báo cáo
@@ -109,7 +109,7 @@ Tên issue giữ nguyên như trên GitHub. Một số tên lớp trong tiêu đ
 | 09 | `[Backend][Chain]` ReservationValidator | @1convitt | #24 | `ReservationValidatorHandler` + 3 validator |
 | 10 | `[Backend][Adapter]` ReservationToOrderAdapter | @vuong123s | #25 | `ReservationToOrderAdapter`, `IPosOrderTarget` |
 | 11 | `[Backend][Facade]` PosCheckoutFacade | @HubertPhung | #26 | `PosCheckoutFacade` |
-| 12 | `[Backend][Server]` HttpServer cổng 8080 | @HubertPhung, @elgthinhnguyen | #27 | 4 handler: menu, tables, reservations, checkout. Các endpoint còn lại xem [API_SPEC §2](API_SPEC.md) |
+| 12 | `[Backend][Server]` HttpServer cổng 8080 | @HubertPhung, @elgthinhnguyen | #27 | 4 handler: menu, tables, reservations (sau bổ sung `transfer-pos`), checkout. Các endpoint còn lại xem [API_SPEC §2](API_SPEC.md) |
 | 13 | `[QA][JUnit5]` Bộ test 9 pattern | @vuong123s, @1convitt | #29, #30 | 9 lớp `*Test` trong `src/test/java/com/dalatcafe/patterns/` |
 | 14 | `[Integration][API]` Next.js ↔ Java | @HubertPhung, @0Yaam | #31, #34 | `lib/api-client.ts` |
 | 15 | `[QA][E2E]` Kiểm thử E2E & báo cáo | Cả nhóm | #29–#36 | [TESTING.md](TESTING.md) |

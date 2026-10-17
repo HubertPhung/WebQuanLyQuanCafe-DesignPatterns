@@ -36,7 +36,7 @@ Ngoại lệ: một đường dẫn chưa đăng ký nằm ngoài bốn nhóm `/
 ### 1.3. Phân quyền & CORS
 - **Vai trò** đọc từ header `X-User-Role` (`ADMIN`, `MANAGER`, `STAFF`, `CUSTOMER`). Đây chỉ là cổng phân vai cho đồ án: vai trò không được xác thực, và header `Authorization` **không** được dùng. Chi tiết tại [ARCHITECTURE §4](ARCHITECTURE.md#4-phân-quyền-rbac).
 - **Công khai:** `GET /api/menu`, `POST /api/reservations`.
-- **Cần STAFF, MANAGER hoặc ADMIN:** các endpoint còn lại dưới `/api/tables`, `/api/reservations` và `/api/checkout`.
+- **Cần STAFF, MANAGER hoặc ADMIN:** các endpoint còn lại dưới `/api/tables`, `/api/reservations` (kể cả `transfer-pos`) và `/api/checkout`.
 - **CORS:** `Access-Control-Allow-Origin: *`. Cho phép các phương thức GET, POST, PUT, PATCH, DELETE và OPTIONS. Preflight `OPTIONS` trả 204, không cần header vai trò.
 
 ---
@@ -51,7 +51,7 @@ Ngoại lệ: một đường dẫn chưa đăng ký nằm ngoài bốn nhóm `/
 | `/api/reservations` | GET | STAFF+ | — | 🟢 Đã triển khai |
 | `/api/reservations` | POST | Công khai | **Chain of Responsibility** | 🟢 Đã triển khai |
 | `/api/checkout` | POST | STAFF+ | **Facade** (+ Decorator, Builder, Strategy, Factory, Observer) | 🟢 Đã triển khai |
-| `/api/reservations/{code}/transfer-pos` | POST | STAFF+ | **Adapter** | ⚪ Chưa triển khai |
+| `/api/reservations/{code}/transfer-pos` | POST | STAFF+ | **Adapter** | 🟢 Đã triển khai |
 | `/api/menu` | POST | — | — | ⚪ Chưa triển khai |
 | `/api/menu/{id}/stock` | PATCH | — | — | ⚪ Chưa triển khai |
 | `/api/reservations/{id}/status` | PATCH | — | — | ⚪ Chưa triển khai |
@@ -146,6 +146,32 @@ Danh sách phiếu: `id` (mã `RES-xxxx`), `customer`, `contact`, `email`, `date
   - 409: hết hàng.
   - 400: thanh toán bị từ chối, hoặc voucher sai.
   - 503 `DATABASE_UNAVAILABLE`: chế độ JDBC mất kết nối. Không thu tiền, không ghi đơn.
+
+### 3.7. `POST /api/reservations/{code}/transfer-pos`
+Khách đặt trước đến quán: `ReservationToOrderAdapter` chuyển phiếu thành đơn POS. Không cần body.
+- **Đơn tạo ra:**
+  - Mã đơn chính là mã phiếu (`code`).
+  - Loại `dine-in`, trạng thái `pending`, thanh toán `unpaid`.
+  - Các món đặt trước (`preOrders`) được sao chép sang đơn, tổng tiền tính lại kèm VAT 8%.
+- **Tác dụng phụ:** phiếu chuyển sang `SEATED` ("Khách đã nhận bàn"); bàn chuyển sang `OCCUPIED`, số khách bằng số khách của phiếu (không vượt số ghế).
+- Phản hồi 200:
+```json
+{
+  "ok": true,
+  "data": {
+    "orderCode": "RES-0010", "customer": "Binh", "tableId": 9, "orderType": "dine-in",
+    "status": "pending", "paymentStatus": "unpaid",
+    "items": [{ "name": "Latte", "qty": 2, "price": 55000 }],
+    "subtotal": 110000, "vatAmount": 8800, "total": 118800
+  },
+  "message": "Reservation RES-0010 transferred to POS"
+}
+```
+- **Lỗi:**
+  - 404: không có phiếu.
+  - 409 `RESOURCE_CONFLICT`: phiếu đã nhận bàn, đã huỷ, hoặc đã có đơn cùng mã.
+  - 405: sai phương thức.
+  - 401 / 403: thiếu quyền.
 
 ---
 
