@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -43,10 +44,41 @@ class BuilderTest {
     }
 
     @Test
+    void appliesWalkInDefaultsWhenOptionalStepsAreSkipped() {
+        Order order = new OrderBuilder()
+                .forCustomer("   ")
+                .addItem(new BaseCoffee(menuItem()), 1)
+                .build();
+
+        assertEquals("Walk-in", order.getCustomer());
+        assertNull(order.getTableId());
+        assertEquals(OrderType.DINE_IN, order.getOrderType());
+        assertEquals(PaymentMethod.CASH, order.getPaymentMethod());
+        assertEquals(PaymentStatus.UNPAID, order.getPaymentStatus());
+        assertEquals(0, order.getDiscountAmount());
+        assertEquals(4_400, order.getVatAmount());
+        assertEquals(59_400, order.getTotal());
+    }
+
+    @Test
     void rejectsOrderWithoutItems() {
         OrderBuilder builder = new OrderBuilder().forCustomer("Walk-in");
 
         assertThrows(IllegalStateException.class, builder::build);
+    }
+
+    @Test
+    void rejectsInvalidStepArguments() {
+        OrderBuilder builder = new OrderBuilder();
+        IBeverage beverage = new BaseCoffee(menuItem());
+
+        assertThrows(IllegalArgumentException.class, () -> builder.atTable(0));
+        assertThrows(IllegalArgumentException.class, () -> builder.addItem(beverage, 0));
+        assertThrows(IllegalArgumentException.class, () -> builder.applyDiscount(-1));
+        assertThrows(IllegalArgumentException.class, () -> builder.applyDiscount(Double.NaN));
+        assertThrows(NullPointerException.class, () -> builder.addItem(null, 1));
+        assertThrows(NullPointerException.class, () -> builder.ofType(null));
+        assertThrows(NullPointerException.class, () -> builder.withPayment(null, true));
     }
 
     @Test

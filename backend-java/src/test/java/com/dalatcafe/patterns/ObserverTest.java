@@ -27,7 +27,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ObserverTest {
@@ -90,14 +92,77 @@ class ObserverTest {
         assertEquals(1, notifications.get());
     }
 
+    @Test
+    void unpaidOrderDoesNotEarnLoyaltyPoints() {
+        OrderEventSubject subject = new OrderEventSubject();
+        subject.attach(new LoyaltyPointObserver(customerDao, customer.getId()));
+
+        subject.notifyOrderCompleted(order(true, false));
+
+        Customer unchanged = customerDao.findById(customer.getId()).orElseThrow();
+        assertEquals(0, unchanged.getLoyaltyPoints());
+        assertEquals(0, unchanged.getTotalOrders());
+    }
+
+    @Test
+    void takeawayOrderWithoutTableLeavesFloorPlanUntouched() {
+        OrderEventSubject subject = new OrderEventSubject();
+        subject.attach(new TableStatusSyncObserver(tableDao));
+
+        subject.notifyOrderCompleted(order(false, true));
+
+        Table unchanged = tableDao.findById(table.getId()).orElseThrow();
+        assertEquals(TableStatus.OCCUPIED, unchanged.getStatus());
+        assertEquals(2, unchanged.getGuestCount());
+    }
+
+    @Test
+    void unknownCustomerFailsLoudly() {
+        OrderEventSubject subject = new OrderEventSubject();
+        subject.attach(new LoyaltyPointObserver(customerDao, 9_999));
+
+        assertThrows(IllegalStateException.class, () -> subject.notifyOrderCompleted(paidOrder()));
+    }
+
+    @Test
+    void unknownTableFailsLoudly() {
+        Order order = paidOrder();
+        order.setTableId(9_999);
+        OrderEventSubject subject = new OrderEventSubject();
+        subject.attach(new TableStatusSyncObserver(tableDao));
+
+        assertThrows(IllegalStateException.class, () -> subject.notifyOrderCompleted(order));
+    }
+
+    @Test
+    void rejectsInvalidArguments() {
+        OrderEventSubject subject = new OrderEventSubject();
+
+        assertThrows(NullPointerException.class, () -> subject.attach(null));
+        assertThrows(NullPointerException.class, () -> subject.notifyOrderCompleted(null));
+        assertThrows(IllegalArgumentException.class, () -> new LoyaltyPointObserver(customerDao, 0));
+        assertThrows(NullPointerException.class, () -> new TableStatusSyncObserver(null));
+    }
+
+    @Test
+    void subjectWithoutObserversIsNoOp() {
+        assertDoesNotThrow(() -> new OrderEventSubject().notifyOrderCompleted(paidOrder()));
+    }
+
     private Order paidOrder() {
+        return order(true, true);
+    }
+
+    private Order order(boolean dineIn, boolean paid) {
         MenuItem menuItem = new MenuItem(1, "Latte", "Coffee", 50_000, 18_000, 100);
-        Order order = new OrderBuilder()
+        OrderBuilder builder = new OrderBuilder()
                 .forCustomer(customer.getName())
-                .atTable(table.getId())
                 .addItem(new BaseCoffee(menuItem), 1)
-                .withPayment(PaymentMethod.CASH, true)
-                .build();
+                .withPayment(PaymentMethod.CASH, paid);
+        if (dineIn) {
+            builder.atTable(table.getId());
+        }
+        Order order = builder.build();
         order.setStatus(OrderStatus.COMPLETED);
         return order;
     }
