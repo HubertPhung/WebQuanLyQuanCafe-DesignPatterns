@@ -182,6 +182,28 @@ Khi triển khai mã nguồn Backend Java trong thư mục `backend-java/`:
 
 ---
 
+### 6.4. Kết nối Frontend với Backend Java (API Proxy)
+
+Server Actions trong `frontend-nextjs/app/admin/actions.ts` chuyển tiếp yêu cầu sang Java qua `lib/api-client.ts`:
+
+| Server Action | Endpoint Java | Ghi chú |
+|---|---|---|
+| `createOrder` | `POST /api/checkout` | Chỉ đơn **đã thanh toán**; món được ghép theo tên vì hai kho đánh số món độc lập |
+| `updateTableStatus` | `PUT /api/tables/{id}` | Java kiểm tra số khách theo sức chứa bàn |
+| `createReservation` | `POST /api/reservations` | Java chạy chuỗi kiểm tra Chain of Responsibility |
+
+Địa chỉ backend cấu hình qua biến môi trường (mặc định `http://localhost:8080`, đặt `off` để tắt):
+
+```bash
+JAVA_BACKEND_URL=http://localhost:8080
+```
+
+- **Java từ chối (4xx):** lỗi nghiệp vụ được trả về cho nhân viên, không ghi dữ liệu.
+- **Java không phản hồi (lỗi mạng, quá 2,5 giây, 5xx):** tự động lưu vào Mock Store cục bộ, giao diện không bị crash.
+- **Món Java không có hoặc tuỳ chọn có phụ thu:** đơn được lưu cục bộ thay vì gửi sang Java với giá sai.
+
+---
+
 ## 7. Tra cứu Tài liệu Kỹ thuật Chi tiết
 
 Toàn bộ tài liệu phân tích kỹ thuật của dự án được lưu trữ trong thư mục `docs/`:

@@ -564,10 +564,23 @@ function createInitialOrders(): Order[] {
   return orders
 }
 
+export type MockReservation = {
+  code: string
+  customer: string
+  contact: string
+  email: string | null
+  note: string | null
+  dateTime: Date
+  guests: number
+  tableId: number
+  status: 'Chờ xác nhận'
+}
+
 type StoreState = {
   tables: FloorTable[]
   menuItems: MenuItem[]
   orders: Order[]
+  reservations?: MockReservation[]
 }
 
 const globalForMock = globalThis as unknown as { __daLatCafeStore?: StoreState }
@@ -711,6 +724,27 @@ export function createMockOrder(input: NewMockOrderInput): { ok: boolean; messag
   }
 
   return { ok: true, message: `Order sent to the bar for ${newOrder.customer}.` }
+}
+
+export type NewMockReservationInput = Omit<MockReservation, 'code' | 'status'>
+
+// Local stand-in for POST /api/reservations while the Java backend is offline.
+// Only the checks that need no backend state run here; the full Chain of Responsibility lives in Java.
+export function createMockReservation(input: NewMockReservationInput): { ok: boolean; code?: string; error?: string } {
+  const store = getStore()
+  const table = store.tables.find((t) => t.id === input.tableId)
+  if (!table) return { ok: false, error: 'Table not found.' }
+  if (input.guests > table.seats) return { ok: false, error: `${table.name} seats at most ${table.seats} guests.` }
+
+  const reservations = (store.reservations ??= [])
+  // The L marks a local booking so it is never mistaken for a backend-issued RES-0001.
+  const code = `RES-L${String(reservations.length + 1).padStart(4, '0')}`
+  reservations.push({ ...input, code, status: 'Chờ xác nhận' })
+  return { ok: true, code }
+}
+
+export function getMockReservations(): MockReservation[] {
+  return [...(getStore().reservations ?? [])]
 }
 
 export type NewMockItemInput = {
