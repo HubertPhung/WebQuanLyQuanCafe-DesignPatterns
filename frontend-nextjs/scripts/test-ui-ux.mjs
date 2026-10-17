@@ -183,6 +183,20 @@ async function runStorefrontTests() {
   } catch (err) {
     recordTest('TC-SF-06', 'Journal & Footer Brand Story', 'Storefront', 'FAIL', err.message)
   }
+
+  // TC-SF-07: Branch contact, cafe space gallery and the compact cart button
+  try {
+    const res = await fetchPage(`${BASE_URL}/`)
+    const ok = res.status === 200 &&
+      res.body.includes('href="tel:0988752291"') &&
+      res.body.includes('href="mailto:2312585@dlu.edu.vn"') &&
+      (res.body.includes('/images/space/') || res.body.includes('%2Fimages%2Fspace%2F')) &&
+      res.body.includes('aria-label="Mở giỏ hàng') &&
+      !res.body.includes('>Giỏ hàng</span>')
+    recordTest('TC-SF-07', 'Branch Contact, Cafe Space Gallery & Icon-only Cart', 'Storefront', ok ? 'PASS' : 'FAIL', `Status ${res.status}`)
+  } catch (err) {
+    recordTest('TC-SF-07', 'Branch Contact, Cafe Space Gallery & Icon-only Cart', 'Storefront', 'FAIL', err.message)
+  }
 }
 
 async function runCartAndWishlistTests() {

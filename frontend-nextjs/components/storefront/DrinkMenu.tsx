@@ -152,7 +152,7 @@ export function DrinkMenu({
             <Sparkles className="size-3 text-amber-600" />
             THƯỞNG THỨC TRỌN VẸN · THỰC ĐƠN THƯỢNG HẠNG
           </p>
-          <h2 className="mt-2 text-3xl md:text-4xl font-sans font-bold text-[#35281f] tracking-normal">
+          <h2 className="font-display mt-2 text-3xl md:text-[2.6rem] font-semibold text-[#35281f] leading-[1.25] text-balance">
             Khám phá món ngon yêu thích.
           </h2>
         </div>

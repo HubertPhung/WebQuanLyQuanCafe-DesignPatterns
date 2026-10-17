@@ -10,7 +10,7 @@ Tài liệu gom toàn bộ thông tin kiểm thử: cách chạy, danh mục tes
 | Bộ kiểm thử | Lệnh | Số ca | Chạy trên CI |
 | :--- | :--- | :---: | :---: |
 | JUnit 5 Backend | `cd backend-java && mvn clean test` | 205 | ✅ Job *Backend CI* |
-| UI/UX & Admin Actions | `cd frontend-nextjs && npm test` | 36 | ✅ Job *Frontend CI* |
+| UI/UX & Admin Actions | `cd frontend-nextjs && npm test` | 37 | ✅ Job *Frontend CI* |
 | Kiểu TypeScript | `cd frontend-nextjs && npx tsc --noEmit` | — | ✅ |
 | Build production | `cd frontend-nextjs && npm run build` | — | ✅ |
 
@@ -41,7 +41,7 @@ Tài liệu gom toàn bộ thông tin kiểm thử: cách chạy, danh mục tes
 
 ---
 
-## 3. Bộ test UI/UX & Admin Actions (36 ca)
+## 3. Bộ test UI/UX & Admin Actions (37 ca)
 
 Các mã dưới đây khớp chính xác với `frontend-nextjs/scripts/test-ui-ux.mjs`.
 
@@ -53,6 +53,7 @@ Các mã dưới đây khớp chính xác với `frontend-nextjs/scripts/test-ui
 | | `TC-SF-04` | Tab danh mục & thanh công cụ |
 | | `TC-SF-05` | Thuộc tính trợ năng (ARIA) |
 | | `TC-SF-06` | Journal & chân trang |
+| | `TC-SF-07` | Hotline / email chi nhánh, ảnh không gian quán ở mục Góc cà phê, nút giỏ hàng chỉ còn biểu tượng và số món |
 | API giỏ hàng | `TC-API-01` | Thêm/bỏ món yêu thích (`/api/favorites`) |
 | | `TC-API-02` | Thêm món có tuỳ chọn vào giỏ (`/api/cart`) |
 | | `TC-API-03` | Tăng/giảm số lượng |
@@ -105,7 +106,7 @@ Các mã dưới đây khớp chính xác với `frontend-nextjs/scripts/test-ui
 | Hạng mục | Kết quả |
 | :--- | :--- |
 | JUnit 5 (`mvn clean test`) | **168 / 168 PASS** (bộ test lúc chạy E2E; hiện là 205, xem mục 1) |
-| UI/UX (`npm test`, Java đang chạy) | **25 / 25 PASS** (hiện là 36, xem mục 3) |
+| UI/UX (`npm test`, Java đang chạy) | **25 / 25 PASS** (hiện là 37, xem mục 3) |
 | TypeScript, build production | Không lỗi |
 | Cú pháp sơ đồ Mermaid (`mermaid.parse`, Mermaid 11) | Tất cả sơ đồ trong `docs/` hợp lệ |
 | API proxy `lib/api-client.ts` với Java thật (menu, checkout, bàn, đặt bàn, backend tắt, `JAVA_BACKEND_URL=off`) | **9 / 9 PASS** |

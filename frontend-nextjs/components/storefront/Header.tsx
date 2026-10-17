@@ -8,7 +8,6 @@ import {
   Bean,
   Heart,
   Menu,
-  Search,
   ShoppingBag,
   X,
   ExternalLink,
@@ -36,14 +35,12 @@ export const NAV_ITEMS: NavItem[] = [
 export interface HeaderProps {
   account?: StorefrontAccount | null
   favoritesCount?: number
-  onSearchClick?: () => void
   onFavoritesClick?: () => void
 }
 
 export function Header({
   account = null,
   favoritesCount = 0,
-  onSearchClick,
   onFavoritesClick,
 }: HeaderProps) {
   const { cart, isOpen: isCartOpen, setIsOpen: setIsCartOpen, openCart, fetchCart } = useCartStore()
@@ -100,21 +97,6 @@ export function Header({
       const targetEl = document.getElementById(targetId)
       if (targetEl) {
         targetEl.scrollIntoView({ behavior: 'smooth' })
-      }
-    }
-  }
-
-  const handleSearch = () => {
-    if (onSearchClick) {
-      onSearchClick()
-    } else {
-      const searchInput = document.getElementById('menu-search')
-      if (searchInput) {
-        searchInput.scrollIntoView({ behavior: 'smooth' })
-        setTimeout(() => searchInput.focus(), 300)
-      } else {
-        const menuEl = document.getElementById('menu')
-        if (menuEl) menuEl.scrollIntoView({ behavior: 'smooth' })
       }
     }
   }
@@ -191,35 +173,32 @@ export function Header({
             </Link>
           </nav>
 
-          {/* Header Action Controls */}
-          <div className="header-actions flex items-center gap-2 sm:gap-3">
-            {/* Search Trigger */}
-            <button
-              type="button"
-              onClick={handleSearch}
-              className="size-9 sm:size-10 rounded-full border border-stone-200/80 bg-white/80 hover:bg-stone-100 flex items-center justify-center text-stone-700 transition-colors shadow-2xs cursor-pointer"
-              aria-label="Search coffee menu"
-              title="Tìm kiếm cà phê"
-            >
-              <Search size={18} />
-            </button>
-
-            {/* Shopping Cart Trigger */}
-            <button
+          {/* Header actions. No legacy .header-actions class: its unlayered "button { border: 0;
+              padding: 0 }" reset overrode these Tailwind borders and broke the outlines. */}
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            {/* Cart: bag icon with the item count only */}
+            <motion.button
               type="button"
               onClick={openCart}
-              className="bag-trigger flex items-center gap-2 rounded-full border border-stone-200/90 bg-white/90 px-3 py-1.5 text-stone-900 transition-all hover:border-[#3E2723] hover:bg-stone-50 shadow-xs cursor-pointer"
+              whileTap={{ scale: 0.94 }}
+              className="relative flex size-11 cursor-pointer items-center justify-center rounded-full border border-stone-200 bg-white text-[#3E2723] shadow-xs transition-colors duration-200 hover:border-[#3E2723]/40 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600"
               aria-label={`Mở giỏ hàng, ${totalQuantity} món`}
-              title="Giỏ hàng cà phê"
+              title="Giỏ hàng"
             >
-              <ShoppingBag size={18} className="text-[#3E2723]" />
-              <span className="hidden sm:inline text-xs font-bold text-stone-800">
-                Giỏ hàng
-              </span>
-              <span className="flex size-5 items-center justify-center rounded-full bg-[#3E2723] text-[11px] font-bold text-white tabular-nums shadow-2xs">
-                {totalQuantity}
-              </span>
-            </button>
+              <ShoppingBag size={20} strokeWidth={1.9} aria-hidden="true" />
+              <AnimatePresence initial={false}>
+                <motion.span
+                  key={totalQuantity}
+                  initial={{ scale: 0.4, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: 'spring', stiffness: 520, damping: 22 }}
+                  aria-hidden="true"
+                  className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#3E2723] px-1 text-[11px] font-bold leading-none text-white tabular-nums ring-2 ring-[#FAF8F5]"
+                >
+                  {totalQuantity}
+                </motion.span>
+              </AnimatePresence>
+            </motion.button>
 
             {/* Modular Account Dropdown */}
             <AccountDropdown account={account} />
@@ -267,7 +246,9 @@ export function Header({
               </nav>
 
               <div className="mt-4 pt-4 border-t border-stone-200/60 flex items-center justify-between text-xs text-stone-500">
-                <span>Hotline: 1900 6868</span>
+                <a href="tel:0988752291" className="font-semibold text-stone-700 hover:underline">
+                  Hotline: 0988 752 291
+                </a>
                 <Link
                   href="/admin"
                   className="font-semibold text-[#3E2723] hover:underline"

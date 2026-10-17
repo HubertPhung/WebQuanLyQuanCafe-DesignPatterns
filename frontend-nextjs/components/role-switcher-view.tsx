@@ -15,6 +15,7 @@ import { CoffeeFooter } from '@/components/coffee-footer'
 import { Hero } from '@/components/storefront/Hero'
 import { DrinkMenu } from '@/components/storefront/DrinkMenu'
 import { Header } from '@/components/storefront/Header'
+import { CafeSpace } from '@/components/storefront/CafeSpace'
 import type { StorefrontAccount } from '@/components/storefront/AccountDropdown'
 import { useCartStore } from '@/lib/store/cart-store'
 import { toast } from 'sonner'
@@ -178,9 +179,17 @@ export function RoleSwitcherView({
         {/* Educational Coffee Journal Section */}
         <section id="journal" className="journal section-shell">
           <p className="eyebrow">
-            GÓC CHUYỆN CÀ PHÊ <span className="sr-only">NOTES FROM THE COFFEE BAR</span>
+            GÓC CÀ PHÊ · KHÔNG GIAN QUÁN <span className="sr-only">NOTES FROM THE COFFEE BAR</span>
           </p>
-          <h2>Hành trình cho một tách cà phê trọn vị.</h2>
+          <h2>Một góc Đà Lạt chậm rãi, ngay giữa phố.</h2>
+          <p className="mt-3 max-w-2xl text-sm leading-relaxed text-stone-600">
+            Gỗ ấm, ánh đèn vàng và khoảng xanh nhìn ra vườn: nơi để bạn ngồi lại lâu hơn một chút, dù là buổi sáng một mình hay
+            buổi chiều cùng bạn bè.
+          </p>
+          <CafeSpace />
+
+          {/* Inline margin: the unlayered ".journal>h2 { margin-top }" rule would override a Tailwind class. */}
+          <h2 style={{ marginTop: '4rem' }}>Hành trình cho một tách cà phê trọn vị.</h2>
           <div className="journal-grid">
             {[
               {

@@ -1,6 +1,6 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
-import { Be_Vietnam_Pro } from 'next/font/google'
+import { Be_Vietnam_Pro, Playfair_Display } from 'next/font/google'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
@@ -9,6 +9,16 @@ const beVietnamPro = Be_Vietnam_Pro({
   subsets: ['vietnamese', 'latin'],
   weight: ['300', '400', '500', '600', '700'],
   variable: '--font-be-vietnam-pro',
+  display: 'swap',
+})
+
+// Headings: a serif with a full Vietnamese glyph set, so stacked diacritics (ữ, ặ, ồ) stay
+// balanced at display sizes where the bold sans looked heavy. Body text keeps Be Vietnam Pro.
+const playfair = Playfair_Display({
+  subsets: ['vietnamese', 'latin'],
+  weight: ['500', '600', '700'],
+  style: ['normal', 'italic'],
+  variable: '--font-display',
   display: 'swap',
 })
 
@@ -34,7 +44,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="vi" className={beVietnamPro.variable} suppressHydrationWarning>
-      <body className={`${beVietnamPro.className} font-sans antialiased leading-relaxed min-h-screen selection:bg-amber-700/20 selection:text-amber-900 dark:selection:text-amber-200`}>
+      <body className={`${beVietnamPro.className} ${playfair.variable} font-sans antialiased leading-relaxed min-h-screen selection:bg-amber-700/20 selection:text-amber-900 dark:selection:text-amber-200`}>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           {children}
           <Toaster richColors position="top-right" />

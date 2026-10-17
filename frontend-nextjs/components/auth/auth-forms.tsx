@@ -161,8 +161,13 @@ function SubmitButton({ pending, idle, busy }: { pending: boolean; idle: string;
       disabled={pending}
       whileHover={pending ? undefined : { y: -1 }}
       whileTap={pending ? undefined : { scale: 0.98 }}
-      className="group flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#3E2723] text-sm font-bold text-white shadow-[0_6px_16px_rgba(62,39,35,0.25)] transition-colors duration-200 hover:bg-[#5A3E2B] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-600/30 disabled:cursor-wait disabled:opacity-80"
+      className="group relative flex h-11 w-full cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-xl bg-gradient-to-r from-[#3E2723] via-[#5A3E2B] to-[#3E2723] text-sm font-bold text-white shadow-[0_6px_16px_rgba(62,39,35,0.25)] transition-colors duration-200 hover:bg-[#5A3E2B] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-600/30 disabled:cursor-wait disabled:opacity-80"
     >
+      {/* Light sweep on hover */}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-y-0 left-0 w-1/3 -translate-x-full -skew-x-12 bg-gradient-to-r from-transparent via-white/30 to-transparent transition-transform duration-700 ease-out group-hover:translate-x-[400%] motion-reduce:hidden"
+      />
       {pending ? (
         <>
           <Loader2 className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />

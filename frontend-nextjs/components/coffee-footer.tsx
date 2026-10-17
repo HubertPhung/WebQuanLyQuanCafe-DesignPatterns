@@ -1,15 +1,13 @@
-import { ArrowUpRight, Coffee, MapPin } from 'lucide-react'
+import { ArrowUpRight, Clock, Mail, MapPin, Phone } from 'lucide-react'
+import { Logo } from '@/components/brand/logo'
 
 export function CoffeeFooter({ storeDomain }: { storeDomain?: string }) {
   return (
     <footer id="locations" className="bg-[#ede6db] border-t border-stone-200/80 text-stone-800">
       <div className="footer-top section-shell">
         <div>
-          <a className="brand" href="#">
-            <Coffee size={27} />
-            <span>
-              Đà Lạt Cafe<small>CÀ PHÊ & CỘNG ĐỒNG</small>
-            </span>
+          <a href="#" aria-label="Đà Lạt Cafe – về đầu trang" className="inline-block">
+            <Logo tagline="Cà phê & cộng đồng" />
           </a>
           <p>
             Dành trọn tình yêu cho cà phê.
@@ -33,7 +31,30 @@ export function CoffeeFooter({ storeDomain }: { storeDomain?: string }) {
           >
             <MapPin size={18} /> Khám phá vùng cà phê Đà Lạt <ArrowUpRight size={16} />
           </a>
-          <small className="text-stone-500">Thông tin chi nhánh mới sẽ sớm được cập nhật.</small>
+          <ul className="mt-4 space-y-2.5 text-sm text-stone-700" aria-label="Liên hệ chi nhánh">
+            <li className="flex items-center gap-2.5">
+              <Phone size={16} className="shrink-0 text-[#5A3E2B]" aria-hidden="true" />
+              <span>
+                Hotline:{' '}
+                <a href="tel:0988752291" className="font-semibold text-[#3E2723] hover:underline">
+                  0988 752 291
+                </a>
+              </span>
+            </li>
+            <li className="flex items-center gap-2.5">
+              <Mail size={16} className="shrink-0 text-[#5A3E2B]" aria-hidden="true" />
+              <span>
+                Email:{' '}
+                <a href="mailto:2312585@dlu.edu.vn" className="font-semibold text-[#3E2723] hover:underline break-all">
+                  2312585@dlu.edu.vn
+                </a>
+              </span>
+            </li>
+            <li className="flex items-center gap-2.5">
+              <Clock size={16} className="shrink-0 text-[#5A3E2B]" aria-hidden="true" />
+              <span>Mở cửa 07:00 – 22:00 mỗi ngày · Phường Cam Ly, TP. Đà Lạt</span>
+            </li>
+          </ul>
         </div>
 
         <div>

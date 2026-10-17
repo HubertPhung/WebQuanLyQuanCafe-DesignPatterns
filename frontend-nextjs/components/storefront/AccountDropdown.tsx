@@ -47,7 +47,7 @@ export function AccountDropdown({ className, account }: AccountDropdownProps) {
     return (
       <Link
         href="/login"
-        className={`flex items-center gap-2 rounded-full border border-stone-200/90 bg-white/90 px-3 py-1.5 text-xs font-bold text-stone-800 shadow-xs transition-colors hover:border-[#3E2723] hover:bg-stone-50 ${className ?? ''}`}
+        className={`flex h-11 items-center gap-2 rounded-full border border-stone-200 bg-white px-4 text-xs font-bold text-stone-800 shadow-xs transition-colors hover:border-[#3E2723] hover:bg-stone-50 ${className ?? ''}`}
       >
         <LogIn className="size-4 text-[#3E2723]" />
         <span className="hidden sm:inline">Đăng nhập</span>
