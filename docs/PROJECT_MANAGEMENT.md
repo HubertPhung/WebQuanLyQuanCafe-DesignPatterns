@@ -22,7 +22,7 @@ Cột *Frontend* là `frontend-nextjs/`, cột *Java* là `backend-java/`. Cột
 | `FEAT-CORE-01` | Thực thể miền (`Order`, `Table`, `MenuItem`, `Reservation`, `Customer`) | Core OOP | 🟢 `lib/db/schema.ts` | 🟢 `com.dalatcafe.model` | — |
 | `FEAT-AUTH-01` | Truy cập Admin qua cờ `REQUIRE_ADMIN_AUTH` | — | 🟢 `lib/admin/access.ts` | — | — |
 | `FEAT-AUTH-02` | Phân quyền theo header `X-User-Role` (công khai / STAFF·MANAGER·ADMIN) | — | 🟢 Gửi `X-User-Role: STAFF` | 🟢 `SimpleAuthFilter` | 🟢 |
-| `FEAT-AUTH-03` | Cấu hình quán toàn cục (07:00–22:00, 10.000đ = 1 điểm, tự huỷ 30 phút) | **Singleton** | 🟢 `admin/settings` (giao diện) | 🟢 `SystemConfigManager` | ⚪ |
+| `FEAT-AUTH-03` | Cấu hình quán toàn cục (07:00–22:00, 10.000đ = 1 điểm, tự huỷ 30 phút) | **Singleton** | 🟢 `admin/settings` + `store-settings-form.tsx` | 🟢 `SystemConfigManager`, `GET/PUT /api/config` | 🟢 (tự huỷ chưa có tác vụ chạy) |
 | `FEAT-AUTH-04` | Giao diện sáng/tối | — | 🟢 `theme-provider` | — | — |
 | `FEAT-AUTH-05` | Hồ sơ & chức danh nhân sự | — | 🟢 `staff-management.tsx` | ⚪ | ⚪ |
 | `FEAT-AUTH-06` | Lịch ca làm việc | — | 🟢 `schedule-management.tsx` | ⚪ | ⚪ |
@@ -36,7 +36,7 @@ Cột *Frontend* là `frontend-nextjs/`, cột *Java* là `backend-java/`. Cột
 | `FEAT-SF-03` | Tuỳ biến đồ uống trên Storefront (sữa, đường, đá) | **Decorator** | 🟢 Modal + `/api/cart` | 🟢 `BeverageDecorator` | ⚪ |
 | `FEAT-SF-04` | Danh sách yêu thích (cookie) | — | 🟢 `/api/favorites` | — | — |
 | `FEAT-SF-05` | Giỏ hàng trượt | — | 🟢 `CartSheet.tsx` | — | — |
-| `FEAT-SF-06` | Mã giảm giá giỏ hàng | **Strategy** | 🟡 `/api/cart`: 5 mã, cố định −10% | 🟢 `DiscountContext` (`WELCOME10` −10%, trần 50.000đ) | ⚪ |
+| `FEAT-SF-06` | Mã giảm giá giỏ hàng | **Strategy** | 🟢 `/api/cart` hỏi Java, giảm 10% (giỏ demo tính USD) | 🟢 `VoucherCatalog`, `POST /api/vouchers/validate` | 🟢 có danh sách mã demo khi Java tắt |
 
 ### 1.3. Bán hàng tại quầy (POS)
 
@@ -84,9 +84,10 @@ Cột *Frontend* là `frontend-nextjs/`, cột *Java* là `backend-java/`. Cột
 | `FEAT-INV-02` | Cảnh báo sắp hết hàng | — | 🟢 `inventory-table.tsx` | 🟢 `MenuItem` | — |
 | `FEAT-INV-03` | Bật/tắt bán món | — | 🟢 `setItemInStock` | 🟢 `PATCH /api/menu/{id}/stock` | 🟢 ghép theo tên món |
 | `FEAT-INV-04` | Thêm món mới | — | 🟢 `add-item-dialog.tsx` | 🟢 `POST /api/menu` (MANAGER) | 🟢 |
-| `FEAT-CRM-01` | Xếp hạng khách hàng | — | 🟢 `admin/customers` | 🟢 `ICustomerDao` | ⚪ |
-| `FEAT-ANA-01` | Doanh thu 7 ngày | — | 🟢 `RevenueChart.tsx` | 🟢 `GET /api/analytics/overview` (tổng, hôm nay, theo trạng thái) | ⚪ biểu đồ đọc kho cục bộ |
-| `FEAT-ANA-02` | Cơ cấu thanh toán & món bán chạy | — | 🟢 `dashboard-charts.tsx` | ⚪ | ⚪ |
+| `FEAT-CRM-01` | Xếp hạng khách hàng | — | 🟢 `admin/customers` (điểm, hạng) | 🟢 `GET /api/customers` | 🟢 tổng hợp đơn cục bộ khi Java tắt |
+| `FEAT-ANA-01` | Doanh thu 7 ngày | — | 🟢 `RevenueChart.tsx` | 🟢 `GET /api/analytics/overview?days=7` | 🟢 kho cục bộ khi Java tắt |
+| `FEAT-ANA-02` | Cơ cấu thanh toán & món bán chạy | — | 🟢 `dashboard-charts.tsx` | 🟢 `paymentMix`, `topItems` | 🟢 |
+| `FEAT-OPS-01` | Đồng bộ đơn ghi lúc mất kết nối Java | — | 🟢 `admin_sync_queue` + nút "Đồng bộ đơn offline" | 🟢 `POST /api/orders/sync` | 🟢 |
 
 > **Mở rộng (🔷):** State Pattern (vòng đời đơn và bàn) và Template Method (xuất báo cáo) được phân tích tại [DESIGN_PATTERNS_SPEC §4](DESIGN_PATTERNS_SPEC.md#4-đánh-giá--đề-xuất-mở-rộng-nâng-cao), không cài đặt trong code.
 

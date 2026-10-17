@@ -146,6 +146,15 @@ erDiagram
 | `admin_menu_items` | `kind` (`menu` / `ingredient`), `unit` mặc định `'pcs'`, `variations` JSONB `[{ name, price }]` | — |
 | `admin_orders` | `order_code` duy nhất, `items` JSONB `[{ name, qty, price, variation? }]`, **không có cột VAT, giảm giá hay ghi chú** (`total` = `subtotal × 1,08`) | `order_type`: `dine-in`, `pickup`, `delivery`; `payment_method`: `cash`, `qr`, `card`; `payment_status`: `paid`, `unpaid`, `refunded`; `status`: `pending`, `brewing`, `ready`, `completed` |
 
+Hai bảng phụ do `lib/admin/local-links.ts` tự tạo (`CREATE TABLE IF NOT EXISTS`) ở lần dùng đầu, **không sửa** các bảng `admin_*`:
+
+| Bảng | Cột | Vai trò |
+| :--- | :--- | :--- |
+| `admin_menu_links` | `menu_item_id` (PK), `java_menu_id`, `linked_at` | Cặp id món frontend ↔ Java. Ghép theo tên một lần rồi lưu lại, hoặc ghi thẳng khi tạo món qua `POST /api/menu`; đổi tên món sau đó không làm mất liên kết |
+| `admin_sync_queue` | `order_code` (PK), `queued_at` | Đơn ghi cục bộ mà Java chưa nhận; được gửi qua `POST /api/orders/sync` rồi xoá khỏi hàng đợi |
+
+Không có `DATABASE_URL`, hoặc không tạo được bảng, thì hai danh sách này nằm trong bộ nhớ cùng mock store.
+
 Dữ liệu mẫu của mock store gồm 15 bàn, 13 món bán, 5 nguyên liệu và lịch sử đơn hàng.
 
 ---

@@ -122,9 +122,9 @@ Lưu ý: kho của frontend và kho của Java là hai bộ dữ liệu riêng, 
 | Nơi | Cơ chế |
 | :--- | :--- |
 | Admin Next.js | `lib/admin/access.ts`. `REQUIRE_ADMIN_AUTH=true` sẽ chặn trang Admin; mặc định cho phép, dùng khi phát triển và demo |
-| Java REST | `SimpleAuthFilter` đọc header `X-User-Role`, chia **3 mức**: *công khai* (`GET /api/menu`, `POST /api/reservations`, `POST /api/vouchers/validate`), *MANAGER / ADMIN* (`POST /api/menu`, `GET /api/analytics/overview`) và *STAFF / MANAGER / ADMIN* (mọi endpoint còn lại, kể cả endpoint mới chưa liệt kê: bộ lọc từ chối theo mặc định). Thiếu hoặc sai header trả 401; vai trò không đủ trả 403. Frontend gửi `STAFF`, riêng tạo món gửi `MANAGER`. Vai trò **không được xác thực**: đây chỉ là cổng phân vai cho đồ án |
+| Java REST | `SimpleAuthFilter` đọc header `X-User-Role`, chia **4 mức**: *công khai* (`GET /api/menu`, `POST /api/reservations`, `POST /api/vouchers/validate`), *chỉ ADMIN* (`PUT | PATCH /api/config`), *MANAGER / ADMIN* (`POST /api/menu`, `GET /api/analytics/overview`) và *STAFF / MANAGER / ADMIN* (mọi endpoint còn lại, kể cả endpoint mới chưa liệt kê: bộ lọc từ chối theo mặc định). Thiếu hoặc sai header trả 401; vai trò không đủ trả 403. Frontend gửi `STAFF`; tạo món và đọc thống kê gửi `MANAGER`; lưu cài đặt gửi `ADMIN`. Vai trò **không được xác thực**: đây chỉ là cổng phân vai cho đồ án |
 
-**Thiết kế mở rộng (Chưa triển khai):** tách thêm quyền riêng cho `ADMIN` (cấu hình, báo cáo tài chính) và xác thực bằng token hoặc session thay cho header tự khai.
+**Thiết kế mở rộng (Chưa triển khai):** xác thực bằng token hoặc session thay cho header tự khai.
 
 ---
 
