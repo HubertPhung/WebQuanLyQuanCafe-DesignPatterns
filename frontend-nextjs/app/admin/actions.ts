@@ -35,6 +35,7 @@ import {
   payJavaOrder,
   transferReservation as transferJavaReservation,
   updateJavaOrderStatus,
+  updateJavaReservationStatus,
   updateJavaStock,
   updateTable,
   type CheckoutPayload,
@@ -52,6 +53,9 @@ import {
   createMockReservation,
   createMockOrderFromItems,
   getMockOrder,
+  updateMockReservationStatus,
+  reservationStatuses,
+  type ReservationStatusLabel,
   transferMockReservation,
   type ExternalOrderInput,
   type NewMockOrderInput,
@@ -577,6 +581,42 @@ async function javaMenuIdFor(itemId: number): Promise<number | undefined> {
   const javaMenu = await fetchMenu()
   if (!javaMenu.ok) return undefined
   return javaMenu.data.find((item) => normalizeName(item.name) === normalizeName(local.name))?.id
+}
+
+const javaReservationStatus = {
+  'Chờ xác nhận': 'pending',
+  'Đã đặt': 'confirmed',
+  'Đã hủy': 'cancelled',
+} as const
+
+// Status dropdown on /admin/reservations. "Hoàn thành" (seated) is reached only through
+// "Sang POS", so the order and the table are always opened together with it.
+export async function updateReservationStatus(
+  code: string,
+  source: 'java' | 'local',
+  status: ReservationStatusLabel,
+): Promise<ActionResult> {
+  try {
+    assertAdminAccess()
+    if (typeof code !== 'string' || !/^[A-Za-z0-9-]{1,40}$/.test(code)) throw new Error('Invalid reservation code.')
+    if (!reservationStatuses.includes(status)) throw new Error('Invalid reservation status.')
+    if (status === 'Hoàn thành') throw new Error('Use "Sang POS" to seat the guests; it opens their order too.')
+
+    if (source === 'local') {
+      const res = updateMockReservationStatus(code, status)
+      refresh()
+      return res.ok ? { ok: true } : { ok: false, error: res.error ?? 'Failed' }
+    }
+    const remote = await updateJavaReservationStatus(code, javaReservationStatus[status])
+    if (!remote.ok) {
+      // The booking lives in Java, so there is nothing local to fall back to.
+      return { ok: false, error: remote.unreachable ? 'Java backend is unreachable; try again shortly.' : remote.error }
+    }
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
 }
 
 export async function setItemInStock(itemId: number, inStock: boolean): Promise<ActionResult> {

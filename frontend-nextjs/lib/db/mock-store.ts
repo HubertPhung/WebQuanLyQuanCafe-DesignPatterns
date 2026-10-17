@@ -826,6 +826,13 @@ export function createMockReservation(input: NewMockReservationInput): { ok: boo
   return { ok: true, code }
 }
 
+export function updateMockReservationStatus(code: string, status: ReservationStatusLabel): { ok: boolean; error?: string } {
+  const reservation = getStore().reservations.find((r) => r.code === code)
+  if (!reservation) return { ok: false, error: 'Reservation not found.' }
+  reservation.status = status
+  return { ok: true }
+}
+
 export function getMockReservations(): MockReservation[] {
   return [...getStore().reservations].sort((a, b) => b.dateTime.getTime() - a.dateTime.getTime())
 }

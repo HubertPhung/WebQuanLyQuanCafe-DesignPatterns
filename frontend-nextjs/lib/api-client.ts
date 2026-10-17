@@ -143,6 +143,11 @@ export function fetchReservations(): Promise<JavaResult<JavaReservation[]>> {
   return request<JavaReservation[]>('/api/reservations', { method: 'GET' })
 }
 
+// PATCH /api/reservations/{code}/status: confirm or cancel (seating goes through transfer-pos).
+export function updateJavaReservationStatus(code: string, status: 'pending' | 'confirmed' | 'cancelled'): Promise<JavaResult<JavaReservation>> {
+  return request<JavaReservation>(`/api/reservations/${encodeURIComponent(code)}/status`, { method: 'PATCH', body: { status } })
+}
+
 export type TransferredOrder = {
   orderCode: string
   customer: string
