@@ -654,6 +654,8 @@ export type NewMockOrderInput = {
   orderType: OrderType
   paymentMethod: PaymentMethod
   paid: boolean
+  // Set when the Java backend already issued the order code.
+  orderCode?: string
 }
 
 export function createMockOrder(input: NewMockOrderInput): { ok: boolean; message?: string; error?: string } {
@@ -683,7 +685,7 @@ export function createMockOrder(input: NewMockOrderInput): { ok: boolean; messag
 
   const newOrder: Order = {
     id: nextId,
-    orderCode: `AC-${String(nextId).padStart(4, '0')}-${Date.now().toString(36).slice(-3).toUpperCase()}`,
+    orderCode: input.orderCode ?? `AC-${String(nextId).padStart(4, '0')}-${Date.now().toString(36).slice(-3).toUpperCase()}`,
     customer: input.customer.trim().slice(0, 60) || 'Walk-in',
     tableId: input.tableId,
     orderType: input.orderType,

@@ -11,6 +11,7 @@ import {
   orderTypes,
   paymentMethods,
   tableStatuses,
+  type MenuItem,
   type OrderItem,
   type OrderStatus,
   type TableStatus,
@@ -18,6 +19,7 @@ import {
 } from '@/lib/db/schema'
 import { assertAdminAccess } from '@/lib/admin/access'
 import { TAX_RATE } from '@/lib/admin/format'
+import { checkout, fetchMenu, type CheckoutPayload } from '@/lib/api-client'
 import {
   updateMockOrderStatus,
   markMockOrderPaid,
@@ -25,6 +27,8 @@ import {
   setMockItemInStock,
   createMockOrder,
   createMockMenuItem,
+  getMockMenuItems,
+  type NewMockOrderInput,
 } from '@/lib/db/mock-store'
 
 type ActionResult = { ok: true; message?: string } | { ok: false; error: string }
@@ -91,6 +95,126 @@ type NewOrderInput = {
   paid: boolean
 }
 
+type LocalMenuItem = Pick<MenuItem, 'id' | 'name' | 'kind' | 'inStock' | 'variations'>
+
+type CheckoutOutcome =
+  | { kind: 'accepted'; orderCode: string }
+  | { kind: 'local' }
+  | { kind: 'rejected'; error: string }
+
+async function loadLocalMenu(ids: number[]): Promise<LocalMenuItem[]> {
+  if (isDbConfigured && db) {
+    try {
+      return await db.select().from(adminMenuItems).where(inArray(adminMenuItems.id, ids))
+    } catch {
+      // Same degradation as the writes below: an unreachable database means the mock store.
+    }
+  }
+  return getMockMenuItems().filter((item) => ids.includes(item.id))
+}
+
+function normalizeName(name: string) {
+  return name.normalize('NFC').trim().toLowerCase()
+}
+
+// The two stores number their menus independently, so lines are matched by name.
+// A line the backend cannot price (unknown item, paid variation) keeps the order local.
+async function toJavaLines(lines: NewOrderInput['lines'], localMenu: LocalMenuItem[]) {
+  const javaMenu = await fetchMenu()
+  if (!javaMenu.ok) return null
+  const javaIdByName = new Map(javaMenu.data.map((item) => [normalizeName(item.name), item.id]))
+  const localById = new Map(localMenu.map((item) => [item.id, item]))
+
+  const javaLines: CheckoutPayload['lines'] = []
+  for (const line of lines) {
+    const local = localById.get(line.menuItemId)
+    if (!local) return null
+    const variation = line.variation ? local.variations.find((option) => option.name === line.variation) : undefined
+    if (variation && variation.price > 0) return null
+    const javaId = javaIdByName.get(normalizeName(local.name))
+    if (javaId === undefined) return null
+    javaLines.push({ menuItemId: javaId, qty: line.qty })
+  }
+  return javaLines
+}
+
+type LocalOrderInput = NewMockOrderInput
+
+async function forwardCheckout(order: LocalOrderInput, localMenu: LocalMenuItem[]): Promise<CheckoutOutcome> {
+  // POST /api/checkout always takes payment, so open tabs stay on the local store.
+  if (!order.paid) return { kind: 'local' }
+  const lines = await toJavaLines(order.lines, localMenu)
+  if (!lines) return { kind: 'local' }
+
+  const receipt = await checkout({
+    lines,
+    customer: order.customer,
+    tableId: order.tableId,
+    orderType: order.orderType,
+    paymentMethod: order.paymentMethod,
+  })
+  if (receipt.ok) return { kind: 'accepted', orderCode: receipt.data.orderCode }
+  return receipt.unreachable ? { kind: 'local' } : { kind: 'rejected', error: receipt.error }
+}
+
+async function recordOrderLocally(input: LocalOrderInput, quantities: Map<number, number>): Promise<ActionResult> {
+  if (!isDbConfigured || !db) {
+    const res = createMockOrder(input)
+    return res.ok ? { ok: true, message: res.message } : { ok: false, error: res.error ?? 'Failed' }
+  }
+
+  try {
+    const menu = await db.select().from(adminMenuItems).where(inArray(adminMenuItems.id, [...quantities.keys()]))
+    const byId = new Map(menu.map((item) => [item.id, item]))
+
+    const items: OrderItem[] = input.lines.map((line) => {
+      const item = byId.get(line.menuItemId)
+      if (!item || item.kind !== 'menu' || !item.inStock) throw new Error('One of the items is no longer available.')
+      const variation = line.variation ? item.variations.find((option: Variation) => option.name === line.variation) : undefined
+      if (line.variation && !variation) throw new Error(`Invalid option for ${item.name}.`)
+      return { name: item.name, qty: line.qty, price: item.sellPrice + (variation?.price ?? 0), variation: variation?.name }
+    })
+
+    const subtotal = Math.round(items.reduce((sum, item) => sum + item.price * item.qty, 0) * 100) / 100
+    const total = Math.round(subtotal * (1 + TAX_RATE) * 100) / 100
+    const customer = input.customer.trim().slice(0, 60) || 'Walk-in'
+
+    await db.transaction(async (tx) => {
+      const [{ next }] = await tx.execute<{ next: number }>(
+        sql`select coalesce(max(id), 0) + 1 as next from admin_orders`,
+      ).then((result) => result.rows)
+      await tx.insert(adminOrders).values({
+        orderCode: input.orderCode ?? `AC-${String(next).padStart(4, '0')}-${Date.now().toString(36).slice(-3).toUpperCase()}`,
+        customer,
+        tableId: input.tableId,
+        orderType: input.orderType,
+        items,
+        subtotal,
+        total,
+        paymentMethod: input.paymentMethod,
+        paymentStatus: input.paid ? 'paid' : 'unpaid',
+        status: 'pending',
+      })
+      for (const [id, qty] of quantities) {
+        await tx
+          .update(adminMenuItems)
+          .set({ stockQty: sql`greatest(${adminMenuItems.stockQty} - ${qty}, 0)` })
+          .where(eq(adminMenuItems.id, id))
+      }
+      if (input.tableId) {
+        await tx
+          .update(adminTables)
+          .set({ status: 'occupied', occupiedSince: sql`coalesce(${adminTables.occupiedSince}, now())`, updatedAt: new Date() })
+          .where(eq(adminTables.id, input.tableId))
+      }
+    })
+    return { ok: true, message: `Order sent to the bar for ${customer}.` }
+  } catch {
+    const res = createMockOrder(input)
+    return res.ok ? { ok: true, message: res.message } : { ok: false, error: res.error ?? 'Failed' }
+  }
+}
+
 export async function createOrder(input: NewOrderInput): Promise<ActionResult> {
   try {
     assertAdminAccess()
@@ -108,80 +232,31 @@ export async function createOrder(input: NewOrderInput): Promise<ActionResult> {
     }
     if ([...quantities.values()].some((qty) => qty > 50)) throw new Error('Maximum 50 of any item per order.')
 
-    if (!isDbConfigured || !db) {
-      const res = createMockOrder({
-        lines: input.lines,
-        customer: input.customer,
-        tableId: orderType === 'dine-in' && input.tableId && Number.isInteger(input.tableId) ? input.tableId : null,
-        orderType,
-        paymentMethod,
-        paid: input.paid,
-      })
-      refresh()
-      return res.ok ? { ok: true, message: res.message } : { ok: false, error: res.error ?? 'Failed' }
+    const order: LocalOrderInput = {
+      lines: input.lines,
+      customer: input.customer,
+      tableId: orderType === 'dine-in' && input.tableId && Number.isInteger(input.tableId) ? input.tableId : null,
+      orderType,
+      paymentMethod,
+      paid: input.paid,
     }
 
-    try {
-      const menu = await db.select().from(adminMenuItems).where(inArray(adminMenuItems.id, [...quantities.keys()]))
-      const byId = new Map(menu.map((item) => [item.id, item]))
+    // Check availability locally first so the backend never charges for an order we cannot record.
+    const localMenu = await loadLocalMenu([...quantities.keys()])
+    const unavailable = input.lines.some((line) => {
+      const item = localMenu.find((candidate) => candidate.id === line.menuItemId)
+      return !item || item.kind !== 'menu' || !item.inStock
+    })
+    if (unavailable) throw new Error('One of the items is no longer available.')
 
-      const items: OrderItem[] = input.lines.map((line) => {
-        const item = byId.get(line.menuItemId)
-        if (!item || item.kind !== 'menu' || !item.inStock) throw new Error('One of the items is no longer available.')
-        const variation = line.variation ? item.variations.find((option: Variation) => option.name === line.variation) : undefined
-        if (line.variation && !variation) throw new Error(`Invalid option for ${item.name}.`)
-        return { name: item.name, qty: line.qty, price: item.sellPrice + (variation?.price ?? 0), variation: variation?.name }
-      })
+    const outcome = await forwardCheckout(order, localMenu)
+    if (outcome.kind === 'rejected') return { ok: false, error: outcome.error }
 
-      const subtotal = Math.round(items.reduce((sum, item) => sum + item.price * item.qty, 0) * 100) / 100
-      const total = Math.round(subtotal * (1 + TAX_RATE) * 100) / 100
-      const tableId = orderType === 'dine-in' && input.tableId && Number.isInteger(input.tableId) ? input.tableId : null
-      const customer = input.customer.trim().slice(0, 60) || 'Walk-in'
-
-      await db.transaction(async (tx) => {
-        const [{ next }] = await tx.execute<{ next: number }>(
-          sql`select coalesce(max(id), 0) + 1 as next from admin_orders`,
-        ).then((result) => result.rows)
-        await tx.insert(adminOrders).values({
-          orderCode: `AC-${String(next).padStart(4, '0')}-${Date.now().toString(36).slice(-3).toUpperCase()}`,
-          customer,
-          tableId,
-          orderType,
-          items,
-          subtotal,
-          total,
-          paymentMethod,
-          paymentStatus: input.paid ? 'paid' : 'unpaid',
-          status: 'pending',
-        })
-        for (const [id, qty] of quantities) {
-          await tx
-            .update(adminMenuItems)
-            .set({ stockQty: sql`greatest(${adminMenuItems.stockQty} - ${qty}, 0)` })
-            .where(eq(adminMenuItems.id, id))
-        }
-        if (tableId) {
-          await tx
-            .update(adminTables)
-            .set({ status: 'occupied', occupiedSince: sql`coalesce(${adminTables.occupiedSince}, now())`, updatedAt: new Date() })
-            .where(eq(adminTables.id, tableId))
-        }
-      })
-
-      refresh()
-      return { ok: true, message: `Order sent to the bar for ${customer}.` }
-    } catch {
-      const res = createMockOrder({
-        lines: input.lines,
-        customer: input.customer,
-        tableId: orderType === 'dine-in' && input.tableId && Number.isInteger(input.tableId) ? input.tableId : null,
-        orderType,
-        paymentMethod,
-        paid: input.paid,
-      })
-      refresh()
-      return res.ok ? { ok: true, message: res.message } : { ok: false, error: res.error ?? 'Failed' }
-    }
+    const orderCode = outcome.kind === 'accepted' ? outcome.orderCode : undefined
+    const res = await recordOrderLocally({ ...order, orderCode }, quantities)
+    refresh()
+    if (!res.ok || !orderCode) return res
+    return { ok: true, message: `Order ${orderCode} recorded by the Java backend.` }
   } catch (error) {
     return fail(error)
   }
