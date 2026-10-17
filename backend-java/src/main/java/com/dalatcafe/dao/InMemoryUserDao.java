@@ -48,15 +48,6 @@ public class InMemoryUserDao implements IUserDao {
     }
 
     @Override
-    public Optional<UserAccount> findByGoogleSubject(String googleSubject) {
-        if (googleSubject == null) return Optional.empty();
-        return users().values().stream()
-                .filter(u -> googleSubject.equals(u.getGoogleSubject()))
-                .findFirst()
-                .map(UserAccount::copy);
-    }
-
-    @Override
     public boolean save(UserAccount user) {
         if (user == null || user.getEmail() == null) return false;
         synchronized (db) {
@@ -64,7 +55,6 @@ public class InMemoryUserDao implements IUserDao {
                 boolean sameRow = user.getId() != null && user.getId().equals(other.getId());
                 if (sameRow) continue;
                 if (other.getEmail().equals(user.getEmail())) return false;
-                if (user.getGoogleSubject() != null && user.getGoogleSubject().equals(other.getGoogleSubject())) return false;
             }
             if (user.getId() == null) {
                 user.setId(db.generateUserId());
