@@ -18,7 +18,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <junit.jupiter.version>5.10.2</junit.jupiter.version>
-        <postgresql.version>42.7.3</postgresql.version>
+        <postgresql.version>42.7.14</postgresql.version>
     </properties>
 
     <dependencies>
