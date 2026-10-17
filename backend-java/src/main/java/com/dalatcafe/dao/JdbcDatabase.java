@@ -302,7 +302,6 @@ public class JdbcDatabase {
                 email VARCHAR(255) UNIQUE NOT NULL,
                 name VARCHAR(255) NOT NULL,
                 password_hash VARCHAR(255),
-                google_subject VARCHAR(255) UNIQUE,
                 role VARCHAR(30) NOT NULL DEFAULT 'CUSTOMER',
                 active BOOLEAN NOT NULL DEFAULT TRUE,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,

@@ -41,7 +41,6 @@ type CallOptions = {
   body?: unknown
   // false for the sign-in calls themselves; a token string to call on behalf of a user just signed in.
   auth?: false | string
-  headers?: Record<string, string>
 }
 
 async function request<T>(path: string, init: CallOptions): Promise<JavaResult<T>> {
@@ -57,7 +56,6 @@ async function request<T>(path: string, init: CallOptions): Promise<JavaResult<T
         Accept: 'application/json',
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...init.headers,
       },
       body: init.body === undefined ? undefined : JSON.stringify(init.body),
       cache: 'no-store',
@@ -325,7 +323,6 @@ export type JavaUser = {
   name: string
   role: JavaRole
   active: boolean
-  providers: ('password' | 'google')[]
   createdAt: string | null
   lastLoginAt: string | null
 }
@@ -338,19 +335,6 @@ export function signInWithPassword(email: string, password: string): Promise<Jav
 
 export function registerAccount(input: { email: string; name: string; password: string }): Promise<JavaResult<JavaSession>> {
   return request<JavaSession>('/api/auth/register', { method: 'POST', body: input, auth: false })
-}
-
-// The frontend verified the Google ID token; the service key proves this call comes from it.
-export function signInWithGoogle(
-  identity: { googleSubject: string; email: string; name: string; emailVerified: boolean },
-  serviceKey: string,
-): Promise<JavaResult<JavaSession>> {
-  return request<JavaSession>('/api/auth/google', {
-    method: 'POST',
-    body: identity,
-    auth: false,
-    headers: { 'X-Service-Key': serviceKey },
-  })
 }
 
 export function changeOwnPassword(currentPassword: string, newPassword: string): Promise<JavaResult<JavaUser>> {

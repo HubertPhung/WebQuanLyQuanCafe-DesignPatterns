@@ -21,10 +21,7 @@ export default async function AccountPage() {
         <dt className="text-stone-500">Vai trò</dt>
         <dd className="font-semibold text-stone-900">{roleLabels[session.role]}</dd>
       </dl>
-      <ChangePasswordForm hasPassword />
-      <p className="mt-2 text-xs text-stone-500">
-        Tài khoản tạo bằng Google chưa có mật khẩu: để trống ô mật khẩu hiện tại không được, hãy đăng nhập bằng Google.
-      </p>
+      <ChangePasswordForm />
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
         {atLeast(session.role, 'STAFF') ? (
           <Link href="/admin" className="text-sm font-semibold text-[#5A3E2B] hover:underline">

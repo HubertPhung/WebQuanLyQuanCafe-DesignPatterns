@@ -6,7 +6,6 @@ import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Bean,
-  Coffee,
   Heart,
   Menu,
   Search,
@@ -17,6 +16,7 @@ import {
 } from 'lucide-react'
 import { useCartStore } from '@/lib/store/cart-store'
 import { AccountDropdown, type StorefrontAccount } from './AccountDropdown'
+import { Logo } from '@/components/brand/logo'
 import { CartSheet } from './CartSheet'
 import { Button } from '@/components/ui/button'
 
@@ -152,17 +152,10 @@ export function Header({
             className="brand flex items-center gap-3 group shrink-0"
             aria-label="Đà Lạt Cafe home"
           >
-            <div className="brand-mark size-10 rounded-xl bg-[#3E2723] text-amber-100 flex items-center justify-center shadow-xs transition-transform duration-200 group-hover:scale-105">
-              <Coffee size={22} strokeWidth={1.75} />
-            </div>
-            <div className="flex flex-col leading-tight">
-              <span className="font-extrabold text-lg sm:text-xl text-stone-900 tracking-tight group-hover:text-[#3E2723] transition-colors">
-                Đà Lạt Cafe
-              </span>
-              <small className="text-[10px] font-bold text-stone-500 uppercase tracking-widest">
-                CÀ PHÊ & CỘNG ĐỒNG
-              </small>
-            </div>
+            <Logo
+              markClassName="brand-mark shadow-xs transition-transform duration-200 group-hover:scale-105 group-hover:-rotate-3"
+              tagline="Cà phê & cộng đồng"
+            />
           </Link>
 
           {/* Desktop Navigation Links */}

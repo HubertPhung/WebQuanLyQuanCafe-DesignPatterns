@@ -55,8 +55,7 @@ public class MainServer {
 
         server = HttpServer.create(new InetSocketAddress(port), 0);
         register("/api/auth", new AuthHandler(users, hasher, tokens,
-                new LoginThrottle(LoginThrottle.DEFAULT_MAX_FAILURES, LoginThrottle.DEFAULT_WINDOW, Clock.systemUTC()),
-                auth.serviceKey()));
+                new LoginThrottle(LoginThrottle.DEFAULT_MAX_FAILURES, LoginThrottle.DEFAULT_WINDOW, Clock.systemUTC())));
         register("/api/users", new UserHandler(users, hasher));
         register("/api/menu", new MenuHandler(daos.getMenuDao()));
         register("/api/orders", new OrderHandler(daos.getOrderDao(), daos.getMenuDao(),

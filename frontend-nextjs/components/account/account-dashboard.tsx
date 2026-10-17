@@ -2,12 +2,12 @@
 
 import Link from 'next/link'
 import { signOut } from '@/app/auth/actions'
+import { Logo } from '@/components/brand/logo'
 import {
   ArrowLeft,
   Award,
   CheckCircle2,
   Clock,
-  Coffee,
   Copy,
   Gift,
   Heart,
@@ -55,12 +55,7 @@ export function AccountDashboard({ user, currentTab }: { user: AccountUser; curr
               Về trang chủ Đà Lạt Cafe
             </span>
           </Link>
-          <div className="flex items-center gap-2">
-            <div className="size-8 rounded-lg bg-[#3E2723] text-white flex items-center justify-center">
-              <Coffee className="size-4.5" />
-            </div>
-            <span className="font-extrabold text-base text-stone-900">Tài khoản Đà Lạt Cafe</span>
-          </div>
+          <Logo markClassName="size-8" tagline="Tài khoản của bạn" />
           <form action={signOut}>
             <Button type="submit" variant="ghost" className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50">
               <LogOut className="size-3.5 mr-1" />
