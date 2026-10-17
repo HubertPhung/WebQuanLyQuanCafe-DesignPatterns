@@ -4,6 +4,8 @@ import com.dalatcafe.dao.DaoFactory;
 import com.dalatcafe.dao.InMemoryDatabase;
 import com.dalatcafe.model.Customer;
 import com.dalatcafe.model.MenuItem;
+import com.dalatcafe.model.Order;
+import com.dalatcafe.model.PaymentStatus;
 import com.dalatcafe.model.ReservationStatus;
 import com.dalatcafe.model.Table;
 import com.dalatcafe.model.TableStatus;
@@ -399,6 +401,76 @@ class ServerTest {
         assertTrue(((List<?>) overview.get("topItems")).toString().contains("Ca phe muoi"));
         assertNotNull(overview.get("tables"));
         assertEquals(404, call("GET", "/api/analytics/other", "ADMIN", null).statusCode());
+    }
+
+    @Test
+    void analyticsReturnsDailySeriesPaymentMixAndValidatesDays() throws Exception {
+        checkoutAtTable(3, "");
+        Map<String, Object> week = data(call("GET", "/api/analytics/overview", "MANAGER", null));
+        List<?> series = (List<?>) week.get("revenueByDay");
+        assertEquals(7, series.size());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> today = (Map<String, Object>) series.get(6);
+        assertTrue(number(today, "revenue") > 0);
+        assertTrue(number(today, "orders") >= 1);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> mix = (Map<String, Object>) week.get("paymentMix");
+        assertTrue(number(mix, "cash") > 0);
+        assertTrue(number(week, "ordersToday") >= 1);
+        assertNotNull(week.get("fulfillmentMinutesToday"));
+
+        assertEquals(3, ((List<?>) data(call("GET", "/api/analytics/overview?days=3", "ADMIN", null)).get("revenueByDay")).size());
+        assertEquals(400, call("GET", "/api/analytics/overview?days=0", "MANAGER", null).statusCode());
+        assertEquals(400, call("GET", "/api/analytics/overview?days=abc", "MANAGER", null).statusCode());
+    }
+
+    private static String offlineOrder(String code, String extra) {
+        return "{\"orderCode\":\"" + code + "\",\"customer\":\"Khach offline\",\"orderType\":\"dine-in\","
+                + "\"paymentMethod\":\"cash\",\"createdAt\":\"2026-10-17T02:00:00Z\"" + extra + "}";
+    }
+
+    @Test
+    void offlineOrdersAreImportedOnceWithoutChargingAgain() throws Exception {
+        DaoFactory daos = DaoFactory.getInstance();
+        daos.getTableDao().updateStatus(12, TableStatus.AVAILABLE, 0);
+        String batch = "{\"orders\":["
+                + offlineOrder("AC-0901-OFF", ",\"tableId\":12,\"paid\":true,\"status\":\"pending\",\"total\":97200,"
+                + "\"lines\":[{\"menuItemId\":" + DRINK_ID + ",\"name\":\"Ca phe muoi\",\"qty\":2,\"price\":45000}]") + ","
+                + offlineOrder("AC-0902-OFF", ",\"orderType\":\"pickup\",\"paid\":false,"
+                + "\"lines\":[{\"menuItemId\":99999,\"name\":\"Banh mi\",\"qty\":1,\"price\":20000}]") + ","
+                + offlineOrder("AC-0903-OFF", ",\"paid\":false,\"status\":\"completed\","
+                + "\"lines\":[{\"name\":\"Tra\",\"qty\":1,\"price\":20000}]") + ","
+                + offlineOrder("AC-0904-OFF", ",\"paid\":true,\"lines\":[{\"name\":\"Tra\",\"qty\":0,\"price\":20000}]")
+                + "]}";
+
+        assertEquals(401, call("POST", "/api/orders/sync", null, batch).statusCode());
+        HttpResponse<String> first = call("POST", "/api/orders/sync", "STAFF", batch);
+        assertEquals(200, first.statusCode(), first.body());
+        assertEquals(2, ((Number) data(first).get("created")).intValue());
+        assertEquals(2, ((Number) data(first).get("failed")).intValue());
+        assertTrue(first.body().contains("stock not deducted"));
+
+        Order imported = daos.getOrderDao().findByOrderCode("AC-0901-OFF").orElseThrow();
+        assertEquals(PaymentStatus.PAID, imported.getPaymentStatus());
+        assertEquals(97_200, imported.getTotal());
+        assertEquals("2026-10-17T02:00:00Z", imported.getCreatedAt().toString());
+        assertEquals(8.0, daos.getMenuDao().findById(DRINK_ID).orElseThrow().getStockQty());
+        assertEquals(TableStatus.OCCUPIED, daos.getTableDao().findById(12).orElseThrow().getStatus());
+        assertEquals(PaymentStatus.UNPAID, daos.getOrderDao().findByOrderCode("AC-0902-OFF").orElseThrow().getPaymentStatus());
+        assertTrue(daos.getOrderDao().findByOrderCode("AC-0903-OFF").isEmpty());
+
+        HttpResponse<String> again = call("POST", "/api/orders/sync", "STAFF", batch);
+        assertEquals(2, ((Number) data(again).get("existing")).intValue());
+        assertEquals(0, ((Number) data(again).get("created")).intValue());
+        assertEquals(8.0, daos.getMenuDao().findById(DRINK_ID).orElseThrow().getStockQty());
+
+        // An imported order follows the normal KDS lifecycle afterwards.
+        assertEquals(200, setOrderStatus("AC-0901-OFF", "completed").statusCode());
+        assertEquals(TableStatus.CLEANING, daos.getTableDao().findById(12).orElseThrow().getStatus());
+
+        assertEquals(400, call("POST", "/api/orders/sync", "STAFF", "{\"orders\":[]}").statusCode());
+        dbUp.set(false);
+        assertEquals(503, call("POST", "/api/orders/sync", "STAFF", batch).statusCode());
     }
 
     @Test
