@@ -23,7 +23,7 @@ function startOfDay(offsetDays = 0) {
 }
 
 export async function getMenuItems(): Promise<MenuItem[]> {
-  assertAdminAccess()
+  await assertAdminAccess()
   if (!isDbConfigured || !db) {
     return getMockMenuItems()
   }
@@ -36,7 +36,7 @@ export async function getMenuItems(): Promise<MenuItem[]> {
 }
 
 export async function getTables(): Promise<FloorTable[]> {
-  assertAdminAccess()
+  await assertAdminAccess()
   if (!isDbConfigured || !db) {
     return getMockTables()
   }
@@ -49,7 +49,7 @@ export async function getTables(): Promise<FloorTable[]> {
 }
 
 export async function getActiveOrders(): Promise<Order[]> {
-  assertAdminAccess()
+  await assertAdminAccess()
   if (!isDbConfigured || !db) {
     return getMockActiveOrders()
   }
@@ -62,7 +62,7 @@ export async function getActiveOrders(): Promise<Order[]> {
 }
 
 export async function getOrdersSince(days: number): Promise<Order[]> {
-  assertAdminAccess()
+  await assertAdminAccess()
   if (!isDbConfigured || !db) {
     return getMockOrdersSince(days)
   }
@@ -203,7 +203,7 @@ export type CustomerView = { name: string; orders: number; spent: number; lastVi
 // Loyalty members from GET /api/customers (with points and rank); without Java, a 90-day
 // summary of the local orders by customer name.
 export async function getCustomers(): Promise<{ customers: CustomerView[]; source: DataSource }> {
-  assertAdminAccess()
+  await assertAdminAccess()
   const remote = await fetchCustomers()
   if (remote.ok) {
     return {
@@ -233,7 +233,7 @@ export async function getCustomers(): Promise<{ customers: CustomerView[]; sourc
 
 // Orders recorded locally that the Java backend has not received yet.
 export async function getPendingSyncCount(): Promise<number> {
-  assertAdminAccess()
+  await assertAdminAccess()
   return (await listSyncQueue()).length
 }
 
@@ -273,7 +273,7 @@ function formatSlot(date: Date) {
 }
 
 export async function getReservations(): Promise<{ reservations: ReservationView[]; javaOnline: boolean }> {
-  assertAdminAccess()
+  await assertAdminAccess()
   const local: ReservationView[] = getMockReservations().map((r) => ({
     id: r.code,
     source: 'local',

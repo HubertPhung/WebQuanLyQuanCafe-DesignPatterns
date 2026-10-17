@@ -15,10 +15,12 @@ import { CoffeeFooter } from '@/components/coffee-footer'
 import { Hero } from '@/components/storefront/Hero'
 import { DrinkMenu } from '@/components/storefront/DrinkMenu'
 import { Header } from '@/components/storefront/Header'
+import type { StorefrontAccount } from '@/components/storefront/AccountDropdown'
 import { useCartStore } from '@/lib/store/cart-store'
 import { toast } from 'sonner'
 
 interface RoleSwitcherViewProps {
+  account?: StorefrontAccount | null
   products: Product[]
   catalogError?: string
   storeDomain?: string
@@ -42,6 +44,7 @@ export function RoleSwitcherView({
   products,
   catalogError,
   storeDomain,
+  account = null,
 }: RoleSwitcherViewProps) {
   const { data: cart, mutate: mutateCart } = useSWR<Cart | null>('/api/cart', fetcher)
   const { data: favorites = [], mutate: mutateFavorites } = useSWR<string[]>('/api/favorites', fetcher)
@@ -87,7 +90,7 @@ export function RoleSwitcherView({
       {/* 1. DEDICATED CUSTOMER STOREFRONT */}
       <main className="min-h-screen">
         {/* Modular Sticky Header with AccountDropdown & CartSheet */}
-        <Header favoritesCount={favorites.length} />
+        <Header account={account} favoritesCount={favorites.length} />
 
         {/* Hero Section Component */}
         <Hero

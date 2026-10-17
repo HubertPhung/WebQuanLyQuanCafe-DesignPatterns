@@ -1,9 +1,11 @@
 import { PageHeading } from '@/components/admin/shared'
 import { StaffManagement } from '@/components/admin/staff-management'
+import { requirePageRole } from '@/lib/auth/session'
 
 export const metadata = { title: 'Nhân viên & Người dùng' }
 
-export default function StaffPage() {
+export default async function StaffPage() {
+  await requirePageRole('MANAGER', '/admin/staff')
   return (
     <>
       <PageHeading

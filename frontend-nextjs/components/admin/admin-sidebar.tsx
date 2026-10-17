@@ -15,6 +15,7 @@ import {
   Users,
   UtensilsCrossed,
   ChevronsUpDown,
+  ShieldCheck,
 } from 'lucide-react'
 import {
   Sidebar,
@@ -31,6 +32,7 @@ import {
   SidebarRail,
 } from '@/components/ui/sidebar'
 import { cn } from '@/lib/utils'
+import { atLeast, requiredRoleForPath, type Role } from '@/lib/auth/roles'
 
 export const overviewNav = [
   { href: '/admin', labelVi: 'Dashboard', subVi: 'Tổng quan & phân tích', icon: LayoutDashboard },
@@ -51,6 +53,7 @@ export const businessNav = [
 export const staffNav = [
   { href: '/admin/staff', labelVi: 'Nhân viên', subVi: 'Tài khoản & người dùng', icon: Users },
   { href: '/admin/schedule', labelVi: 'Lịch làm việc', subVi: 'Xếp ca & chấm công', icon: CalendarDays },
+  { href: '/admin/users', labelVi: 'Tài khoản & phân quyền', subVi: 'Đăng nhập, vai trò', icon: ShieldCheck },
 ]
 
 type Badges = { orders?: number; stock?: number }
@@ -65,6 +68,7 @@ function NavGroup({
   badges?: Badges
 }) {
   const pathname = usePathname()
+  if (items.length === 0) return null
   return (
     <SidebarGroup className="py-1.5">
       <SidebarGroupLabel className="text-xs font-bold uppercase tracking-wider text-stone-400 px-4 mb-1">
@@ -112,7 +116,10 @@ function NavGroup({
   )
 }
 
-export function AdminSidebar({ badges = { orders: 0, stock: 0 } }: { badges?: Badges }) {
+export function AdminSidebar({ badges = { orders: 0, stock: 0 }, role = 'STAFF' }: { badges?: Badges; role?: Role }) {
+  // Only the pages this role may open (same rules as proxy.ts).
+  const allowed = <T extends { href: string }>(items: T[]) =>
+    items.filter((item) => atLeast(role, requiredRoleForPath(item.href) ?? 'STAFF'))
   return (
     <Sidebar collapsible="icon" className="border-r border-stone-200/50 bg-[#F7F5F0] text-stone-800 font-sans">
       {/* Brand Header */}
@@ -139,10 +146,10 @@ export function AdminSidebar({ badges = { orders: 0, stock: 0 } }: { badges?: Ba
 
       {/* 4 Grouped Operations Menus */}
       <SidebarContent className="py-2 bg-[#F7F5F0] overflow-y-auto">
-        <NavGroup label="TỔNG QUAN" items={overviewNav} badges={badges} />
-        <NavGroup label="QUẢN LÝ CỬA HÀNG" items={storeNav} badges={badges} />
-        <NavGroup label="KINH DOANH" items={businessNav} badges={badges} />
-        <NavGroup label="NHÂN SỰ" items={staffNav} badges={badges} />
+        <NavGroup label="TỔNG QUAN" items={allowed(overviewNav)} badges={badges} />
+        <NavGroup label="QUẢN LÝ CỬA HÀNG" items={allowed(storeNav)} badges={badges} />
+        <NavGroup label="KINH DOANH" items={allowed(businessNav)} badges={badges} />
+        <NavGroup label="NHÂN SỰ" items={allowed(staffNav)} badges={badges} />
 
         {/* Hidden links for automated test suite backward-compatibility */}
         <div className="sr-only">

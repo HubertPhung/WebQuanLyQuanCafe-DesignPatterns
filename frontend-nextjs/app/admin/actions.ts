@@ -39,6 +39,8 @@ import {
   updateTable,
   syncJavaOrders,
   updateConfig,
+  createUser,
+  updateUser,
   type CheckoutPayload,
   type CheckoutReceipt,
   type JavaResult,
@@ -105,7 +107,7 @@ function javaRefusal(result: JavaResult<unknown>): string | null {
 
 export async function updateOrderStatus(orderId: number, status: OrderStatus): Promise<ActionResult> {
   try {
-    assertAdminAccess()
+    await assertAdminAccess()
     if (!Number.isInteger(orderId) || !orderStatuses.includes(status)) throw new Error('Invalid order update.')
     const local = await findLocalOrder(orderId)
     if (local) {
@@ -143,7 +145,7 @@ export async function updateOrderStatus(orderId: number, status: OrderStatus): P
 
 export async function markOrderPaid(orderId: number): Promise<ActionResult> {
   try {
-    assertAdminAccess()
+    await assertAdminAccess()
     if (!Number.isInteger(orderId)) throw new Error('Invalid order.')
     const local = await findLocalOrder(orderId)
     if (local) {
@@ -179,7 +181,7 @@ export type MemberLookup = { ok: true; member: Member | null; offline: boolean }
 // POS member lookup through GET /api/customers?phone=... (members live in the Java store).
 export async function lookupMember(phone: string): Promise<MemberLookup> {
   try {
-    assertAdminAccess()
+    await assertAdminAccess()
     const digits = normalizePhone(phone)
     if (!digits) throw new Error('Enter a phone number with 8 to 15 digits.')
     const result = await findCustomerByPhone(digits)
@@ -356,7 +358,7 @@ async function recordOrderLocally(input: LocalOrderInput, quantities: Map<number
 
 export async function createOrder(input: NewOrderInput): Promise<ActionResult> {
   try {
-    assertAdminAccess()
+    await assertAdminAccess()
     const orderType = orderTypes.find((type) => type === input.orderType)
     const paymentMethod = paymentMethods.find((method) => method === input.paymentMethod)
     if (!orderType || !paymentMethod) throw new Error('Choose a valid order type and payment method.')
@@ -443,7 +445,7 @@ export async function createOrder(input: NewOrderInput): Promise<ActionResult> {
 
 export async function updateTableStatus(tableId: number, status: TableStatus, guestCount = 0): Promise<ActionResult> {
   try {
-    assertAdminAccess()
+    await assertAdminAccess()
     if (!Number.isInteger(tableId) || !tableStatuses.includes(status)) throw new Error('Invalid table update.')
     const guests = Math.min(Math.max(Math.trunc(guestCount), 0), 20)
 
@@ -487,7 +489,7 @@ type NewReservationInput = {
 
 export async function createReservation(input: NewReservationInput): Promise<ActionResult> {
   try {
-    assertAdminAccess()
+    await assertAdminAccess()
     const customer = input.customer.trim().slice(0, 60)
     const contact = input.contact.trim().slice(0, 30)
     if (!customer || !contact) throw new Error('Customer name and contact are required.')
@@ -568,7 +570,7 @@ async function recordExternalOrder(input: ExternalOrderInput): Promise<ActionRes
 // (ReservationToOrderAdapter in Java); a reservation that only exists locally uses the frontend mirror.
 export async function transferReservationToPos(code: string, source: 'java' | 'local', guests = 1): Promise<ActionResult> {
   try {
-    assertAdminAccess()
+    await assertAdminAccess()
     if (typeof code !== 'string' || !/^[A-Za-z0-9-]{1,40}$/.test(code)) throw new Error('Invalid reservation code.')
 
     if (source === 'local') {
@@ -618,7 +620,7 @@ export async function updateReservationStatus(
   status: ReservationStatusLabel,
 ): Promise<ActionResult> {
   try {
-    assertAdminAccess()
+    await assertAdminAccess()
     if (typeof code !== 'string' || !/^[A-Za-z0-9-]{1,40}$/.test(code)) throw new Error('Invalid reservation code.')
     if (!reservationStatuses.includes(status)) throw new Error('Invalid reservation status.')
     if (status === 'Hoàn thành') throw new Error('Use "Sang POS" to seat the guests; it opens their order too.')
@@ -642,7 +644,7 @@ export async function updateReservationStatus(
 
 export async function setItemInStock(itemId: number, inStock: boolean): Promise<ActionResult> {
   try {
-    assertAdminAccess()
+    await assertAdminAccess()
     if (!Number.isInteger(itemId)) throw new Error('Invalid item.')
     const javaId = await javaMenuIdFor(itemId)
     if (javaId !== undefined) {
@@ -687,7 +689,7 @@ function money(value: number, label: string) {
 
 export async function createMenuItem(input: NewItemInput): Promise<ActionResult> {
   try {
-    assertAdminAccess()
+    await assertAdminAccess('MANAGER')
     const name = input.name.trim().slice(0, 80)
     const category = input.category.trim().slice(0, 40)
     if (!name || !category) throw new Error('Name and category are required.')
@@ -843,7 +845,7 @@ async function pushQueuedOrders(codes: string[]): Promise<PushSummary> {
 
 export async function syncOfflineOrders(): Promise<ActionResult> {
   try {
-    assertAdminAccess()
+    await assertAdminAccess()
     const queued = await listSyncQueue()
     if (queued.length === 0) return { ok: true, message: 'Nothing to sync: the Java backend has every order.' }
     const summary = await pushQueuedOrders(queued)
@@ -861,13 +863,50 @@ export async function syncOfflineOrders(): Promise<ActionResult> {
 // Store settings live in the Java SystemConfigManager Singleton, so there is no local fallback.
 export async function updateStoreSettings(change: StoreConfigChange): Promise<ActionResult> {
   try {
-    assertAdminAccess()
+    await assertAdminAccess('ADMIN')
     const remote = await updateConfig(change)
     if (!remote.ok) {
       return { ok: false, error: remote.unreachable ? 'Java backend is unreachable; settings were not changed.' : remote.error }
     }
     refresh()
     return { ok: true, message: 'Settings saved on the Java backend.' }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+const accountRoles = ['CUSTOMER', 'STAFF', 'MANAGER', 'ADMIN'] as const
+
+// Accounts live in the Java backend (/api/users, ADMIN); there is no local fallback.
+function accountError(result: Extract<JavaResult<unknown>, { ok: false }>) {
+  if (result.unreachable) return 'Java backend is unreachable; accounts were not changed.'
+  return result.code === 'EMAIL_TAKEN' ? 'An account with this email already exists.' : result.error
+}
+
+export async function createAccount(input: { email: string; name: string; password: string; role: string }): Promise<ActionResult> {
+  try {
+    await assertAdminAccess('ADMIN')
+    const role = accountRoles.find((candidate) => candidate === input.role)
+    if (!role) throw new Error('Choose a valid role.')
+    const result = await createUser({ email: input.email.trim(), name: input.name.trim(), password: input.password, role })
+    if (!result.ok) return { ok: false, error: accountError(result) }
+    refresh()
+    return { ok: true, message: `Account ${result.data.email} created as ${role}.` }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+export async function updateAccount(id: number, change: { role?: string; active?: boolean }): Promise<ActionResult> {
+  try {
+    await assertAdminAccess('ADMIN')
+    if (!Number.isInteger(id)) throw new Error('Invalid account.')
+    const role = change.role === undefined ? undefined : accountRoles.find((candidate) => candidate === change.role)
+    if (change.role !== undefined && !role) throw new Error('Choose a valid role.')
+    const result = await updateUser(id, { role, active: change.active })
+    if (!result.ok) return { ok: false, error: accountError(result) }
+    refresh()
+    return { ok: true, message: `Account ${result.data.email} updated.` }
   } catch (error) {
     return fail(error)
   }

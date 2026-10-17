@@ -5,8 +5,23 @@
 
 import { createServer } from 'http'
 import { spawn, execSync } from 'child_process'
+import { SignJWT } from 'jose'
 
 const BASE_URL = process.env.TEST_BASE_URL || 'http://localhost:3000'
+
+// Session cookies for the admin pages, signed like the Java TokenService does (HS256). The
+// secret must match the server's AUTH_JWT_SECRET; locally both fall back to the dev secret.
+const JWT_SECRET = new TextEncoder().encode(process.env.AUTH_JWT_SECRET || 'dalatcafe-dev-only-secret-change-me-0123456789')
+
+async function sessionCookie(role, secret = JWT_SECRET) {
+  const token = await new SignJWT({ email: `${role.toLowerCase()}@test.local`, name: `Test ${role}`, role })
+    .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+    .setSubject('1')
+    .setIssuedAt()
+    .setExpirationTime('1h')
+    .sign(secret)
+  return `dalatcafe_session=${token}`
+}
 
 let spawnedProcess = null
 
@@ -295,9 +310,10 @@ async function runAdminUITests() {
     { id: 'TC-ADM-09', path: '/admin/staff', title: 'Staff Roles & Schedule', keywords: ['Staff accounts arrive with sign-in'] },
   ]
 
+  const adminCookie = await sessionCookie('ADMIN')
   for (const route of adminRoutes) {
     try {
-      const res = await fetchPage(`${BASE_URL}${route.path}`)
+      const res = await fetchPage(`${BASE_URL}${route.path}`, { headers: { Cookie: adminCookie } })
       const allFound = route.keywords.every(kw => res.body.includes(kw))
       if (res.status === 200 && allFound) {
         recordTest(route.id, route.title, 'Admin UI', 'PASS', 'Route returned 200 OK with expected UI elements')
@@ -457,6 +473,80 @@ async function runAdminMutationTests() {
   }
 }
 
+async function runAuthTests() {
+  console.log('
+--- 5. TESTING SIGN-IN & ROLE-BASED ACCESS ---')
+  const manual = (cookie) => ({ redirect: 'manual', headers: cookie ? { Cookie: cookie } : {} })
+  const target = (res) => res.headers.get('location') ?? ''
+
+  const checks = [
+    {
+      id: 'TC-AUTH-01', name: 'Visitor Is Sent to Sign-in With the Requested Page',
+      run: async () => {
+        const res = await fetchPage(`${BASE_URL}/admin/pos`, manual())
+        return [res.status === 307 && target(res).includes('/login?next=%2Fadmin%2Fpos'), `${res.status} -> ${target(res)}`]
+      },
+    },
+    {
+      id: 'TC-AUTH-02', name: 'Customer Session Cannot Open the Admin Console',
+      run: async () => {
+        const res = await fetchPage(`${BASE_URL}/admin`, manual(await sessionCookie('CUSTOMER')))
+        return [res.status === 307 && new URL(target(res), BASE_URL).pathname === '/', `${res.status} -> ${target(res)}`]
+      },
+    },
+    {
+      id: 'TC-AUTH-03', name: 'Staff Opens POS but Not Admin-only Settings',
+      run: async () => {
+        const cookie = await sessionCookie('STAFF')
+        const pos = await fetchPage(`${BASE_URL}/admin/pos`, manual(cookie))
+        const settings = await fetchPage(`${BASE_URL}/admin/settings`, manual(cookie))
+        return [pos.status === 200 && settings.status === 307 && target(settings).includes('/admin?denied=1'), `pos=${pos.status}, settings=${settings.status}`]
+      },
+    },
+    {
+      id: 'TC-AUTH-04', name: 'Token Signed With Another Secret Is Rejected',
+      run: async () => {
+        const forged = await sessionCookie('ADMIN', new TextEncoder().encode('an-attacker-chosen-secret-0123456789-xyz'))
+        const res = await fetchPage(`${BASE_URL}/admin`, manual(forged))
+        return [res.status === 307 && target(res).includes('/login'), `${res.status} -> ${target(res)}`]
+      },
+    },
+    {
+      id: 'TC-AUTH-05', name: 'Sign-in Page With Password Form and Google Option',
+      run: async () => {
+        const res = await fetchPage(`${BASE_URL}/login`)
+        const ok = res.status === 200 && res.body.includes('Sign in') && res.body.includes('name="password"') && res.body.includes('Google')
+        return [ok, `Status ${res.status}`]
+      },
+    },
+    {
+      id: 'TC-AUTH-06', name: 'Sign-up Page Creates Customer Accounts',
+      run: async () => {
+        const res = await fetchPage(`${BASE_URL}/register`)
+        const ok = res.status === 200 && res.body.includes('Create account') && res.body.includes('name="confirm"')
+        return [ok, `Status ${res.status}`]
+      },
+    },
+    {
+      id: 'TC-AUTH-07', name: 'Admin Opens Accounts & Roles Page',
+      run: async () => {
+        const res = await fetchPage(`${BASE_URL}/admin/users`, manual(await sessionCookie('ADMIN')))
+        const managerRes = await fetchPage(`${BASE_URL}/admin/users`, manual(await sessionCookie('MANAGER')))
+        return [res.status === 200 && res.body.includes('Users') && managerRes.status === 307, `admin=${res.status}, manager=${managerRes.status}`]
+      },
+    },
+  ]
+
+  for (const check of checks) {
+    try {
+      const [ok, details] = await check.run()
+      recordTest(check.id, check.name, 'Auth & RBAC', ok ? 'PASS' : 'FAIL', details)
+    } catch (err) {
+      recordTest(check.id, check.name, 'Auth & RBAC', 'FAIL', err.message)
+    }
+  }
+}
+
 async function main() {
   console.log('=====================================================')
   console.log(' ĐÀ LẠT CAFE - UI/UX AUTOMATED TEST SUITE')
@@ -470,6 +560,7 @@ async function main() {
     await runCartAndWishlistTests()
     await runAdminUITests()
     await runAdminMutationTests()
+    await runAuthTests()
   } catch (err) {
     console.error('\n❌ Fatal Test Error:', err.message)
   } finally {
