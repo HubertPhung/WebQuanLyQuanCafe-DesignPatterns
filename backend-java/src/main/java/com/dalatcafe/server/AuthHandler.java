@@ -9,7 +9,10 @@ import com.dalatcafe.security.TokenService;
 import com.sun.net.httpserver.HttpExchange;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -18,8 +21,8 @@ import java.util.Objects;
 import java.util.regex.Pattern;
 
 /**
- * /api/auth: sign-up, password sign-in, the current account and password change. Successful
- * sign-ins answer with an HS256 access token.
+ * /api/auth: sign-up, password sign-in, Google sign-in reported by the frontend, the current
+ * account, and password change. Successful sign-ins answer with an HS256 access token.
  *
  * Sign-up always creates a CUSTOMER; staff roles are given by an admin through /api/users.
  * Wrong email and wrong password get the same answer (and take about the same time), and a
@@ -34,14 +37,16 @@ public class AuthHandler extends ApiHandler {
     private final PasswordHasher hasher;
     private final TokenService tokens;
     private final LoginThrottle throttle;
+    private final String serviceKey;
     /** Verified against when the email is unknown, so both failures cost the same time. */
     private final String dummyHash;
 
-    public AuthHandler(IUserDao users, PasswordHasher hasher, TokenService tokens, LoginThrottle throttle) {
+    public AuthHandler(IUserDao users, PasswordHasher hasher, TokenService tokens, LoginThrottle throttle, String serviceKey) {
         this.users = Objects.requireNonNull(users, "User DAO must not be null");
         this.hasher = Objects.requireNonNull(hasher, "Hasher must not be null");
         this.tokens = Objects.requireNonNull(tokens, "Token service must not be null");
         this.throttle = Objects.requireNonNull(throttle, "Throttle must not be null");
+        this.serviceKey = serviceKey;
         this.dummyHash = hasher.hash("not-a-real-password-0");
     }
 
@@ -58,6 +63,10 @@ public class AuthHandler extends ApiHandler {
             case "login" -> {
                 requireMethod(exchange, method, "POST");
                 login(exchange);
+            }
+            case "google" -> {
+                requireMethod(exchange, method, "POST");
+                google(exchange);
             }
             case "me" -> {
                 requireMethod(exchange, method, "GET");
@@ -111,6 +120,49 @@ public class AuthHandler extends ApiHandler {
         sendOk(exchange, 200, session(user), "Signed in");
     }
 
+    /**
+     * The frontend verified the Google ID token (signature, audience, issuer, nonce) and reports
+     * the result here with the shared service key. Matches by Google id, then links an existing
+     * customer account with the same verified email, otherwise creates a CUSTOMER.
+     *
+     * Google sign-in is for customers only: staff, manager and admin accounts keep signing in with
+     * their password, so the lockout and the admin's control over those accounts always apply.
+     */
+    private void google(HttpExchange exchange) throws IOException {
+        String presented = exchange.getRequestHeaders().getFirst("X-Service-Key");
+        if (serviceKey == null || presented == null
+                || !MessageDigest.isEqual(serviceKey.getBytes(StandardCharsets.UTF_8), presented.getBytes(StandardCharsets.UTF_8))) {
+            throw new ApiException(401, "UNAUTHORIZED", "Google sign-in is only accepted from the frontend server");
+        }
+        Map<String, Object> body = readJsonBody(exchange);
+        String subject = requireStr(body, "googleSubject");
+        String email = email(body);
+        if (!bool(body, "emailVerified", false)) {
+            throw ApiException.badRequest("The Google email address is not verified");
+        }
+        UserAccount user = users.findByGoogleSubject(subject)
+                .or(() -> users.findByEmail(email))
+                .orElse(null);
+        if (user == null) {
+            user = new UserAccount(null, email, name(body), UserRole.CUSTOMER);
+        } else if (user.getGoogleSubject() != null && !user.getGoogleSubject().equals(subject)) {
+            throw new ApiException(409, "RESOURCE_CONFLICT", "This email is linked to a different Google account");
+        }
+        if (user.getRole() != UserRole.CUSTOMER) {
+            throw new ApiException(403, "STAFF_PASSWORD_ONLY", "Staff accounts sign in with their email and password");
+        }
+        if (!user.isActive()) {
+            throw new ApiException(403, "ACCOUNT_DISABLED", "This account has been disabled; contact an administrator");
+        }
+        boolean created = user.getId() == null;
+        user.setGoogleSubject(subject);
+        user.setLastLoginAt(Instant.now());
+        if (!users.save(user)) {
+            throw new ApiException(409, "EMAIL_TAKEN", "An account with this email already exists");
+        }
+        sendOk(exchange, created ? 201 : 200, session(user), created ? "Account created with Google" : "Signed in with Google");
+    }
+
     private void changePassword(HttpExchange exchange) throws IOException {
         UserAccount user = currentUser(exchange);
         if (user.getId() == null) {
@@ -118,7 +170,7 @@ public class AuthHandler extends ApiHandler {
         }
         Map<String, Object> body = readJsonBody(exchange);
         String next = password(body, "newPassword");
-        if (!hasher.verify(str(body, "currentPassword"), user.getPasswordHash())) {
+        if (user.getPasswordHash() != null && !hasher.verify(str(body, "currentPassword"), user.getPasswordHash())) {
             throw new ApiException(401, "INVALID_CREDENTIALS", "The current password is wrong");
         }
         user.setPasswordHash(hasher.hash(next));
@@ -179,6 +231,10 @@ public class AuthHandler extends ApiHandler {
         json.put("name", user.getName());
         json.put("role", user.getRole().name());
         json.put("active", user.isActive());
+        List<Object> providers = new ArrayList<>();
+        if (user.getPasswordHash() != null) providers.add("password");
+        if (user.getGoogleSubject() != null) providers.add("google");
+        json.put("providers", providers);
         json.put("createdAt", user.getCreatedAt() == null ? null : user.getCreatedAt().toString());
         json.put("lastLoginAt", user.getLastLoginAt() == null ? null : user.getLastLoginAt().toString());
         return json;

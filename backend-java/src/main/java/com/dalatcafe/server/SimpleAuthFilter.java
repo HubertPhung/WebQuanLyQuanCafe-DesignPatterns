@@ -124,8 +124,8 @@ public class SimpleAuthFilter extends Filter {
                 || p.equals("/api/vouchers/validate") && method.equals("POST")) {
             return Access.PUBLIC;
         }
-        if (p.equals("/api/auth/register") || p.equals("/api/auth/login")) {
-            return Access.PUBLIC;
+        if (p.equals("/api/auth/register") || p.equals("/api/auth/login") || p.equals("/api/auth/google")) {
+            return Access.PUBLIC; // the Google endpoint checks its own service key
         }
         if (p.startsWith("/api/auth/")) {
             return Access.SIGNED_IN;

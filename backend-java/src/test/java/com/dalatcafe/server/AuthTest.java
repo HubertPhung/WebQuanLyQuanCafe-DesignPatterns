@@ -2,6 +2,7 @@ package com.dalatcafe.server;
 
 import com.dalatcafe.dao.DaoFactory;
 import com.dalatcafe.dao.InMemoryDatabase;
+import com.dalatcafe.model.UserRole;
 import com.dalatcafe.security.AdminBootstrap;
 import com.dalatcafe.security.AuthSettings;
 import com.dalatcafe.security.PasswordHasher;
@@ -21,11 +22,12 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Sign-up, sign-in and RBAC with real access tokens: the server runs without
+ * Sign-up, sign-in, Google sign-in and RBAC with real access tokens: the server runs without
  * the X-User-Role shortcut, exactly like production.
  */
 class AuthTest {
     private static final String SECRET = "test-secret-that-is-long-enough-0123456789";
+    private static final String SERVICE_KEY = "frontend-service-key";
     private static final String ADMIN_EMAIL = "boss@dalatcafe.vn";
     private static final String ADMIN_PASSWORD = "Boss12345";
 
@@ -38,7 +40,7 @@ class AuthTest {
         DaoFactory daos = DaoFactory.getInstance();
         PasswordHasher hasher = new PasswordHasher(10_000);
         AdminBootstrap.ensureAdmin(daos.getUserDao(), hasher, Map.of("ADMIN_EMAIL", ADMIN_EMAIL, "ADMIN_PASSWORD", ADMIN_PASSWORD));
-        AuthSettings auth = new AuthSettings(SECRET.getBytes(StandardCharsets.UTF_8), false, Duration.ofHours(1));
+        AuthSettings auth = new AuthSettings(SECRET.getBytes(StandardCharsets.UTF_8), SERVICE_KEY, false, Duration.ofHours(1));
         server = new MainServer(0, daos, () -> true, auth, hasher);
         server.start();
         client = HttpClient.newHttpClient();
@@ -185,6 +187,47 @@ class AuthTest {
         assertEquals(409, call("PATCH", "/api/users/" + adminId, admin, "{\"role\":\"manager\"}").statusCode());
         assertEquals(200, call("PATCH", "/api/users/" + adminId, other, "{\"role\":\"manager\"}").statusCode());
         assertEquals(409, call("PATCH", "/api/users/" + second, other, "{\"active\":false}").statusCode());
+    }
+
+    @Test
+    void googleSignInIsForCustomersAndNeedsTheServiceKey() throws Exception {
+        String google = "{\"googleSubject\":\"1234567890\",\"email\":\"lan@gmail.com\",\"name\":\"Lan\",\"emailVerified\":true}";
+        assertEquals(401, call("POST", "/api/auth/google", null, google).statusCode());
+        assertEquals(401, call("POST", "/api/auth/google", null, google, "X-Service-Key", "guess").statusCode());
+
+        HttpResponse<String> first = call("POST", "/api/auth/google", null, google, "X-Service-Key", SERVICE_KEY);
+        assertEquals(201, first.statusCode(), first.body());
+        assertEquals("CUSTOMER", role(first));
+        HttpResponse<String> again = call("POST", "/api/auth/google", null, google, "X-Service-Key", SERVICE_KEY);
+        assertEquals(200, again.statusCode());
+        assertEquals(data(first).get("user").toString(), data(again).get("user").toString().replace(
+                ((Map<?, ?>) data(again).get("user")).get("lastLoginAt").toString(),
+                ((Map<?, ?>) data(first).get("user")).get("lastLoginAt").toString()));
+
+        // A customer who signed up with a password is linked to Google by the verified email.
+        assertEquals(201, call("POST", "/api/auth/register", null,
+                "{\"email\":\"mai@gmail.com\",\"name\":\"Mai\",\"password\":\"Coffee2026\"}").statusCode());
+        HttpResponse<String> linked = call("POST", "/api/auth/google", null,
+                "{\"googleSubject\":\"777\",\"email\":\"mai@gmail.com\",\"name\":\"Mai\",\"emailVerified\":true}",
+                "X-Service-Key", SERVICE_KEY);
+        assertEquals(200, linked.statusCode(), linked.body());
+        assertEquals(UserRole.CUSTOMER.name(), role(linked));
+
+        // Staff accounts are password-only: Google may not sign them in, nor create a second account.
+        String admin = login(ADMIN_EMAIL, ADMIN_PASSWORD);
+        createUser(admin, "thu.ngan@gmail.com", "staff");
+        HttpResponse<String> staff = call("POST", "/api/auth/google", null,
+                "{\"googleSubject\":\"999\",\"email\":\"thu.ngan@gmail.com\",\"name\":\"Thu Ngan\",\"emailVerified\":true}",
+                "X-Service-Key", SERVICE_KEY);
+        assertEquals(403, staff.statusCode());
+        assertEquals("STAFF_PASSWORD_ONLY", code(staff));
+
+        assertEquals(400, call("POST", "/api/auth/google", null,
+                "{\"googleSubject\":\"5\",\"email\":\"x@gmail.com\",\"name\":\"X\",\"emailVerified\":false}",
+                "X-Service-Key", SERVICE_KEY).statusCode());
+        assertEquals(409, call("POST", "/api/auth/google", null,
+                "{\"googleSubject\":\"other\",\"email\":\"lan@gmail.com\",\"name\":\"Lan\",\"emailVerified\":true}",
+                "X-Service-Key", SERVICE_KEY).statusCode(), "one email cannot belong to two Google accounts");
     }
 
     @Test

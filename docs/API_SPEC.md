@@ -25,7 +25,8 @@ Ngoại lệ: một đường dẫn nằm ngoài các nhóm đã đăng ký (`/a
 | 400 | `INSUFFICIENT_POINTS` | `useLoyaltyPoints` lớn hơn số điểm khách đang có |
 | 400 | `CHAIN_VALIDATION_FAILED` | Phiếu đặt bàn không qua chuỗi kiểm định |
 | 400 | `INVALID_VOUCHER` | Mã giảm giá khác `WELCOME10` |
-| 401 | `UNAUTHORIZED` | Thiếu, sai hoặc hết hạn Bearer token; tài khoản đã bị khoá |
+| 401 | `UNAUTHORIZED` | Thiếu, sai hoặc hết hạn Bearer token; tài khoản đã bị khoá; sai `X-Service-Key` |
+| 403 | `STAFF_PASSWORD_ONLY` | Đăng nhập Google vào tài khoản nhân viên (chỉ khách hàng được dùng Google) |
 | 401 | `INVALID_CREDENTIALS` | Sai email hoặc mật khẩu (cùng một câu trả lời cho cả hai trường hợp) |
 | 403 | `ACCOUNT_DISABLED` | Đăng nhập đúng mật khẩu nhưng tài khoản đã bị khoá |
 | 409 | `EMAIL_TAKEN` | Email đã có tài khoản |
@@ -39,9 +40,9 @@ Ngoại lệ: một đường dẫn nằm ngoài các nhóm đã đăng ký (`/a
 | 503 | `DATABASE_UNAVAILABLE` | Chế độ JDBC mất kết nối khi checkout hoặc khi thanh toán đơn (`/pay`). Không thu tiền, không ghi đơn. |
 
 ### 1.3. Xác thực, phân quyền & CORS
-- **Xác thực:** gửi `Authorization: Bearer <token>`, với token lấy từ `/api/auth/login` hoặc `/api/auth/register` (mục 3.19). Token là JWT HS256 có `sub` (id tài khoản), `email`, `name`, `role`, `exp` (mặc định 8 giờ), ký bằng `AUTH_JWT_SECRET`. Frontend dùng cùng khoá để kiểm cookie phiên.
+- **Xác thực:** gửi `Authorization: Bearer <token>`, với token lấy từ `/api/auth/login`, `/api/auth/register` hoặc `/api/auth/google` (mục 3.19). Token là JWT HS256 có `sub` (id tài khoản), `email`, `name`, `role`, `exp` (mặc định 8 giờ), ký bằng `AUTH_JWT_SECRET`. Frontend dùng cùng khoá để kiểm cookie phiên.
 - **Vai trò** (thấp đến cao): `CUSTOMER` < `STAFF` < `MANAGER` < `ADMIN`; vai trò cao gồm mọi quyền của vai trò thấp hơn. Mỗi request đọc lại vai trò **từ tài khoản**, không tin vai trò ghi trong token, nên đổi vai trò hay khoá tài khoản có hiệu lực ngay với cả token cũ. Chi tiết tại [ARCHITECTURE §4](ARCHITECTURE.md#4-xác-thực--phân-quyền-rbac).
-- **Công khai:** `GET /api/menu`, `POST /api/reservations`, `POST /api/vouchers/validate`, `POST /api/auth/register`, `POST /api/auth/login`. Token hỏng hoặc hết hạn ở endpoint công khai bị bỏ qua, không làm lỗi request.
+- **Công khai:** `GET /api/menu`, `POST /api/reservations`, `POST /api/vouchers/validate`, `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/google` (cần `X-Service-Key`). Token hỏng hoặc hết hạn ở endpoint công khai bị bỏ qua, không làm lỗi request.
 - **Mọi tài khoản đã đăng nhập:** `GET /api/auth/me`, `POST /api/auth/password`.
 - **Chỉ ADMIN:** `/api/users`, `PUT | PATCH /api/config`.
 - **Cần MANAGER hoặc ADMIN:** `POST /api/menu`, `GET /api/analytics/overview`.
@@ -75,6 +76,7 @@ Ngoại lệ: một đường dẫn nằm ngoài các nhóm đã đăng ký (`/a
 | `/api/config` | GET | STAFF+ | **Singleton** | 🟢 Đã triển khai |
 | `/api/config` | PUT, PATCH | ADMIN | **Singleton** | 🟢 Đã triển khai |
 | `/api/auth/register`, `/api/auth/login` | POST | Công khai | — | 🟢 Đã triển khai |
+| `/api/auth/google` | POST | `X-Service-Key` | — | 🟢 Đã triển khai |
 | `/api/auth/me` | GET | Đã đăng nhập | — | 🟢 Đã triển khai |
 | `/api/auth/password` | POST | Đã đăng nhập | — | 🟢 Đã triển khai |
 | `/api/users` | GET, POST | ADMIN | — | 🟢 Đã triển khai |
@@ -285,10 +287,11 @@ Thông số trong Singleton `SystemConfigManager`. `GET` (STAFF+) trả `storeNa
 ```
 Toàn bộ thay đổi được kiểm trước khi áp dụng: giờ mở phải trước giờ đóng, số khách 1–100, 1 điểm = 1.000–1.000.000đ khi tích, 0–100.000đ khi đổi, chữ 1–120 ký tự. Một trường sai trả 400 và không trường nào bị đổi. Chuỗi kiểm định đặt bàn và việc tích/đổi điểm đọc giá trị mới ngay. Giá trị nằm trong bộ nhớ và trở về mặc định khi khởi động lại server.
 
-### 3.19. `/api/auth` — đăng ký, đăng nhập
+### 3.19. `/api/auth` — đăng ký, đăng nhập, Google (khách hàng)
 - `POST /api/auth/register` `{ "email", "name", "password" }` → **201** với phiên. Luôn tạo `CUSTOMER`; tài khoản nhân viên do ADMIN cấp ở mục 3.20. Email được chuyển về chữ thường; mật khẩu 8–128 ký tự, có cả chữ và số. Email đã có: 409 `EMAIL_TAKEN`.
 - `POST /api/auth/login` `{ "email", "password" }` → 200 với phiên. Sai email hay sai mật khẩu đều trả 401 `INVALID_CREDENTIALS` và tốn thời gian như nhau (email lạ vẫn chạy so khớp với một hash giả). Sai 5 lần trong 15 phút: 429 `TOO_MANY_ATTEMPTS`. Tài khoản bị khoá: 403 `ACCOUNT_DISABLED` (chỉ báo sau khi mật khẩu đúng).
-- `GET /api/auth/me` → tài khoản hiện tại. `POST /api/auth/password` `{ "currentPassword", "newPassword" }` đổi mật khẩu.
+- `POST /api/auth/google` `{ "googleSubject", "email", "name", "emailVerified" }` với header `X-Service-Key: <AUTH_SERVICE_KEY>`. Chỉ frontend gọi, **sau khi** đã tự kiểm `id_token` của Google (chữ ký theo JWKS, issuer, audience, hạn, nonce). **Chỉ dành cho khách hàng:** tìm theo `googleSubject`, rồi theo email đã xác minh (liên kết tài khoản khách hàng đã đăng ký bằng mật khẩu), nếu không có thì tạo `CUSTOMER` (201). Email thuộc tài khoản nhân viên / quản lý / quản trị: 403 `STAFF_PASSWORD_ONLY`. Email chưa xác minh: 400; email đã gắn với tài khoản Google khác: 409; sai hoặc thiếu khoá: 401.
+- `GET /api/auth/me` → tài khoản hiện tại. `POST /api/auth/password` `{ "currentPassword", "newPassword" }` đổi mật khẩu (khách chỉ đăng nhập Google, chưa có mật khẩu, thì bỏ trống `currentPassword`).
 
 Phiên trả về:
 ```json

@@ -194,12 +194,16 @@ class JdbcIntegrationTest {
         assertTrue(loaded.isActive());
 
         assertFalse(users.save(new UserAccount(null, "BARISTA@dalatcafe.vn", "Copy", UserRole.CUSTOMER)), "emails are unique");
+        loaded.setGoogleSubject("google-42");
         loaded.setRole(UserRole.MANAGER);
         loaded.setActive(false);
         assertTrue(users.save(loaded));
-        UserAccount updated = users.findById(loaded.getId()).orElseThrow();
+        UserAccount updated = users.findByGoogleSubject("google-42").orElseThrow();
         assertEquals(UserRole.MANAGER, updated.getRole());
         assertFalse(updated.isActive());
+        UserAccount sameGoogle = new UserAccount(null, "other@dalatcafe.vn", "Other", UserRole.CUSTOMER);
+        sameGoogle.setGoogleSubject("google-42");
+        assertFalse(users.save(sameGoogle), "Google ids are unique");
         assertTrue(users.findAll().size() >= 1);
     }
 

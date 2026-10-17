@@ -99,22 +99,27 @@ class SecurityTest {
         AuthSettings dev = AuthSettings.fromEnvironment(Map.of());
         assertArrayEquals(AuthSettings.DEV_SECRET.getBytes(StandardCharsets.UTF_8), dev.jwtSecret());
         assertFalse(dev.allowRoleHeader());
+        assertNull(dev.serviceKey());
         AuthSettings custom = AuthSettings.fromEnvironment(Map.of("AUTH_JWT_SECRET", "x".repeat(40),
-                "AUTH_TOKEN_HOURS", "2", "AUTH_ALLOW_ROLE_HEADER", "true"));
+                "AUTH_SERVICE_KEY", "k", "AUTH_TOKEN_HOURS", "2", "AUTH_ALLOW_ROLE_HEADER", "true"));
         assertEquals(Duration.ofHours(2), custom.tokenTtl());
         assertTrue(custom.allowRoleHeader());
+        assertEquals("k", custom.serviceKey());
     }
 
     @Test
-    void inMemoryUsersKeepEmailsUnique() {
+    void inMemoryUsersKeepEmailsAndGoogleIdsUnique() {
         InMemoryDatabase db = InMemoryDatabase.getInstance();
         db.reset();
         InMemoryUserDao users = new InMemoryUserDao(db);
         UserAccount first = new UserAccount(null, "Mai@Cafe.vn", "Mai", UserRole.STAFF);
+        first.setGoogleSubject("g-1");
         assertTrue(users.save(first));
         assertEquals("mai@cafe.vn", users.findByEmail("MAI@cafe.vn").orElseThrow().getEmail());
         assertFalse(users.save(new UserAccount(null, "mai@cafe.vn", "Mai 2", UserRole.CUSTOMER)));
-        assertTrue(users.save(new UserAccount(null, "other@cafe.vn", "Other", UserRole.CUSTOMER)));
+        UserAccount sameGoogle = new UserAccount(null, "other@cafe.vn", "Other", UserRole.CUSTOMER);
+        sameGoogle.setGoogleSubject("g-1");
+        assertFalse(users.save(sameGoogle));
 
         UserAccount loaded = users.findById(first.getId()).orElseThrow();
         loaded.setRole(UserRole.ADMIN); // a copy: the store changes only through save()

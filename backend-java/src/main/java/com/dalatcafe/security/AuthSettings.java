@@ -3,6 +3,7 @@ package com.dalatcafe.security;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.Duration;
+import java.util.Base64;
 import java.util.Map;
 import java.util.Objects;
 import java.util.logging.Logger;
@@ -11,10 +12,12 @@ import java.util.logging.Logger;
  * Authentication settings of the server.
  *
  * @param jwtSecret       HS256 key shared with the Next.js frontend ({@code AUTH_JWT_SECRET})
+ * @param serviceKey      key the frontend sends when it reports a verified Google sign-in
+ *                        ({@code AUTH_SERVICE_KEY}); without one, Google sign-in is refused
  * @param allowRoleHeader also trust a bare {@code X-User-Role} header (development and tests only)
  * @param tokenTtl        lifetime of an access token
  */
-public record AuthSettings(byte[] jwtSecret, boolean allowRoleHeader, Duration tokenTtl) {
+public record AuthSettings(byte[] jwtSecret, String serviceKey, boolean allowRoleHeader, Duration tokenTtl) {
     private static final Logger LOGGER = Logger.getLogger(AuthSettings.class.getName());
     public static final Duration DEFAULT_TTL = Duration.ofHours(8);
     /** Development-only secret, identical to the frontend's default, so a local run needs no setup. */
@@ -28,11 +31,11 @@ public record AuthSettings(byte[] jwtSecret, boolean allowRoleHeader, Duration t
 
     /** Random keys and the legacy role header: what the existing REST tests run with. */
     public static AuthSettings withRoleHeader() {
-        return new AuthSettings(randomBytes(32), true, DEFAULT_TTL);
+        return new AuthSettings(randomBytes(32), base64(randomBytes(24)), true, DEFAULT_TTL);
     }
 
     /**
-     * Reads AUTH_JWT_SECRET, AUTH_ALLOW_ROLE_HEADER and AUTH_TOKEN_HOURS.
+     * Reads AUTH_JWT_SECRET, AUTH_SERVICE_KEY, AUTH_ALLOW_ROLE_HEADER and AUTH_TOKEN_HOURS.
      * With APP_ENV=production a missing or short secret stops the server instead of falling
      * back to the development secret.
      */
@@ -46,6 +49,11 @@ public record AuthSettings(byte[] jwtSecret, boolean allowRoleHeader, Duration t
             LOGGER.warning("AUTH_JWT_SECRET is not set: using the development secret. Never do this in production.");
             secret = DEV_SECRET;
         }
+        String serviceKey = env.get("AUTH_SERVICE_KEY");
+        if (serviceKey == null || serviceKey.isBlank()) {
+            LOGGER.warning("AUTH_SERVICE_KEY is not set: Google sign-in is disabled.");
+            serviceKey = null;
+        }
         boolean header = "true".equalsIgnoreCase(env.get("AUTH_ALLOW_ROLE_HEADER"));
         if (header) {
             LOGGER.warning("AUTH_ALLOW_ROLE_HEADER=true: an unauthenticated X-User-Role header is trusted.");
@@ -55,12 +63,16 @@ public record AuthSettings(byte[] jwtSecret, boolean allowRoleHeader, Duration t
         if (hours != null && hours.matches("\\d{1,3}") && Integer.parseInt(hours) > 0) {
             ttl = Duration.ofHours(Integer.parseInt(hours));
         }
-        return new AuthSettings(secret.getBytes(StandardCharsets.UTF_8), header, ttl);
+        return new AuthSettings(secret.getBytes(StandardCharsets.UTF_8), serviceKey, header, ttl);
     }
 
     private static byte[] randomBytes(int length) {
         byte[] bytes = new byte[length];
         new SecureRandom().nextBytes(bytes);
         return bytes;
+    }
+
+    private static String base64(byte[] bytes) {
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 }

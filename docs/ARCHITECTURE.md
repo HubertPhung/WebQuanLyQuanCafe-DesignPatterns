@@ -121,7 +121,7 @@ Lưu ý: kho của frontend và kho của Java là hai bộ dữ liệu riêng, 
 
 | Vai trò | Được làm |
 | :--- | :--- |
-| `CUSTOMER` | Storefront, `/account` (đơn, voucher, mật khẩu). Tự đăng ký tại `/register` |
+| `CUSTOMER` | Storefront, `/account` (đơn, voucher, mật khẩu). Tự đăng ký tại `/register` hoặc tiếp tục với Google |
 | `STAFF` | Thêm toàn bộ console `/admin`: POS, KDS, bàn, đặt bàn, kho, khách hàng |
 | `MANAGER` | Thêm tạo món (`POST /api/menu`), thống kê, nhân sự, lịch làm việc |
 | `ADMIN` | Thêm cài đặt quán (`/api/config`) và `/admin/users` (cấp tài khoản, đổi vai trò, khoá) |
@@ -130,11 +130,24 @@ Lưu ý: kho của frontend và kho của Java là hai bộ dữ liệu riêng, 
 sequenceDiagram
     actor U as Người dùng
     participant N as Next.js (Server Action / Route Handler)
+    participant G as Google
     participant J as Java (/api/auth)
 
-    U->>N: signIn(email, password) hoặc signUp(...)
-    N->>J: POST /api/auth/login | /api/auth/register
-    J-->>N: { token, user }
+    alt Email + mật khẩu (mọi vai trò)
+        U->>N: signIn(email, password) hoặc signUp(...)
+        N->>J: POST /api/auth/login | /api/auth/register
+        J-->>N: { token, user }
+    else Google (chỉ khách hàng)
+        U->>N: GET /api/auth/google/start
+        N-->>U: 302 tới Google (state, nonce, PKCE S256)
+        U->>G: Đồng ý
+        G-->>U: 302 /api/auth/google/callback?code&state
+        U->>N: callback
+        N->>G: Đổi code lấy id_token (kèm code_verifier)
+        N->>N: Kiểm id_token bằng JWKS (iss, aud, exp, nonce, email_verified)
+        N->>J: POST /api/auth/google + X-Service-Key
+        J-->>N: { token, user } hoặc 403 STAFF_PASSWORD_ONLY
+    end
     N-->>U: Set-Cookie dalatcafe_session (httpOnly) + chuyển trang theo vai trò
     U->>N: Mở /admin/...
     N->>N: proxy.ts kiểm cookie và vai trò
@@ -147,7 +160,7 @@ sequenceDiagram
 2. Tầng dữ liệu frontend: layout admin và các trang MANAGER/ADMIN gọi `requirePageRole`, mọi hàm dữ liệu và Server Action gọi `assertAdminAccess(vai trò)`. Đây là kiểm tra có thẩm quyền, theo hướng dẫn DAL của Next.js.
 3. Java `SimpleAuthFilter`: kiểm Bearer token cho mọi endpoint, rồi đọc lại tài khoản nên đổi vai trò hay khoá tài khoản có hiệu lực ngay.
 
-**An toàn:** cùng một câu trả lời cho email sai và mật khẩu sai; khoá email sau 5 lần sai trong 15 phút; `?next=` chỉ nhận đường dẫn nội bộ; token `alg: none` hoặc ký bằng khoá khác bị từ chối; không dùng đăng nhập bên thứ ba; quản trị viên cuối cùng không thể bị hạ quyền. Lần chạy đầu, `AdminBootstrap` tạo một ADMIN từ `ADMIN_EMAIL` / `ADMIN_PASSWORD`, hoặc in mật khẩu dùng một lần vào log server.
+**An toàn:** cùng một câu trả lời cho email sai và mật khẩu sai; khoá email sau 5 lần sai trong 15 phút; `?next=` chỉ nhận đường dẫn nội bộ; token `alg: none` hoặc ký bằng khoá khác bị từ chối; Google chỉ đăng nhập được tài khoản khách hàng, nên tài khoản nhân viên luôn chịu cơ chế khoá khi sai mật khẩu và do quản trị viên quản lý; quản trị viên cuối cùng không thể bị hạ quyền. Lần chạy đầu, `AdminBootstrap` tạo một ADMIN từ `ADMIN_EMAIL` / `ADMIN_PASSWORD`, hoặc in mật khẩu dùng một lần vào log server.
 
 **Giới hạn:** token có hạn 8 giờ và không thu hồi được trước hạn, nhưng Java đọc lại tài khoản ở mỗi request nên khoá tài khoản vẫn có tác dụng ngay ở phía Java; trang admin của frontend có thể còn mở cho tới khi token hết hạn (dữ liệu Java khi đó trả 401). Bộ đếm sai mật khẩu nằm trong bộ nhớ của một tiến trình Java.
 

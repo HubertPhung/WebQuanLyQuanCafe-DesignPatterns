@@ -18,13 +18,13 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * JDBC PostgreSQL implementation of IUserDao (table {@code users}). The database enforces a
- * unique email, so a duplicate makes {@link #save} return false.
+ * JDBC PostgreSQL implementation of IUserDao (table {@code users}). Uniqueness of the email and
+ * the Google subject is enforced by the database, so a duplicate makes {@link #save} return false.
  */
 public class JdbcUserDao implements IUserDao {
     private static final Logger LOGGER = Logger.getLogger(JdbcUserDao.class.getName());
     private static final String COLUMNS =
-            "id, email, name, password_hash, role, active, created_at, last_login_at";
+            "id, email, name, password_hash, google_subject, role, active, created_at, last_login_at";
 
     @Override
     public List<UserAccount> findAll() {
@@ -54,12 +54,18 @@ public class JdbcUserDao implements IUserDao {
     }
 
     @Override
+    public Optional<UserAccount> findByGoogleSubject(String googleSubject) {
+        if (googleSubject == null) return Optional.empty();
+        return findOne("SELECT " + COLUMNS + " FROM users WHERE google_subject = ?", ps -> ps.setString(1, googleSubject));
+    }
+
+    @Override
     public boolean save(UserAccount user) {
         if (user == null || user.getEmail() == null) return false;
         boolean insert = user.getId() == null;
         String sql = insert
-                ? "INSERT INTO users (email, name, password_hash, role, active, created_at, last_login_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-                : "UPDATE users SET email = ?, name = ?, password_hash = ?, role = ?, active = ?, created_at = ?, last_login_at = ? WHERE id = ?";
+                ? "INSERT INTO users (email, name, password_hash, google_subject, role, active, created_at, last_login_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+                : "UPDATE users SET email = ?, name = ?, password_hash = ?, google_subject = ?, role = ?, active = ?, created_at = ?, last_login_at = ? WHERE id = ?";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = insert
                      ? conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)
@@ -67,12 +73,13 @@ public class JdbcUserDao implements IUserDao {
             ps.setString(1, user.getEmail());
             ps.setString(2, user.getName());
             ps.setString(3, user.getPasswordHash());
-            ps.setString(4, user.getRole().name());
-            ps.setBoolean(5, user.isActive());
-            ps.setTimestamp(6, Timestamp.from(user.getCreatedAt() != null ? user.getCreatedAt() : Instant.now()));
-            ps.setTimestamp(7, user.getLastLoginAt() != null ? Timestamp.from(user.getLastLoginAt()) : null);
+            ps.setString(4, user.getGoogleSubject());
+            ps.setString(5, user.getRole().name());
+            ps.setBoolean(6, user.isActive());
+            ps.setTimestamp(7, Timestamp.from(user.getCreatedAt() != null ? user.getCreatedAt() : Instant.now()));
+            ps.setTimestamp(8, user.getLastLoginAt() != null ? Timestamp.from(user.getLastLoginAt()) : null);
             if (!insert) {
-                ps.setInt(8, user.getId());
+                ps.setInt(9, user.getId());
             }
             if (ps.executeUpdate() == 0) return false;
             if (insert) {
@@ -82,7 +89,7 @@ public class JdbcUserDao implements IUserDao {
             }
             return true;
         } catch (SQLException e) {
-            // 23505 = unique_violation: the email is already registered.
+            // 23505 = unique_violation: the email or Google account is already registered.
             if (!"23505".equals(e.getSQLState())) {
                 LOGGER.log(Level.SEVERE, "Error save user via JDBC: " + e.getMessage(), e);
             }
@@ -114,6 +121,7 @@ public class JdbcUserDao implements IUserDao {
         user.setEmail(rs.getString("email"));
         user.setName(rs.getString("name"));
         user.setPasswordHash(rs.getString("password_hash"));
+        user.setGoogleSubject(rs.getString("google_subject"));
         try {
             user.setRole(UserRole.valueOf(rs.getString("role").toUpperCase(Locale.ROOT)));
         } catch (IllegalArgumentException | NullPointerException e) {

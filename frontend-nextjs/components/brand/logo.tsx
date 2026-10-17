@@ -6,7 +6,9 @@ import { cn } from '@/lib/utils'
 export function LogoMark({ className, title }: { className?: string; title?: string }) {
   const id = useId().replace(/:/g, '')
   return (
-    <svg viewBox="0 0 40 40" className={cn('size-10 shrink-0', className)} role={title ? 'img' : undefined} aria-hidden={title ? undefined : true}>
+    // rounded-[27.5%] matches the badge corner (rx 11 of 40), so any shadow or ring added by a
+    // caller follows the badge instead of drawing a square box around it.
+    <svg viewBox="0 0 40 40" className={cn('size-10 shrink-0 rounded-[27.5%]', className)} role={title ? 'img' : undefined} aria-hidden={title ? undefined : true}>
       {title && <title>{title}</title>}
       <defs>
         <linearGradient id={`${id}-bg`} x1="6" y1="2" x2="34" y2="38" gradientUnits="userSpaceOnUse">

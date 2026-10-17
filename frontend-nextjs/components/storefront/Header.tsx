@@ -153,7 +153,7 @@ export function Header({
             aria-label="Đà Lạt Cafe home"
           >
             <Logo
-              markClassName="brand-mark shadow-xs transition-transform duration-200 group-hover:scale-105 group-hover:-rotate-3"
+              markClassName="shadow-sm transition-transform duration-200 group-hover:scale-105 group-hover:-rotate-3"
               tagline="Cà phê & cộng đồng"
             />
           </Link>
