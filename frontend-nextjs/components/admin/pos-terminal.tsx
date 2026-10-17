@@ -241,8 +241,8 @@ export function PosTerminal({ menu, tables }: { menu: MenuItem[]; tables: FloorT
 
         {/* Member loyalty banner if phone matches */}
         {customerPhone && (
-          <div className="flex items-center justify-between p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-xs">
-            <div className="flex items-center gap-2 text-amber-900">
+          <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-xs">
+            <div className="flex min-w-0 items-center gap-2 text-amber-900">
               <Sparkles className="size-4 text-amber-600 shrink-0" />
               <span className="font-semibold truncate">{customerName}</span>
             </div>
@@ -251,9 +251,9 @@ export function PosTerminal({ menu, tables }: { menu: MenuItem[]; tables: FloorT
               type="button"
               disabled
               title="Chưa hỗ trợ đổi điểm khi thanh toán"
-              className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-stone-100 text-stone-400 cursor-not-allowed"
+              className="shrink-0 whitespace-nowrap px-2.5 py-1 rounded-md text-[11px] font-bold bg-stone-100 text-stone-500 cursor-not-allowed"
             >
-              Đổi điểm: chưa hỗ trợ
+              Chưa đổi điểm
             </button>
           </div>
         )}
