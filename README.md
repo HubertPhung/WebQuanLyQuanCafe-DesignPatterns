@@ -6,7 +6,7 @@
 ![Java SE 17](https://img.shields.io/badge/Backend-Pure%20Java%20SE%2017-orange?style=for-the-badge&logo=openjdk)
 ![Design Patterns](https://img.shields.io/badge/Architecture-9%20GoF%20Patterns-success?style=for-the-badge)
 [![CI/CD Pipeline](https://github.com/HubertPhung/WebQuanLyQuanCafe-DesignPatterns/actions/workflows/ci.yml/badge.svg)](https://github.com/HubertPhung/WebQuanLyQuanCafe-DesignPatterns/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/Tests-205%20JUnit%20%2B%2036%20UI-brightgreen?style=for-the-badge)
+![Tests](https://img.shields.io/badge/Tests-204%20JUnit%20%2B%2036%20UI-brightgreen?style=for-the-badge)
 
 ---
 
@@ -87,7 +87,7 @@ Frontend chạy ngay mà không cần database. Nếu đặt `DATABASE_URL` (Pos
 ### 5.2. Backend Java
 ```bash
 cd backend-java
-mvn clean test                                            # 205 test JUnit 5
+mvn clean test                                            # 204 test JUnit 5
 mvn -q compile
 java -cp target/classes com.dalatcafe.server.MainServer   # cổng 8080, chế độ In-Memory
 ```
@@ -118,11 +118,6 @@ Tài khoản nằm ở backend Java, nên **cần chạy Java** để đăng nh�
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Java | Quản trị viên đầu tiên |
 | `AUTH_TOKEN_HOURS` | Java | Thời hạn token, mặc định 8 |
 | `AUTH_ALLOW_ROLE_HEADER` | Java | `true` để nhận header `X-User-Role` tự khai (chỉ khi phát triển) |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Next.js | OAuth client loại *Web application* trên Google Cloud Console |
-| `AUTH_SERVICE_KEY` | Java **và** Next.js (cùng giá trị) | Khoá để Java chỉ nhận đăng nhập Google từ server Next.js |
-| `APP_URL` | Next.js (tuỳ chọn) | Gốc URL công khai, dùng để tạo redirect URI |
-
-**Đăng nhập bằng Google (Gmail):** tạo OAuth client trên Google Cloud Console (APIs & Services → Credentials), thêm *Authorized redirect URI* `http://localhost:3000/api/auth/google/callback` (và URL thật khi deploy), rồi đặt ba biến `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `AUTH_SERVICE_KEY`. Chưa đặt thì nút Google hiện hướng dẫn thay vì chuyển trang. Email Gmail trùng với tài khoản nhân viên sẽ được liên kết và giữ nguyên vai trò.
 
 ---
 
@@ -130,7 +125,7 @@ Tài khoản nằm ở backend Java, nên **cần chạy Java** để đăng nh�
 
 ```bash
 cd frontend-nextjs && npm test     # 36 test UI/UX (tự khởi động next dev nếu chưa có server)
-cd backend-java && mvn clean test  # 205 test JUnit 5 (kể cả JDBC trên PostgreSQL nhúng)
+cd backend-java && mvn clean test  # 204 test JUnit 5 (kể cả JDBC trên PostgreSQL nhúng)
 ```
 Danh mục test, báo cáo E2E và các giới hạn đã biết: [docs/TESTING.md](docs/TESTING.md).
 
