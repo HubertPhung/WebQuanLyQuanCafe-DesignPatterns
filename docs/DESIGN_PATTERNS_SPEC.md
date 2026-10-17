@@ -89,7 +89,7 @@ frontend-nextjs/
 │   ├── db/                 index.ts (Drizzle), schema.ts, mock-store.ts
 │   ├── store/cart-store.ts # Zustand
 │   └── shopify.ts, utils.ts
-└── scripts/test-ui-ux.mjs  # 29 test UI/UX
+└── scripts/test-ui-ux.mjs  # 36 test UI/UX
 ```
 
 ### 1.3.2. Backend Java (`backend-java`)
@@ -107,12 +107,18 @@ backend-java/
     │   │   ├── TableHandler.java              # GET /api/tables, PUT|PATCH /api/tables/{id}
     │   │   ├── ReservationHandler.java        # GET|POST /api/reservations (gắn Chain of Responsibility)
     │   │   ├── CheckoutHandler.java           # POST /api/checkout (gắn Facade, Strategy, Observer)
-    │   │   ├── SimpleAuthFilter.java          # RBAC theo header X-User-Role
-    │   │   ├── CorsHandler.java, Json.java, ApiException.java
+    │   │   ├── OrderHandler.java              # /api/orders: KDS, thanh toán, nhập đơn offline (Observer, Factory)
+    │   │   ├── CustomerHandler.java, AnalyticsHandler.java, VoucherHandler.java, ConfigHandler.java
+    │   │   ├── AuthHandler.java, UserHandler.java  # /api/auth (đăng ký, đăng nhập, Google), /api/users (ADMIN)
+    │   │   ├── SimpleAuthFilter.java          # RBAC theo Bearer token (JWT), đọc lại vai trò từ tài khoản
+    │   │   ├── CorsHandler.java, ApiException.java, VoucherCatalog.java
+    │   ├── security/                          # PasswordHasher (PBKDF2), TokenService (JWT HS256),
+    │   │                                      # LoginThrottle, AuthSettings, AdminBootstrap
+    │   ├── util/                              # Json (đọc/ghi JSON thuần Java SE)
     │   ├── model/                             # POJO: Order, OrderItem, MenuItem, Variation, Table,
-    │   │                                      #       Reservation, Customer và các enum trạng thái
-    │   ├── dao/                               # DAO: I*Dao, InMemory*Dao, Jdbc*Dao, DaoFactory, DaoMode,
-    │   │                                      #      InMemoryDatabase, JdbcDatabase
+    │   │                                      #       Reservation, Customer, UserAccount và các enum (kể cả UserRole)
+    │   ├── dao/                               # DAO: I*Dao, InMemory*Dao, Jdbc*Dao (kể cả tài khoản), DaoFactory,
+    │   │                                      #      DaoMode, InMemoryDatabase, JdbcDatabase (pool), JsonColumns
     │   └── patterns/
     │       ├── singleton/   SystemConfigManager
     │       ├── factory/     IPaymentProcessor, CashPaymentProcessor, MomoQrPaymentProcessor,
@@ -1230,7 +1236,7 @@ public class LoyaltyPointObserver implements IOrderObserver {
 | **Thư mục Backend Java** | Hoàn thành #01–#12: POJO, DAO (In-Memory/JDBC), 9 pattern, HttpServer cổng 8080 | Cấu trúc Maven Java SE OOP tại `src/main/java/com/dalatcafe/` (mục 1.4.2) |
 | **Khung công nghệ Backend** | Không dùng Spring Boot / Security / Data JPA | Thiết kế hướng đối tượng thuần túy Java SE 17+ (Pure Java OOP) |
 | **9 GoF Design Patterns** | Đã cài đặt đủ 9 pattern, mỗi pattern có lớp test JUnit 5 riêng (#13) | Sơ đồ lớp Mermaid và mã nguồn tại Mục 3 được vẽ lại theo code thực tế |
-| **Kiểm thử tự động** | 191 test JUnit 5 (`mvn test`, gồm test JDBC trên PostgreSQL nhúng) và 29 test UI/UX (`npm test`) chạy trên GitHub Actions | Kết quả E2E ghi tại [TESTING.md](TESTING.md) (#15) |
+| **Kiểm thử tự động** | 205 test JUnit 5 (`mvn test`, gồm test JDBC trên PostgreSQL nhúng) và 36 test UI/UX (`npm test`) chạy trên GitHub Actions | Kết quả E2E ghi tại [TESTING.md](TESTING.md) (#15) |
 
 ### 5.2. Lộ trình Thực hiện Backend Java Thuần (`backend-java`)
 1. **Khởi tạo cấu trúc gói Java tiêu chuẩn (Hoàn thành 🟢, #01):** Cấu trúc thư mục `src/main/java/com/dalatcafe/` theo chuẩn Maven.

@@ -80,7 +80,7 @@ Lưu ý: kho của frontend và kho của Java là hai bộ dữ liệu riêng, 
 
 ### 2.1. Cấu hình
 - `JAVA_BACKEND_URL` nhận giá trị mặc định `http://localhost:8080`. Đặt `off` để tắt hẳn việc gọi sang Java.
-- `lib/api-client.ts` gửi JSON kèm header `X-User-Role: STAFF`, đặt timeout 2,5 giây, và không ném ngoại lệ. Mỗi lời gọi trả về một trong ba kết quả:
+- `lib/api-client.ts` gửi JSON kèm `Authorization: Bearer <token>` lấy từ cookie phiên (xem §4), đặt timeout 2,5 giây, và không ném ngoại lệ. Mỗi lời gọi trả về một trong ba kết quả:
   - `ok`: thành công.
   - `rejected`: Java trả 4xx (lỗi nghiệp vụ).
   - `unreachable`: lỗi mạng, quá thời gian chờ, phản hồi không phải JSON, hoặc 5xx.
@@ -115,16 +115,54 @@ Lưu ý: kho của frontend và kho của Java là hai bộ dữ liệu riêng, 
 
 ---
 
-## 4. Phân quyền (RBAC)
+## 4. Xác thực & phân quyền (RBAC)
 
-**Đã triển khai:**
+**Tài khoản** nằm ở backend Java (bảng `users`, in-memory hoặc JDBC). Mật khẩu băm PBKDF2-HMAC-SHA256 (600.000 vòng, salt ngẫu nhiên). Java phát **access token JWT HS256** (`TokenService`); Next.js giữ token trong cookie `dalatcafe_session` (`httpOnly`, `sameSite=lax`, `secure` khi production) và kiểm chữ ký bằng `jose` với cùng `AUTH_JWT_SECRET`.
 
-| Nơi | Cơ chế |
+| Vai trò | Được làm |
 | :--- | :--- |
-| Admin Next.js | `lib/admin/access.ts`. `REQUIRE_ADMIN_AUTH=true` sẽ chặn trang Admin; mặc định cho phép, dùng khi phát triển và demo |
-| Java REST | `SimpleAuthFilter` đọc header `X-User-Role`, chia **4 mức**: *công khai* (`GET /api/menu`, `POST /api/reservations`, `POST /api/vouchers/validate`), *chỉ ADMIN* (`PUT | PATCH /api/config`), *MANAGER / ADMIN* (`POST /api/menu`, `GET /api/analytics/overview`) và *STAFF / MANAGER / ADMIN* (mọi endpoint còn lại, kể cả endpoint mới chưa liệt kê: bộ lọc từ chối theo mặc định). Thiếu hoặc sai header trả 401; vai trò không đủ trả 403. Frontend gửi `STAFF`; tạo món và đọc thống kê gửi `MANAGER`; lưu cài đặt gửi `ADMIN`. Vai trò **không được xác thực**: đây chỉ là cổng phân vai cho đồ án |
+| `CUSTOMER` | Storefront, `/account` (đơn, voucher, mật khẩu). Tự đăng ký hoặc đăng nhập Google |
+| `STAFF` | Thêm toàn bộ console `/admin`: POS, KDS, bàn, đặt bàn, kho, khách hàng |
+| `MANAGER` | Thêm tạo món (`POST /api/menu`), thống kê, nhân sự, lịch làm việc |
+| `ADMIN` | Thêm cài đặt quán (`/api/config`) và `/admin/users` (cấp tài khoản, đổi vai trò, khoá) |
 
-**Thiết kế mở rộng (Chưa triển khai):** xác thực bằng token hoặc session thay cho header tự khai.
+```mermaid
+sequenceDiagram
+    actor U as Người dùng
+    participant N as Next.js (Server Action / Route Handler)
+    participant G as Google
+    participant J as Java (/api/auth)
+
+    alt Email + mật khẩu
+        U->>N: signIn(email, password)
+        N->>J: POST /api/auth/login
+        J-->>N: { token, user }
+    else Google
+        U->>N: GET /api/auth/google/start
+        N-->>U: 302 tới Google (state, nonce, PKCE S256)
+        U->>G: Đồng ý
+        G-->>U: 302 /api/auth/google/callback?code&state
+        U->>N: callback
+        N->>G: Đổi code lấy id_token (kèm code_verifier)
+        N->>N: Kiểm id_token bằng JWKS (iss, aud, exp, nonce, email_verified)
+        N->>J: POST /api/auth/google + X-Service-Key
+        J-->>N: { token, user }
+    end
+    N-->>U: Set-Cookie dalatcafe_session (httpOnly) + chuyển trang theo vai trò
+    U->>N: Mở /admin/...
+    N->>N: proxy.ts kiểm cookie và vai trò
+    N->>J: Gọi API với Authorization: Bearer
+    J->>J: SimpleAuthFilter kiểm token, đọc lại vai trò từ tài khoản
+```
+
+**Ba lớp kiểm tra:**
+1. `proxy.ts` (Next 16, thay cho middleware): chặn sớm. Chưa đăng nhập → `/login?next=…`; thiếu vai trò → về trang của vai trò đó (`/admin?denied=1` hoặc `/`). Luật đường dẫn ở `lib/auth/roles.ts`.
+2. Tầng dữ liệu frontend: layout admin và các trang MANAGER/ADMIN gọi `requirePageRole`, mọi hàm dữ liệu và Server Action gọi `assertAdminAccess(vai trò)`. Đây là kiểm tra có thẩm quyền, theo hướng dẫn DAL của Next.js.
+3. Java `SimpleAuthFilter`: kiểm Bearer token cho mọi endpoint, rồi đọc lại tài khoản nên đổi vai trò hay khoá tài khoản có hiệu lực ngay.
+
+**An toàn:** cùng một câu trả lời cho email sai và mật khẩu sai; khoá email sau 5 lần sai trong 15 phút; `?next=` chỉ nhận đường dẫn nội bộ; token `alg: none` hoặc ký bằng khoá khác bị từ chối; quản trị viên cuối cùng không thể bị hạ quyền. Lần chạy đầu, `AdminBootstrap` tạo một ADMIN từ `ADMIN_EMAIL` / `ADMIN_PASSWORD`, hoặc in mật khẩu dùng một lần vào log server.
+
+**Giới hạn:** token có hạn 8 giờ và không thu hồi được trước hạn, nhưng Java đọc lại tài khoản ở mỗi request nên khoá tài khoản vẫn có tác dụng ngay ở phía Java; trang admin của frontend có thể còn mở cho tới khi token hết hạn (dữ liệu Java khi đó trả 401). Bộ đếm sai mật khẩu nằm trong bộ nhớ của một tiến trình Java.
 
 ---
 
