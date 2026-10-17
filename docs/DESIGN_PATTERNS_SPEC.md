@@ -507,119 +507,98 @@ public final class SystemConfigManager {
 
 ### 3.2. Factory Method Pattern - Khởi tạo Bộ xử lý Thanh toán Đa kênh (`PaymentProcessorFactory`)
 - **Bài toán thực tế trong nghiệp vụ:**  
-  Tại quầy POS Terminal (`pos-terminal.tsx`) và cổng đặt hàng online, khách hàng có thể chọn nhiều phương thức thanh toán: `Tiền mặt (Cash)`, `Ví MoMo (QR Code)` hoặc `Thẻ / Cổng VNPay`. Nếu viết chuỗi `if-else` lồng nhau trong luồng thanh toán chính, mã nguồn sẽ bị phụ thuộc cứng vào các lớp xử lý cụ thể, vi phạm nguyên tắc Open/Closed Principle khi quán bổ sung phương thức mới (ví dụ: ZaloPay, VietQR).
+  Tại quầy POS Terminal (`pos-terminal.tsx`) và cổng đặt hàng online, khách hàng có thể chọn nhiều phương thức thanh toán: `Tiền mặt (Cash)`, `Ví MoMo (QR Code)` hoặc `Thẻ ngân hàng (máy POS)`. Nếu viết chuỗi `if-else` lồng nhau trong luồng thanh toán chính, mã nguồn sẽ bị phụ thuộc cứng vào các lớp xử lý cụ thể, vi phạm nguyên tắc Open/Closed Principle khi quán bổ sung phương thức mới (ví dụ: ZaloPay, VietQR).
 - **Giải pháp kỹ thuật (Pure Java OOP):**  
-  Áp dụng **Factory Method Pattern**. Khai báo giao diện chung `IPaymentProcessor` với phương thức `processPayment(double amount, String orderCode)`. Lớp `PaymentProcessorFactory` đóng vai trò Creator, căn cứ vào mã hình thức thanh toán được truyền vào để sản sinh ra đối tượng xử lý cụ thể.
+  Áp dụng **Factory Method Pattern** (dạng Simple/Static Factory). Giao diện chung `IPaymentProcessor` khai báo `processPayment(double amount, String transactionRef)` và `getMethodName()`. Lớp `PaymentProcessorFactory` (không thể khởi tạo) nhận enum `PaymentMethod` và trả về bộ xử lý tương ứng bằng biểu thức `switch`; thêm phương thức mới chỉ cần thêm một hằng enum và một lớp Concrete Product. `PosCheckoutFacade` là nơi duy nhất gọi Factory.
 - **Bảng ánh xạ thành phần (Participants Mapping):**
   | Vai trò GoF | Class / Interface Java | Trách nhiệm cụ thể |
   | :--- | :--- | :--- |
-  | **Product Interface** | `IPaymentProcessor` | Giao diện chuẩn cho tất cả cổng thanh toán trong hệ thống |
-  | **Concrete Product A** | `CashPaymentProcessor` | Xử lý thanh toán tiền mặt trực tiếp tại quầy POS, tính tiền thừa |
-  | **Concrete Product B** | `MomoPaymentProcessor` | Xử lý thanh toán quét mã QR ví điện tử MoMo |
-  | **Concrete Product C** | `VnPayPaymentProcessor` | Xử lý thanh toán chuyển hướng qua cổng VNPay |
-  | **Creator / Factory** | `PaymentProcessorFactory` | Phương thức tĩnh `getProcessor(String method)` trả về thể hiện tương ứng |
+  | **Product Interface** | `IPaymentProcessor` | Giao diện chuẩn cho mọi hình thức thanh toán |
+  | **Concrete Product A** | `CashPaymentProcessor` | Thanh toán tiền mặt tại quầy, mã giao dịch `CASH-<uuid>` |
+  | **Concrete Product B** | `MomoQrPaymentProcessor` | Thanh toán quét mã QR ví MoMo (`PaymentMethod.QR`) |
+  | **Concrete Product C** | `CardPosPaymentProcessor` | Thanh toán thẻ qua máy POS (`PaymentMethod.CARD`) |
+  | **Creator / Factory** | `PaymentProcessorFactory` | `createProcessor(PaymentMethod)` trả về thể hiện tương ứng |
+  | **Kết quả** | `PaymentResult` | Bất biến: `isSuccess()`, `getTransactionId()`, `getMessage()` |
 
 - **Sơ đồ lớp (Class Diagram):**
 ```mermaid
 classDiagram
     class IPaymentProcessor {
         <<interface>>
-        +processPayment(double amount, String orderCode) PaymentResult
+        +processPayment(double amount, String transactionRef) PaymentResult
         +getMethodName() String
     }
 
     class CashPaymentProcessor {
-        +processPayment(double amount, String orderCode) PaymentResult
+        +processPayment(double amount, String transactionRef) PaymentResult
         +getMethodName() String
     }
 
-    class MomoPaymentProcessor {
-        +processPayment(double amount, String orderCode) PaymentResult
+    class MomoQrPaymentProcessor {
+        +processPayment(double amount, String transactionRef) PaymentResult
         +getMethodName() String
     }
 
-    class VnPayPaymentProcessor {
-        +processPayment(double amount, String orderCode) PaymentResult
+    class CardPosPaymentProcessor {
+        +processPayment(double amount, String transactionRef) PaymentResult
         +getMethodName() String
     }
 
     class PaymentProcessorFactory {
-        +static getProcessor(String method) IPaymentProcessor
+        <<final>>
+        -PaymentProcessorFactory()
+        +createProcessor(PaymentMethod method)$ IPaymentProcessor
+    }
+
+    class PaymentMethod {
+        <<enumeration>>
+        CASH
+        QR
+        CARD
     }
 
     class PaymentResult {
+        <<final>>
         -boolean success
         -String transactionId
         -String message
         +isSuccess() boolean
+        +getTransactionId() String
         +getMessage() String
     }
 
     IPaymentProcessor <|.. CashPaymentProcessor
-    IPaymentProcessor <|.. MomoPaymentProcessor
-    IPaymentProcessor <|.. VnPayPaymentProcessor
+    IPaymentProcessor <|.. MomoQrPaymentProcessor
+    IPaymentProcessor <|.. CardPosPaymentProcessor
+    PaymentProcessorFactory ..> PaymentMethod : reads
     PaymentProcessorFactory ..> IPaymentProcessor : creates
     IPaymentProcessor ..> PaymentResult : returns
 ```
 
-- **Mã nguồn minh họa (Pure Java):**
+- **Mã nguồn thực tế** (`backend-java/src/main/java/com/dalatcafe/patterns/factory/PaymentProcessorFactory.java`):
 ```java
 package com.dalatcafe.patterns.factory;
 
-public interface IPaymentProcessor {
-    PaymentResult processPayment(double amount, String orderCode);
-    String getMethodName();
-}
-
-public class CashPaymentProcessor implements IPaymentProcessor {
-    @Override
-    public PaymentResult processPayment(double amount, String orderCode) {
-        System.out.println("Thu ngân nhận tiền mặt: " + amount + " VND cho đơn " + orderCode);
-        return new PaymentResult(true, "CASH-" + System.currentTimeMillis(), "Thanh toán tiền mặt thành công");
-    }
-    @Override
-    public String getMethodName() { return "Tiền mặt"; }
-}
-
-public class MomoPaymentProcessor implements IPaymentProcessor {
-    @Override
-    public PaymentResult processPayment(double amount, String orderCode) {
-        System.out.println("Tạo mã QR MoMo cho đơn " + orderCode + " số tiền: " + amount + " VND");
-        return new PaymentResult(true, "MOMO-" + System.currentTimeMillis(), "Giao dịch MoMo hoàn tất");
-    }
-    @Override
-    public String getMethodName() { return "Ví MoMo"; }
-}
-
-public class VnPayPaymentProcessor implements IPaymentProcessor {
-    @Override
-    public PaymentResult processPayment(double amount, String orderCode) {
-        System.out.println("Khởi tạo cổng VNPay cho đơn " + orderCode);
-        return new PaymentResult(true, "VNPAY-" + System.currentTimeMillis(), "Giao dịch VNPay thành công");
-    }
-    @Override
-    public String getMethodName() { return "Cổng VNPay"; }
-}
+import com.dalatcafe.model.PaymentMethod;
 
 public final class PaymentProcessorFactory {
-    public static IPaymentProcessor getProcessor(String method) {
-        if (method == null) throw new IllegalArgumentException("Phương thức thanh toán không được null");
-        switch (method.toLowerCase().trim()) {
-            case "cash":
-            case "tiền mặt":
-                return new CashPaymentProcessor();
-            case "momo":
-            case "qr":
-                return new MomoPaymentProcessor();
-            case "vnpay":
-            case "card":
-                return new VnPayPaymentProcessor();
-            default:
-                throw new UnsupportedOperationException("Chưa hỗ trợ phương thức thanh toán: " + method);
+    private PaymentProcessorFactory() {
+    }
+
+    public static IPaymentProcessor createProcessor(PaymentMethod method) {
+        if (method == null) {
+            throw new IllegalArgumentException("Payment method must not be null");
         }
+
+        return switch (method) {
+            case CASH -> new CashPaymentProcessor();
+            case QR -> new MomoQrPaymentProcessor();
+            case CARD -> new CardPosPaymentProcessor();
+        };
     }
 }
 ```
+- **Kiểm thử:** `FactoryTest` (tạo đúng bộ xử lý cho từng `PaymentMethod`, từ chối `null`, trả về `PaymentResult` thành công).
 
 ---
 
@@ -777,20 +756,20 @@ public class OrderBuilder {
 
 ---
 
-### 3.4. Decorator Pattern - Tùy biến Đồ uống, Nâng Size và Thêm Topping Động (`ToppingDecorator`)
+### 3.4. Decorator Pattern - Tùy biến Đồ uống, Nâng Size và Thêm Topping Động (`BeverageDecorator`)
 - **Bài toán thực tế trong nghiệp vụ:**  
-  Trên giao diện Storefront (`DrinkMenu.tsx` - Customization Modal) cũng như quầy thu ngân POS, khách hàng có thể tùy chọn thêm nhiều loại topping hoặc nâng size cho ly cà phê gốc (ví dụ: Ly Latte Vani gốc có giá 55.000 VNĐ, thêm Trân châu trắng +10.000 VNĐ, thêm Kem Cheese béo ngậy +12.000 VNĐ, nâng Size L +10.000 VNĐ). Nếu sử dụng kế thừa để tạo lớp cho từng tổ hợp (ví dụ: `LatteVaniWithPearlAndCheeseLarge`), hệ thống sẽ rơi vào tình trạng bùng nổ số lượng lớp (Class Explosion) và không thể thay đổi tùy chọn linh hoạt tại runtime.
+  Trên giao diện Storefront (`DrinkMenu.tsx` - Customization Modal) cũng như quầy thu ngân POS, khách hàng có thể tùy chọn thêm nhiều loại topping hoặc nâng size cho ly cà phê gốc (ví dụ: Ly Latte Vani gốc có giá 55.000 VNĐ, thêm Trân châu trắng +10.000 VNĐ, thêm Kem Cheese béo ngậy +15.000 VNĐ, nâng Size L +10.000 VNĐ). Nếu sử dụng kế thừa để tạo lớp cho từng tổ hợp (ví dụ: `LatteVaniWithPearlAndCheeseLarge`), hệ thống sẽ rơi vào tình trạng bùng nổ số lượng lớp (Class Explosion) và không thể thay đổi tùy chọn linh hoạt tại runtime.
 - **Giải pháp kỹ thuật (Pure Java OOP):**  
-  Áp dụng **Decorator Pattern**. Khai báo giao diện `IBeverage` với hai phương thức cốt lõi: `getCost()` và `getDescription()`. Lớp `BaseDrinkItem` đóng vai trò Concrete Component đại diện cho đồ uống gốc. Lớp trừu tượng `ToppingDecorator` bọc lấy đối tượng `IBeverage` bên trong. Các Decorator cụ thể (`PearlToppingDecorator`, `CheeseFoamDecorator`, `UpsizeLargeDecorator`) sẽ cộng thêm giá và bổ sung mô tả vào đồ uống gốc một cách trong suốt.
+  Áp dụng **Decorator Pattern**. Giao diện `IBeverage` khai báo `getCost()` và `getDescription()`. Lớp `BaseCoffee` (Concrete Component) bọc một `MenuItem` và lấy giá bán `sellPrice`. Lớp trừu tượng `BeverageDecorator` giữ tham chiếu `protected final IBeverage beverage` (không nhận `null`) và chuyển tiếp lời gọi. Ba Concrete Decorator cộng thêm phụ thu và nối mô tả. Vì mỗi Decorator chỉ cộng một khoản cố định nên thứ tự bọc không làm thay đổi tổng tiền, và có thể bọc cùng một topping nhiều lần. `PosCheckoutFacade` dựng chuỗi Decorator từ danh sách `Customization` của từng dòng đơn.
 - **Bảng ánh xạ thành phần (Participants Mapping):**
   | Vai trò GoF | Class / Interface Java | Trách nhiệm cụ thể |
   | :--- | :--- | :--- |
-  | **Component** | `IBeverage` | Định nghĩa giao diện tính giá và mô tả của đồ uống |
-  | **Concrete Component** | `BaseDrinkItem` | Đại diện cho đồ uống tiêu chuẩn trong menu (Latte, Cold Brew, Muối...) |
-  | **Decorator** | `ToppingDecorator` | Giữ tham chiếu đến `IBeverage` được bọc và chuyển tiếp yêu cầu |
-  | **Concrete Decorator 1** | `PearlToppingDecorator` | Cộng thêm 10.000 VNĐ và nối thêm chuỗi "+ Trân châu trắng" |
-  | **Concrete Decorator 2** | `CheeseFoamDecorator` | Cộng thêm 12.000 VNĐ và nối thêm chuỗi "+ Kem Cheese béo" |
-  | **Concrete Decorator 3** | `UpsizeLargeDecorator` | Cộng thêm 10.000 VNĐ và nối thêm chuỗi "(Size L - 480ml)" |
+  | **Component** | `IBeverage` | Giao diện tính giá và mô tả đồ uống |
+  | **Concrete Component** | `BaseCoffee` | Đồ uống gốc trong menu, giá = `MenuItem.getSellPrice()` |
+  | **Decorator** | `BeverageDecorator` | Giữ `IBeverage` được bọc và chuyển tiếp yêu cầu |
+  | **Concrete Decorator 1** | `LargeSizeDecorator` | +10.000 VNĐ, nối chuỗi `" (Size L)"` |
+  | **Concrete Decorator 2** | `CheeseFoamDecorator` | +15.000 VNĐ, nối chuỗi `" + Salted Cheese Foam"` |
+  | **Concrete Decorator 3** | `PearlToppingDecorator` | +10.000 VNĐ, nối chuỗi `" + White Pearls"` |
 
 - **Sơ đồ lớp (Class Diagram):**
 ```mermaid
@@ -801,107 +780,92 @@ classDiagram
         +getDescription() String
     }
 
-    class BaseDrinkItem {
-        -String name
-        -double basePrice
+    class BaseCoffee {
+        -MenuItem menuItem
+        +BaseCoffee(MenuItem menuItem)
         +getCost() double
         +getDescription() String
     }
 
-    class ToppingDecorator {
+    class BeverageDecorator {
         <<abstract>>
         #IBeverage beverage
-        +ToppingDecorator(IBeverage beverage)
+        #BeverageDecorator(IBeverage beverage)
         +getCost() double
         +getDescription() String
     }
 
-    class PearlToppingDecorator {
+    class LargeSizeDecorator {
+        -double PRICE$ = 10000
         +getCost() double
         +getDescription() String
     }
 
     class CheeseFoamDecorator {
+        -double PRICE$ = 15000
         +getCost() double
         +getDescription() String
     }
 
-    class UpsizeLargeDecorator {
+    class PearlToppingDecorator {
+        -double PRICE$ = 10000
         +getCost() double
         +getDescription() String
     }
 
-    IBeverage <|.. BaseDrinkItem
-    IBeverage <|.. ToppingDecorator
-    ToppingDecorator <|-- PearlToppingDecorator
-    ToppingDecorator <|-- CheeseFoamDecorator
-    ToppingDecorator <|-- UpsizeLargeDecorator
-    ToppingDecorator o--> IBeverage : wraps
+    IBeverage <|.. BaseCoffee
+    IBeverage <|.. BeverageDecorator
+    BeverageDecorator <|-- LargeSizeDecorator
+    BeverageDecorator <|-- CheeseFoamDecorator
+    BeverageDecorator <|-- PearlToppingDecorator
+    BeverageDecorator o--> IBeverage : wraps
+    BaseCoffee --> MenuItem
 ```
 
-- **Mã nguồn minh họa (Pure Java):**
+- **Mã nguồn thực tế** (`backend-java/src/main/java/com/dalatcafe/patterns/decorator/`):
 ```java
-package com.dalatcafe.patterns.decorator;
-
-public interface IBeverage {
-    double getCost();
-    String getDescription();
-}
-
-public class BaseDrinkItem implements IBeverage {
-    private final String name;
-    private final double basePrice;
-
-    public BaseDrinkItem(String name, double basePrice) {
-        this.name = name;
-        this.basePrice = basePrice;
-    }
-
-    @Override
-    public double getCost() { return basePrice; }
-
-    @Override
-    public String getDescription() { return name; }
-}
-
-public abstract class ToppingDecorator implements IBeverage {
+public abstract class BeverageDecorator implements IBeverage {
     protected final IBeverage beverage;
 
-    public ToppingDecorator(IBeverage beverage) {
-        this.beverage = beverage;
+    protected BeverageDecorator(IBeverage beverage) {
+        this.beverage = Objects.requireNonNull(beverage, "Beverage must not be null");
     }
 
     @Override
-    public double getCost() { return beverage.getCost(); }
+    public String getDescription() {
+        return beverage.getDescription();
+    }
 
     @Override
-    public String getDescription() { return beverage.getDescription(); }
+    public double getCost() {
+        return beverage.getCost();
+    }
 }
 
-public class PearlToppingDecorator extends ToppingDecorator {
-    public PearlToppingDecorator(IBeverage beverage) { super(beverage); }
+public class CheeseFoamDecorator extends BeverageDecorator {
+    private static final double PRICE = 15_000;
+
+    public CheeseFoamDecorator(IBeverage beverage) {
+        super(beverage);
+    }
+
     @Override
-    public double getCost() { return beverage.getCost() + 10000; }
+    public String getDescription() {
+        return beverage.getDescription() + " + Salted Cheese Foam";
+    }
+
     @Override
-    public String getDescription() { return beverage.getDescription() + " + Trân châu trắng"; }
+    public double getCost() {
+        return beverage.getCost() + PRICE;
+    }
 }
 
-public class CheeseFoamDecorator extends ToppingDecorator {
-    public CheeseFoamDecorator(IBeverage beverage) { super(beverage); }
-    @Override
-    public double getCost() { return beverage.getCost() + 12000; }
-    @Override
-    public String getDescription() { return beverage.getDescription() + " + Kem Cheese béo"; }
-}
-
-public class UpsizeLargeDecorator extends ToppingDecorator {
-    public UpsizeLargeDecorator(IBeverage beverage) { super(beverage); }
-    @Override
-    public double getCost() { return beverage.getCost() + 10000; }
-    @Override
-    public String getDescription() { return beverage.getDescription() + " (Size L)"; }
-}
+// Sử dụng: Cà phê muối 55.000 + Size L + Cheese Foam + Trân châu = 90.000 VNĐ
+IBeverage drink = new PearlToppingDecorator(
+        new CheeseFoamDecorator(
+                new LargeSizeDecorator(new BaseCoffee(menuItem))));
 ```
+- **Kiểm thử:** `DecoratorTest` (cộng dồn giá và mô tả, phụ thu từng topping, bọc lặp, độc lập thứ tự bọc, từ chối `null`).
 
 ---
 
