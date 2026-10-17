@@ -2,27 +2,35 @@ package com.dalatcafe.patterns.observer;
 
 import com.dalatcafe.model.Order;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CopyOnWriteArrayList;
 
+/**
+ * Subject of the Observer pattern. The list is copy-on-write because checkout attaches a
+ * per-customer observer while other request threads may be broadcasting.
+ */
 public class OrderEventSubject {
-    private final List<IOrderObserver> observers = new ArrayList<>();
+    private final CopyOnWriteArrayList<IOrderObserver> observers = new CopyOnWriteArrayList<>();
 
     public void attach(IOrderObserver observer) {
         Objects.requireNonNull(observer, "Observer must not be null");
-        if (!observers.contains(observer)) {
-            observers.add(observer);
-        }
+        observers.addIfAbsent(observer);
     }
 
     public void detach(IOrderObserver observer) {
         observers.remove(observer);
     }
 
+    public void notifyOrderPaid(Order order) {
+        Objects.requireNonNull(order, "Order must not be null");
+        for (IOrderObserver observer : observers) {
+            observer.onOrderPaid(order);
+        }
+    }
+
     public void notifyOrderCompleted(Order order) {
         Objects.requireNonNull(order, "Order must not be null");
-        for (IOrderObserver observer : List.copyOf(observers)) {
+        for (IOrderObserver observer : observers) {
             observer.onOrderCompleted(order);
         }
     }

@@ -16,6 +16,7 @@ import com.dalatcafe.patterns.facade.CheckoutRequest;
 import com.dalatcafe.patterns.facade.CheckoutResult;
 import com.dalatcafe.patterns.facade.Customization;
 import com.dalatcafe.patterns.facade.PosCheckoutFacade;
+import com.dalatcafe.patterns.observer.IOrderObserver;
 import com.dalatcafe.patterns.observer.OrderEventSubject;
 import com.dalatcafe.patterns.strategy.FixedAmountDiscountStrategy;
 import org.junit.jupiter.api.BeforeEach;
@@ -62,7 +63,9 @@ class FacadeTest {
     @Test
     void checkoutRunsFullWorkflowWithOneCall() {
         List<Order> notified = new ArrayList<>();
-        subject.attach(notified::add);
+        List<Order> completed = new ArrayList<>();
+        subject.attach(IOrderObserver.whenPaid(notified::add));
+        subject.attach(IOrderObserver.whenCompleted(completed::add));
 
         CheckoutResult result = facade.checkout(request(2, PaymentMethod.CASH, Set.of(), true));
 
@@ -71,7 +74,9 @@ class FacadeTest {
         assertEquals(100_000, order.getSubtotal());
         assertEquals(30_000, order.getDiscountAmount());
         assertEquals(75_600, order.getTotal());
-        assertEquals(OrderStatus.COMPLETED, order.getStatus());
+        // Paid orders wait on the KDS; the kitchen completes them later.
+        assertEquals(OrderStatus.PENDING, order.getStatus());
+        assertTrue(completed.isEmpty());
         assertEquals(PaymentStatus.PAID, order.getPaymentStatus());
         assertEquals(3, order.getTableId());
         assertNotNull(order.getId());
@@ -140,9 +145,9 @@ class FacadeTest {
 
     @Test
     void observerFailureDoesNotUndoCommittedCheckout() {
-        subject.attach(order -> {
+        subject.attach(IOrderObserver.whenPaid(order -> {
             throw new IllegalStateException("boom");
-        });
+        }));
         CheckoutResult result = facade.checkout(request(1, PaymentMethod.CASH, Set.of(), false));
         assertTrue(result.isSuccess());
         assertEquals(1, result.getWarnings().size());
