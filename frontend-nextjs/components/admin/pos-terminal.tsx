@@ -52,7 +52,8 @@ const keypadKeys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '000', '0', 'de
 // Same numbers as the Java backend (SystemConfigManager, LoyaltyTierDiscountStrategy), so the
 // preview matches the receipt: tier discount first, then points on what is left, VAT last.
 const POINTS_PER_REDEMPTION = 20
-const VND_PER_POINT = 1000
+// Default value of one point; the page passes the live value from GET /api/config.
+const DEFAULT_VND_PER_POINT = 1000
 const tierRates: Record<string, number> = { bronze: 0, silver: 0.05, gold: 0.1, vip: 0.15 }
 const rankLabels: Record<string, string> = { bronze: 'Đồng', silver: 'Bạc', gold: 'Vàng', vip: 'VIP' }
 
@@ -63,7 +64,15 @@ type MemberState =
   | { kind: 'none' }
   | { kind: 'offline' }
 
-export function PosTerminal({ menu, tables }: { menu: MenuItem[]; tables: FloorTable[] }) {
+export function PosTerminal({
+  menu,
+  tables,
+  pointValue = DEFAULT_VND_PER_POINT,
+}: {
+  menu: MenuItem[]
+  tables: FloorTable[]
+  pointValue?: number
+}) {
   const sellable = menu.filter((item) => item.kind === 'menu')
   const categories = ['Tất cả', ...new Set(sellable.map((item) => item.category))]
   const [category, setCategory] = useState('Tất cả')
@@ -83,10 +92,10 @@ export function PosTerminal({ menu, tables }: { menu: MenuItem[]; tables: FloorT
   const member = memberState.kind === 'found' ? memberState.member : null
   const subtotal = useMemo(() => lines.reduce((sum, line) => sum + unitPrice(line) * line.qty, 0), [lines])
   const tierDiscount = member ? Math.round(subtotal * (tierRates[member.rank] ?? 0)) : 0
-  const redeemablePoints = member && usePoints
-    ? Math.min(POINTS_PER_REDEMPTION, member.points, Math.floor((subtotal - tierDiscount) / VND_PER_POINT))
+  const redeemablePoints = member && usePoints && pointValue > 0
+    ? Math.min(POINTS_PER_REDEMPTION, member.points, Math.floor((subtotal - tierDiscount) / pointValue))
     : 0
-  const pointsDiscount = redeemablePoints * VND_PER_POINT
+  const pointsDiscount = redeemablePoints * pointValue
   const afterDiscount = subtotal - tierDiscount - pointsDiscount
   const tax = Math.round(afterDiscount * TAX_RATE)
   const total = afterDiscount + tax
@@ -315,7 +324,7 @@ export function PosTerminal({ menu, tables }: { menu: MenuItem[]; tables: FloorT
                 aria-pressed={usePoints}
                 disabled={member.points < 1 || pending}
                 onClick={() => setUsePoints((current) => !current)}
-                title={`Mỗi điểm trừ ${VND_PER_POINT.toLocaleString('vi-VN')} đ khi thanh toán ngay`}
+                title={`Mỗi điểm trừ ${pointValue.toLocaleString('vi-VN')} đ khi thanh toán ngay`}
                 className={cn(
                   'shrink-0 whitespace-nowrap px-2.5 py-1 rounded-md text-[11px] font-bold transition-colors cursor-pointer disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-500',
                   usePoints ? 'bg-[#5A3E2B] text-white' : 'bg-amber-200/70 text-amber-900 hover:bg-amber-200',

@@ -10,7 +10,8 @@ import java.util.Set;
 
 /**
  * Header-based RBAC (docs/API_SPEC.md 1.4). The role comes from {@code X-User-Role}.
- * Public endpoints need no header; creating menu items and analytics need MANAGER or ADMIN;
+ * Public endpoints need no header; changing store settings needs ADMIN; creating menu items
+ * and analytics need MANAGER or ADMIN;
  * every other endpoint needs STAFF, MANAGER or ADMIN.
  * This is a role gate for the course project, not authentication: roles are not verified.
  */
@@ -19,6 +20,7 @@ public class SimpleAuthFilter extends Filter {
 
     private static final Set<Role> STAFF_UP = EnumSet.of(Role.STAFF, Role.MANAGER, Role.ADMIN);
     private static final Set<Role> MANAGER_UP = EnumSet.of(Role.MANAGER, Role.ADMIN);
+    private static final Set<Role> ADMIN_ONLY = EnumSet.of(Role.ADMIN);
 
     @Override
     public void doFilter(HttpExchange exchange, Chain chain) throws IOException {
@@ -70,6 +72,9 @@ public class SimpleAuthFilter extends Filter {
         }
         if (p.startsWith("/api/analytics")) {
             return MANAGER_UP;
+        }
+        if (p.equals("/api/config") && !method.equals("GET")) {
+            return ADMIN_ONLY;
         }
         return STAFF_UP;
     }

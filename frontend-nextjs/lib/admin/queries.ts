@@ -11,7 +11,8 @@ import {
   getMockReservations,
   type ReservationStatusLabel,
 } from '@/lib/db/mock-store'
-import { fetchReservations } from '@/lib/api-client'
+import { fetchAnalytics, fetchCustomers, fetchReservations } from '@/lib/api-client'
+import { listSyncQueue } from './local-links'
 
 const DAY = 24 * 60 * 60 * 1000
 
@@ -88,8 +89,46 @@ function revenue(orders: Order[]) {
   return orders.filter((order) => order.paymentStatus === 'paid').reduce((sum, order) => sum + order.total, 0)
 }
 
+export type DataSource = 'java' | 'local'
+
+// Chart data computed by GET /api/analytics/overview, in the shape the dashboard widgets use.
+async function getJavaOverview(days: number) {
+  const remote = await fetchAnalytics(days)
+  if (!remote.ok) return null
+  const analytics = remote.data
+  return {
+    metrics: {
+      revenueToday: analytics.revenueToday,
+      revenueYesterday: analytics.revenueYesterday,
+      ordersToday: analytics.ordersToday,
+      ordersYesterday: analytics.ordersYesterday,
+      activeTables: analytics.tables.occupied,
+      totalTables: analytics.tables.total,
+      fulfillmentToday: analytics.fulfillmentMinutesToday,
+      fulfillmentYesterday: analytics.fulfillmentMinutesYesterday,
+    },
+    revenueByDay: analytics.revenueByDay.map((row) => ({
+      day: new Date(`${row.date}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short' }),
+      revenue: Math.round(row.revenue * 100) / 100,
+      orders: row.orders,
+    })),
+    topDrinks: analytics.topItems.map((item) => ({ name: item.name, sold: item.qty })),
+    paymentMix: (['cash', 'qr', 'card'] as const).map((method) => ({
+      method,
+      total: Math.round((analytics.paymentMix[method] ?? 0) * 100) / 100,
+    })),
+  }
+}
+
+// Java's analytics when it answers (orders it priced or imported), otherwise the local store.
 export async function getOverview(days = 7) {
-  const [orders, tables, menu] = await Promise.all([getOrdersSince(days), getTables(), getMenuItems()])
+  const [orders, tables, menu, fromJava] = await Promise.all([
+    getOrdersSince(days),
+    getTables(),
+    getMenuItems(),
+    getJavaOverview(days),
+  ])
+  if (fromJava) return { ...fromJava, recentOrders: orders.slice(0, 12), source: 'java' as DataSource }
   const todayStart = startOfDay().getTime()
   const yesterdayStart = startOfDay(1).getTime()
   const today = orders.filter((order) => order.createdAt.getTime() >= todayStart)
@@ -142,6 +181,7 @@ export async function getOverview(days = 7) {
     topDrinks,
     paymentMix,
     recentOrders: orders.slice(0, 12),
+    source: 'local' as DataSource,
   }
 }
 
@@ -158,9 +198,28 @@ export async function getHeaderData() {
   }
 }
 
-export async function getCustomers() {
+export type CustomerView = { name: string; orders: number; spent: number; lastVisit: Date; points?: number; rank?: string }
+
+// Loyalty members from GET /api/customers (with points and rank); without Java, a 90-day
+// summary of the local orders by customer name.
+export async function getCustomers(): Promise<{ customers: CustomerView[]; source: DataSource }> {
+  assertAdminAccess()
+  const remote = await fetchCustomers()
+  if (remote.ok) {
+    return {
+      source: 'java',
+      customers: remote.data.map((customer) => ({
+        name: customer.name,
+        orders: customer.totalOrders,
+        spent: customer.totalSpent,
+        lastVisit: customer.lastVisit ? new Date(customer.lastVisit) : new Date(0),
+        points: customer.loyaltyPoints,
+        rank: customer.rank,
+      })),
+    }
+  }
   const orders = await getOrdersSince(90)
-  const customers = new Map<string, { name: string; orders: number; spent: number; lastVisit: Date }>()
+  const customers = new Map<string, CustomerView>()
   for (const order of orders) {
     if (order.customer === 'Walk-in') continue
     const entry = customers.get(order.customer) ?? { name: order.customer, orders: 0, spent: 0, lastVisit: order.createdAt }
@@ -169,7 +228,13 @@ export async function getCustomers() {
     if (order.createdAt > entry.lastVisit) entry.lastVisit = order.createdAt
     customers.set(order.customer, entry)
   }
-  return [...customers.values()].sort((a, b) => b.spent - a.spent)
+  return { customers: [...customers.values()].sort((a, b) => b.spent - a.spent), source: 'local' }
+}
+
+// Orders recorded locally that the Java backend has not received yet.
+export async function getPendingSyncCount(): Promise<number> {
+  assertAdminAccess()
+  return (await listSyncQueue()).length
 }
 
 export type ReservationView = {

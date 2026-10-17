@@ -51,3 +51,9 @@ Thumbs.db
 .design-cache/
 .v0-trash/
 .vercel/
+
+# Local AI tooling (Claude Code settings, graphify knowledge graph)
+CLAUDE.md
+.claude/
+.gitattributes
+graphify-out/

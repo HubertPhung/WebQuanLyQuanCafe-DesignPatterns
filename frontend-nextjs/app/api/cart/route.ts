@@ -1,8 +1,21 @@
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import { Cart, cartFields, shopify, demoProducts } from '@/lib/shopify'
+import { validateVoucher } from '@/lib/api-client'
 
 const isShopifyConfigured = Boolean(process.env.SHOPIFY_STORE_DOMAIN && process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN)
+
+// Demo codes used when the Java backend cannot be asked.
+const OFFLINE_CODES = ['WELCOME', 'WELCOME10', 'DALATCAFE', 'COFFEE', 'DISCOUNT']
+
+// Java's VoucherCatalog decides whether a code exists (POST /api/vouchers/validate, the same
+// Strategy checkout applies). The demo cart is priced in USD, so only that verdict is used and
+// the cart keeps its flat 10% off; without Java the demo list above applies.
+async function isVoucherApplicable(code: string, subtotal: number): Promise<boolean> {
+  const verdict = await validateVoucher(code, subtotal)
+  if (verdict.ok) return verdict.data.valid
+  return OFFLINE_CODES.includes(code)
+}
 
 async function getLocalCart(): Promise<Cart | null> {
   const cookieStore = await cookies()
@@ -131,7 +144,8 @@ export async function POST(request: NextRequest) {
         }
       } else if (body.action === 'discount') {
         const code = String(body.code ?? '').trim().toUpperCase()
-        const applicable = ['WELCOME', 'WELCOME10', 'DALATCAFE', 'COFFEE', 'DISCOUNT'].includes(code)
+        const subtotal = cart.lines.nodes.reduce((sum, l) => sum + Number(l.merchandise.price.amount) * l.quantity, 0)
+        const applicable = code ? await isVoucherApplicable(code, subtotal) : false
         cart.discountCodes = code ? [{ code, applicable }] : []
       } else if (body.action === 'note') {
         cart.note = String(body.note ?? '').slice(0, 500)

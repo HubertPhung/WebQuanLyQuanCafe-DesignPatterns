@@ -4,9 +4,12 @@ import com.dalatcafe.dao.DaoFactory;
 import com.dalatcafe.dao.InMemoryDatabase;
 import com.dalatcafe.model.Customer;
 import com.dalatcafe.model.MenuItem;
+import com.dalatcafe.model.Order;
+import com.dalatcafe.model.PaymentStatus;
 import com.dalatcafe.model.ReservationStatus;
 import com.dalatcafe.model.Table;
 import com.dalatcafe.model.TableStatus;
+import com.dalatcafe.patterns.singleton.SystemConfigManager;
 import com.dalatcafe.util.Json;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -49,6 +52,8 @@ class ServerTest {
     @AfterEach
     void tearDown() {
         server.stop();
+        // The config endpoint changes the Singleton; later tests expect the defaults.
+        SystemConfigManager.getInstance().resetToDefaults();
     }
 
     private HttpResponse<String> call(String method, String path, String role, String body) throws Exception {
@@ -399,6 +404,103 @@ class ServerTest {
         assertTrue(((List<?>) overview.get("topItems")).toString().contains("Ca phe muoi"));
         assertNotNull(overview.get("tables"));
         assertEquals(404, call("GET", "/api/analytics/other", "ADMIN", null).statusCode());
+    }
+
+    @Test
+    void analyticsReturnsDailySeriesPaymentMixAndValidatesDays() throws Exception {
+        checkoutAtTable(3, "");
+        Map<String, Object> week = data(call("GET", "/api/analytics/overview", "MANAGER", null));
+        List<?> series = (List<?>) week.get("revenueByDay");
+        assertEquals(7, series.size());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> today = (Map<String, Object>) series.get(6);
+        assertTrue(number(today, "revenue") > 0);
+        assertTrue(number(today, "orders") >= 1);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> mix = (Map<String, Object>) week.get("paymentMix");
+        assertTrue(number(mix, "cash") > 0);
+        assertTrue(number(week, "ordersToday") >= 1);
+        assertNotNull(week.get("fulfillmentMinutesToday"));
+
+        assertEquals(3, ((List<?>) data(call("GET", "/api/analytics/overview?days=3", "ADMIN", null)).get("revenueByDay")).size());
+        assertEquals(400, call("GET", "/api/analytics/overview?days=0", "MANAGER", null).statusCode());
+        assertEquals(400, call("GET", "/api/analytics/overview?days=abc", "MANAGER", null).statusCode());
+    }
+
+    private static String offlineOrder(String code, String extra) {
+        return "{\"orderCode\":\"" + code + "\",\"customer\":\"Khach offline\",\"orderType\":\"dine-in\","
+                + "\"paymentMethod\":\"cash\",\"createdAt\":\"2026-10-17T02:00:00Z\"" + extra + "}";
+    }
+
+    @Test
+    void offlineOrdersAreImportedOnceWithoutChargingAgain() throws Exception {
+        DaoFactory daos = DaoFactory.getInstance();
+        daos.getTableDao().updateStatus(12, TableStatus.AVAILABLE, 0);
+        String batch = "{\"orders\":["
+                + offlineOrder("AC-0901-OFF", ",\"tableId\":12,\"paid\":true,\"status\":\"pending\",\"total\":97200,"
+                + "\"lines\":[{\"menuItemId\":" + DRINK_ID + ",\"name\":\"Ca phe muoi\",\"qty\":2,\"price\":45000}]") + ","
+                + offlineOrder("AC-0902-OFF", ",\"orderType\":\"pickup\",\"paid\":false,"
+                + "\"lines\":[{\"menuItemId\":99999,\"name\":\"Banh mi\",\"qty\":1,\"price\":20000}]") + ","
+                + offlineOrder("AC-0903-OFF", ",\"paid\":false,\"status\":\"completed\","
+                + "\"lines\":[{\"name\":\"Tra\",\"qty\":1,\"price\":20000}]") + ","
+                + offlineOrder("AC-0904-OFF", ",\"paid\":true,\"lines\":[{\"name\":\"Tra\",\"qty\":0,\"price\":20000}]")
+                + "]}";
+
+        assertEquals(401, call("POST", "/api/orders/sync", null, batch).statusCode());
+        HttpResponse<String> first = call("POST", "/api/orders/sync", "STAFF", batch);
+        assertEquals(200, first.statusCode(), first.body());
+        assertEquals(2, ((Number) data(first).get("created")).intValue());
+        assertEquals(2, ((Number) data(first).get("failed")).intValue());
+        assertTrue(first.body().contains("stock not deducted"));
+
+        Order imported = daos.getOrderDao().findByOrderCode("AC-0901-OFF").orElseThrow();
+        assertEquals(PaymentStatus.PAID, imported.getPaymentStatus());
+        assertEquals(97_200, imported.getTotal());
+        assertEquals("2026-10-17T02:00:00Z", imported.getCreatedAt().toString());
+        assertEquals(8.0, daos.getMenuDao().findById(DRINK_ID).orElseThrow().getStockQty());
+        assertEquals(TableStatus.OCCUPIED, daos.getTableDao().findById(12).orElseThrow().getStatus());
+        assertEquals(PaymentStatus.UNPAID, daos.getOrderDao().findByOrderCode("AC-0902-OFF").orElseThrow().getPaymentStatus());
+        assertTrue(daos.getOrderDao().findByOrderCode("AC-0903-OFF").isEmpty());
+
+        HttpResponse<String> again = call("POST", "/api/orders/sync", "STAFF", batch);
+        assertEquals(2, ((Number) data(again).get("existing")).intValue());
+        assertEquals(0, ((Number) data(again).get("created")).intValue());
+        assertEquals(8.0, daos.getMenuDao().findById(DRINK_ID).orElseThrow().getStockQty());
+
+        // An imported order follows the normal KDS lifecycle afterwards.
+        assertEquals(200, setOrderStatus("AC-0901-OFF", "completed").statusCode());
+        assertEquals(TableStatus.CLEANING, daos.getTableDao().findById(12).orElseThrow().getStatus());
+
+        assertEquals(400, call("POST", "/api/orders/sync", "STAFF", "{\"orders\":[]}").statusCode());
+        dbUp.set(false);
+        assertEquals(503, call("POST", "/api/orders/sync", "STAFF", batch).statusCode());
+    }
+
+    @Test
+    void adminChangesStoreSettingsUsedByTheReservationChain() throws Exception {
+        assertEquals(200, call("GET", "/api/config", "STAFF", null).statusCode());
+        assertEquals(401, call("GET", "/api/config", null, null).statusCode());
+        String change = "{\"maxReservationGuests\":4,\"openingTime\":\"08:00\",\"storeName\":\"Da Lat Cafe 2\"}";
+        assertEquals(403, call("PUT", "/api/config", "MANAGER", change).statusCode());
+
+        HttpResponse<String> updated = call("PUT", "/api/config", "ADMIN", change);
+        assertEquals(200, updated.statusCode(), updated.body());
+        assertEquals("08:00", data(updated).get("openingTime"));
+        assertEquals("22:00", data(updated).get("closingTime"));
+        assertEquals("Da Lat Cafe 2", SystemConfigManager.getInstance().getStoreName());
+
+        // The Chain of Responsibility reads the Singleton: 5 guests now exceed the limit.
+        String when = LocalDate.now().plusDays(2).atTime(LocalTime.of(15, 0)).toInstant(ZoneOffset.ofHours(7)).toString();
+        HttpResponse<String> tooMany = call("POST", "/api/reservations", null, "{\"customer\":\"Lan\",\"contact\":\"0912000111\","
+                + "\"dateTime\":\"" + when + "\",\"tableId\":5,\"guests\":5}");
+        assertEquals(400, tooMany.statusCode());
+        assertEquals("CHAIN_VALIDATION_FAILED", json(tooMany).get("code"));
+
+        assertEquals(400, call("PATCH", "/api/config", "ADMIN", "{\"openingTime\":\"23:00\"}").statusCode());
+        assertEquals(400, call("PATCH", "/api/config", "ADMIN", "{\"closingTime\":\"10pm\"}").statusCode());
+        assertEquals(400, call("PATCH", "/api/config", "ADMIN", "{\"maxReservationGuests\":0}").statusCode());
+        assertEquals(400, call("PATCH", "/api/config", "ADMIN", "{\"storeName\":\"\",\"maxReservationGuests\":9}").statusCode());
+        assertEquals(4, SystemConfigManager.getInstance().getMaxReservationGuests(), "a rejected update changes nothing");
     }
 
     @Test

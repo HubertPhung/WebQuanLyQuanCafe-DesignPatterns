@@ -6,7 +6,7 @@ const DEFAULT_BACKEND_URL = 'http://localhost:8080'
 const REQUEST_TIMEOUT_MS = 2500
 // The Java SimpleAuthFilter gates endpoints by role header (API_SPEC 1.3): POS work needs
 // STAFF, creating menu items and analytics need MANAGER.
-type JavaRole = 'STAFF' | 'MANAGER'
+type JavaRole = 'STAFF' | 'MANAGER' | 'ADMIN'
 // 5xx codes the backend uses to refuse on purpose rather than crash (API_SPEC 1.2).
 const FAIL_CLOSED_CODES = new Set(['DATABASE_UNAVAILABLE'])
 
@@ -213,4 +213,86 @@ export type NewJavaMenuItem = {
 // POST /api/menu (MANAGER+)
 export function createJavaMenuItem(payload: NewJavaMenuItem): Promise<JavaResult<JavaMenuItem>> {
   return request<JavaMenuItem>('/api/menu', { method: 'POST', body: payload, role: 'MANAGER' })
+}
+
+export type SyncOrderPayload = {
+  orderCode: string
+  customer: string
+  tableId: number | null
+  orderType: string
+  paymentMethod: string
+  paid: boolean
+  status: string
+  createdAt: string
+  total: number
+  lines: { menuItemId?: number; name: string; qty: number; price: number; variation?: string }[]
+}
+
+export type SyncResult = {
+  created: number
+  existing: number
+  failed: number
+  results: { orderCode: string | null; result: 'created' | 'exists' | 'failed'; error?: string; warnings?: string[] }[]
+}
+
+// POST /api/orders/sync: imports orders recorded locally while Java was down (no payment is taken).
+export function syncJavaOrders(orders: SyncOrderPayload[]): Promise<JavaResult<SyncResult>> {
+  return request<SyncResult>('/api/orders/sync', { method: 'POST', body: { orders } })
+}
+
+export type JavaAnalytics = {
+  revenueToday: number
+  revenueYesterday: number
+  ordersToday: number
+  ordersYesterday: number
+  fulfillmentMinutesToday: number
+  fulfillmentMinutesYesterday: number
+  revenueByDay: { date: string; revenue: number; orders: number }[]
+  paymentMix: { cash: number; qr: number; card: number }
+  topItems: { name: string; qty: number; revenue: number }[]
+  tables: { total: number; occupied: number }
+}
+
+// GET /api/analytics/overview (MANAGER)
+export function fetchAnalytics(days: number): Promise<JavaResult<JavaAnalytics>> {
+  return request<JavaAnalytics>(`/api/analytics/overview?days=${days}`, { method: 'GET', role: 'MANAGER' })
+}
+
+export type JavaCustomerSummary = JavaCustomer & { lastVisit: string | null }
+
+// GET /api/customers
+export function fetchCustomers(): Promise<JavaResult<JavaCustomerSummary[]>> {
+  return request<JavaCustomerSummary[]>('/api/customers', { method: 'GET' })
+}
+
+export type VoucherVerdict = { code: string; valid: boolean; discountAmount: number; description: string }
+
+// POST /api/vouchers/validate (public): previews a voucher with the Strategy checkout uses.
+export function validateVoucher(code: string, subtotal: number): Promise<JavaResult<VoucherVerdict>> {
+  return request<VoucherVerdict>('/api/vouchers/validate', { method: 'POST', body: { code, subtotal } })
+}
+
+export type StoreConfig = {
+  storeName: string
+  storeAddress: string
+  storePhone: string
+  openingTime: string
+  closingTime: string
+  maxReservationGuests: number
+  loyaltyRateVndPerPoint: number
+  pointRedeemValueVnd: number
+  vatRate: number
+  autoCancelMinutes: number
+}
+
+export type StoreConfigChange = Partial<Omit<StoreConfig, 'vatRate' | 'autoCancelMinutes'>>
+
+// GET /api/config: settings held by the SystemConfigManager Singleton.
+export function fetchConfig(): Promise<JavaResult<StoreConfig>> {
+  return request<StoreConfig>('/api/config', { method: 'GET' })
+}
+
+// PUT /api/config (ADMIN)
+export function updateConfig(change: StoreConfigChange): Promise<JavaResult<StoreConfig>> {
+  return request<StoreConfig>('/api/config', { method: 'PUT', body: change, role: 'ADMIN' })
 }

@@ -15,7 +15,7 @@ Mọi endpoint Java trả JSON UTF-8 với cùng một khung:
 { "ok": false, "error": "mô tả lỗi", "code": "MÃ_LỖI" }
 ```
 
-Ngoại lệ: một đường dẫn nằm ngoài các nhóm đã đăng ký (`/api/menu`, `/api/tables`, `/api/reservations`, `/api/checkout`, `/api/orders`, `/api/customers`, `/api/analytics`, `/api/vouchers`) sẽ nhận trang 404 mặc định của `HttpServer`, không theo khung trên.
+Ngoại lệ: một đường dẫn nằm ngoài các nhóm đã đăng ký (`/api/menu`, `/api/tables`, `/api/reservations`, `/api/checkout`, `/api/orders`, `/api/customers`, `/api/analytics`, `/api/vouchers`, `/api/config`) sẽ nhận trang 404 mặc định của `HttpServer`, không theo khung trên.
 
 ### 1.2. Mã lỗi
 
@@ -37,6 +37,7 @@ Ngoại lệ: một đường dẫn nằm ngoài các nhóm đã đăng ký (`/a
 ### 1.3. Phân quyền & CORS
 - **Vai trò** đọc từ header `X-User-Role` (`ADMIN`, `MANAGER`, `STAFF`, `CUSTOMER`). Đây chỉ là cổng phân vai cho đồ án: vai trò không được xác thực, và header `Authorization` **không** được dùng. Chi tiết tại [ARCHITECTURE §4](ARCHITECTURE.md#4-phân-quyền-rbac).
 - **Công khai:** `GET /api/menu`, `POST /api/reservations`, `POST /api/vouchers/validate`.
+- **Chỉ ADMIN:** `PUT | PATCH /api/config`.
 - **Cần MANAGER hoặc ADMIN:** `POST /api/menu`, `GET /api/analytics/overview`.
 - **Cần STAFF, MANAGER hoặc ADMIN:** mọi endpoint còn lại. `SimpleAuthFilter` từ chối theo mặc định, nên một endpoint mới không bao giờ vô tình thành công khai.
 - **CORS:** `Access-Control-Allow-Origin: *`. Cho phép các phương thức GET, POST, PUT, PATCH, DELETE và OPTIONS. Preflight `OPTIONS` trả 204, không cần header vai trò.
@@ -63,6 +64,9 @@ Ngoại lệ: một đường dẫn nằm ngoài các nhóm đã đăng ký (`/a
 | `/api/customers` | GET | STAFF+ | — | 🟢 Đã triển khai |
 | `/api/analytics/overview` | GET | MANAGER+ | — | 🟢 Đã triển khai |
 | `/api/vouchers/validate` | POST | Công khai | **Strategy** | 🟢 Đã triển khai |
+| `/api/orders/sync` | POST | STAFF+ | — | 🟢 Đã triển khai |
+| `/api/config` | GET | STAFF+ | **Singleton** | 🟢 Đã triển khai |
+| `/api/config` | PUT, PATCH | ADMIN | **Singleton** | 🟢 Đã triển khai |
 
 Vòng đời đơn hiện được kiểm bằng một bảng chuyển trạng thái trong `OrderHandler`; tách thành State Pattern vẫn là đề xuất (🔷, xem [DESIGN_PATTERNS_SPEC](DESIGN_PATTERNS_SPEC.md)).
 
@@ -221,12 +225,16 @@ Bắt buộc `name`, `category`, `sellPrice`; số tiền và số lượng khô
 ### 3.14. `GET /api/customers`
 Danh sách thành viên, chi tiêu nhiều nhất trước: `id`, `name`, `phone`, `email`, `totalOrders`, `totalSpent`, `loyaltyPoints`, `rank` (`bronze`, `silver`, `gold`, `vip`), `lastVisit`. `?phone=0901234567` trả mảng 0 hoặc 1 phần tử (POS dùng để tra cứu thành viên).
 
-### 3.15. `GET /api/analytics/overview` (MANAGER+)
-Tính trực tiếp từ DAO mỗi lần gọi. Doanh thu chỉ tính đơn đã thanh toán và chưa huỷ; "hôm nay" theo giờ `Asia/Ho_Chi_Minh`.
+### 3.15. `GET /api/analytics/overview?days=7` (MANAGER+)
+Tính trực tiếp từ DAO mỗi lần gọi. Doanh thu chỉ tính đơn đã thanh toán và chưa huỷ; "hôm nay" theo giờ `Asia/Ho_Chi_Minh`. `days` (1–90, mặc định 7) là độ dài chuỗi `revenueByDay`; `paymentMix` và `topItems` tính trong cùng khoảng đó. Sai `days` trả 400. Dashboard và trang phân tích của frontend dùng endpoint này khi Java phản hồi.
 ```json
 {
   "totalRevenue": 1250000, "paidOrders": 21, "averageOrderValue": 59523.8,
-  "revenueToday": 320000, "paidOrdersToday": 6,
+  "revenueToday": 320000, "paidOrdersToday": 6, "revenueYesterday": 410000,
+  "ordersToday": 7, "ordersYesterday": 9,
+  "fulfillmentMinutesToday": 6.5, "fulfillmentMinutesYesterday": 7.2, "days": 7,
+  "revenueByDay": [{ "date": "2026-10-17", "revenue": 320000, "orders": 6 }],
+  "paymentMix": { "cash": 540000, "qr": 410000, "card": 300000 },
   "ordersByStatus": { "pending": 2, "brewing": 1, "ready": 0, "completed": 18, "cancelled": 0 },
   "topItems": [{ "name": "Cà phê Muối Đặc Biệt", "qty": 14, "revenue": 630000 }],
   "lowStockItems": [{ "id": 7, "name": "Sữa tươi", "stockQty": 4, "unit": "lít", "lowStockThreshold": 5 }],
@@ -238,7 +246,32 @@ Tính trực tiếp từ DAO mỗi lần gọi. Doanh thu chỉ tính đơn đã
 ```json
 { "code": "welcome10", "subtotal": 100000 }
 ```
-Xem trước voucher bằng đúng Strategy mà checkout dùng (`VoucherCatalog`). Mã hợp lệ: `{ "code": "WELCOME10", "valid": true, "discountAmount": 10000, "description": "…" }`. Mã sai vẫn trả 200 với `"valid": false` và `discountAmount: 0`. Thiếu `subtotal` hoặc âm trả 400.
+Xem trước voucher bằng đúng Strategy mà checkout dùng (`VoucherCatalog`). Mã hợp lệ: `{ "code": "WELCOME10", "valid": true, "discountAmount": 10000, "description": "…" }`. Mã sai vẫn trả 200 với `"valid": false` và `discountAmount: 0`. Thiếu `subtotal` hoặc âm trả 400. Giỏ hàng Storefront (`/api/cart`, action `discount`) hỏi endpoint này để biết mã có hợp lệ không.
+
+### 3.17. `POST /api/orders/sync`
+Nhận lại các đơn frontend đã ghi khi Java mất kết nối. **Không thu tiền** (tiền đã thu lúc offline).
+```json
+{
+  "orders": [{
+    "orderCode": "AC-K2Q7F3-X9A", "customer": "Khách tại bàn", "tableId": 12, "orderType": "dine-in",
+    "paymentMethod": "cash", "paid": true, "status": "pending", "createdAt": "2026-10-17T02:00:00Z", "total": 97200,
+    "lines": [{ "menuItemId": 1, "name": "Cà phê Muối Đặc Biệt", "qty": 2, "price": 45000, "variation": null }]
+  }]
+}
+```
+- Tối đa 200 đơn mỗi lần. Mỗi đơn được xử lý riêng: `created`, `exists` (đã có mã này, không làm gì, nên gửi lại cả lô vẫn an toàn) hoặc `failed` kèm `error` (dòng sai, đơn `completed` mà chưa trả tiền…).
+- Tồn kho chỉ bị trừ sau khi đơn đã lưu, cho những dòng có `menuItemId` Java biết (được phép về 0 vì món đã bán thật; có cảnh báo). Bàn không tồn tại thì đơn được nhập không kèm bàn.
+- Đơn đã trả tiền và còn mở phát `notifyOrderPaid` (bàn → `OCCUPIED`, phiếu KDS). Sau đó đơn đi tiếp theo vòng đời ở mục 3.9.
+- Phản hồi: `{ "created": 1, "existing": 0, "failed": 0, "results": [{ "orderCode": "…", "result": "created", "warnings": [] }] }`. 503 `DATABASE_UNAVAILABLE` khi chế độ JDBC mất kết nối.
+
+### 3.18. `GET | PUT /api/config`
+Thông số trong Singleton `SystemConfigManager`. `GET` (STAFF+) trả `storeName`, `storeAddress`, `storePhone`, `openingTime`, `closingTime` (`HH:mm`), `maxReservationGuests`, `loyaltyRateVndPerPoint`, `pointRedeemValueVnd`, cùng `vatRate` và `autoCancelMinutes` chỉ để tham khảo (đơn dùng VAT cố định trong `Order`, và chưa có tác vụ tự huỷ).
+
+`PUT` hoặc `PATCH` (chỉ ADMIN) nhận bất kỳ tập con nào của 8 trường sửa được:
+```json
+{ "openingTime": "08:00", "maxReservationGuests": 6, "pointRedeemValueVnd": 1000 }
+```
+Toàn bộ thay đổi được kiểm trước khi áp dụng: giờ mở phải trước giờ đóng, số khách 1–100, 1 điểm = 1.000–1.000.000đ khi tích, 0–100.000đ khi đổi, chữ 1–120 ký tự. Một trường sai trả 400 và không trường nào bị đổi. Chuỗi kiểm định đặt bàn và việc tích/đổi điểm đọc giá trị mới ngay. Giá trị nằm trong bộ nhớ và trở về mặc định khi khởi động lại server.
 
 ---
 
@@ -252,4 +285,4 @@ Hai endpoint này dùng định dạng JSON riêng (không theo khung `{ ok, dat
 | `/api/cart` | POST | Body dạng `{ action, … }` với `action` là `add` (kèm tuỳ chọn Sữa / Độ ngọt / Đá), `quantity`, `discount` (mã `WELCOME`, `WELCOME10`, `DALATCAFE`, `COFFEE`, `DISCOUNT`; mã nào cũng giảm cố định 10%) hoặc `note` |
 | `/api/favorites` | GET, POST | Danh sách món yêu thích, lưu trong cookie `dalatcafe-favorites` |
 
-> Mã giảm giá của giỏ hàng Storefront được xử lý hoàn toàn trong Next.js, khác với quy tắc `WELCOME10` của Java ở mục 3.6 và 3.16.
+> Giỏ hàng Storefront tính giá bằng USD (dữ liệu demo kiểu Shopify), nên chỉ lấy phán quyết hợp lệ của Java (mục 3.16) rồi giảm cố định 10%. Khi Java không phản hồi, danh sách mã demo (`WELCOME`, `WELCOME10`, `DALATCAFE`, `COFFEE`, `DISCOUNT`) được dùng.

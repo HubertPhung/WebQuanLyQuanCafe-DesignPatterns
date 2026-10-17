@@ -9,8 +9,8 @@ Tài liệu gom toàn bộ thông tin kiểm thử: cách chạy, danh mục tes
 
 | Bộ kiểm thử | Lệnh | Số ca | Chạy trên CI |
 | :--- | :--- | :---: | :---: |
-| JUnit 5 Backend | `cd backend-java && mvn clean test` | 188 | ✅ Job *Backend CI* |
-| UI/UX & Admin Actions | `cd frontend-nextjs && npm test` | 27 | ✅ Job *Frontend CI* |
+| JUnit 5 Backend | `cd backend-java && mvn clean test` | 191 | ✅ Job *Backend CI* |
+| UI/UX & Admin Actions | `cd frontend-nextjs && npm test` | 29 | ✅ Job *Frontend CI* |
 | Kiểu TypeScript | `cd frontend-nextjs && npx tsc --noEmit` | — | ✅ |
 | Build production | `cd frontend-nextjs && npm run build` | — | ✅ |
 
@@ -35,11 +35,11 @@ Tài liệu gom toàn bộ thông tin kiểm thử: cách chạy, danh mục tes
 | `patterns/ObserverTest` | Sự kiện *paid* (cộng điểm, bàn → `OCCUPIED`, phiếu KDS) và *completed* (bàn → `CLEANING`, không cộng điểm lần hai), đăng ký trùng, đơn chưa trả tiền, đơn mang đi, khách/bàn không tồn tại |
 | `dao/DaoLayerTest`, `model/ModelEntitiesTest` | Tầng DAO In-Memory và các thực thể |
 | `dao/JdbcIntegrationTest` | DAO JDBC trên PostgreSQL thật: nâng cấp schema chạy lại được, khoá ngoại chặn bàn không tồn tại, cột JSONB (`items`, `variations`, `pre_orders`), seed và sequence, mã `AC-0001` / `RES-0001`, pool kết nối, checkout qua Facade |
-| `server/ServerTest` | Định tuyến REST, mã lỗi, RBAC theo `X-User-Role` (mặc định từ chối, MANAGER cho tạo món và thống kê), 503 khi mất CSDL, `transfer-pos` qua Adapter, vòng đời đơn trên KDS và đồng bộ bàn, thanh toán đơn chuyển từ đặt bàn, đổi trạng thái phiếu, tạo món và chỉnh tồn kho, đổi điểm thành viên (kể cả không giảm quá hoá đơn), thống kê, xem trước voucher |
+| `server/ServerTest` | Định tuyến REST, mã lỗi, RBAC theo `X-User-Role` (mặc định từ chối, MANAGER cho tạo món và thống kê), 503 khi mất CSDL, `transfer-pos` qua Adapter, vòng đời đơn trên KDS và đồng bộ bàn, thanh toán đơn chuyển từ đặt bàn, đổi trạng thái phiếu, tạo món và chỉnh tồn kho, đổi điểm thành viên (kể cả không giảm quá hoá đơn), thống kê (chuỗi theo ngày, cơ cấu thanh toán, `days` sai), xem trước voucher, nhập đơn offline (idempotent, không trừ kho hai lần, dòng sai chỉ làm hỏng đơn đó), cài đặt `/api/config` (chỉ ADMIN, chuỗi đặt bàn đọc giá trị mới, cập nhật sai không đổi gì) |
 
 ---
 
-## 3. Bộ test UI/UX & Admin Actions (27 ca)
+## 3. Bộ test UI/UX & Admin Actions (29 ca)
 
 Các mã dưới đây khớp chính xác với `frontend-nextjs/scripts/test-ui-ux.mjs`.
 
@@ -72,6 +72,8 @@ Các mã dưới đây khớp chính xác với `frontend-nextjs/scripts/test-ui
 | | `TC-ACT-05` | Thêm món mới vào catalog |
 | | `TC-ACT-06` | Đơn tại bàn đã thu tiền làm bàn `occupied`; hoàn tất trên KDS chuyển bàn sang `cleaning` |
 | | `TC-ACT-07` | Đơn do Java định giá (giảm hạng, đổi điểm) giữ đúng tổng tiền của Java ở kho frontend |
+| | `TC-ACT-08` | Tải lại đơn theo mã để đồng bộ offline (mã không có bị bỏ qua) |
+| | `TC-ACT-09` | Món mới trả về id để liên kết với món Java |
 
 > Bộ UI chỉ kiểm tra phản hồi HTTP và nội dung trang, cộng với các hàm của mock store. Các luồng có giao tiếp với Java được kiểm ở mục 4.
 
@@ -93,8 +95,8 @@ Các mã dưới đây khớp chính xác với `frontend-nextjs/scripts/test-ui
 
 | Hạng mục | Kết quả |
 | :--- | :--- |
-| JUnit 5 (`mvn clean test`) | **168 / 168 PASS** (bộ test lúc chạy E2E; hiện là 188, xem mục 1) |
-| UI/UX (`npm test`, Java đang chạy) | **25 / 25 PASS** (hiện là 27, xem mục 3) |
+| JUnit 5 (`mvn clean test`) | **168 / 168 PASS** (bộ test lúc chạy E2E; hiện là 191, xem mục 1) |
+| UI/UX (`npm test`, Java đang chạy) | **25 / 25 PASS** (hiện là 29, xem mục 3) |
 | TypeScript, build production | Không lỗi |
 | Cú pháp sơ đồ Mermaid (`mermaid.parse`, Mermaid 11) | Tất cả sơ đồ trong `docs/` hợp lệ |
 | API proxy `lib/api-client.ts` với Java thật (menu, checkout, bàn, đặt bàn, backend tắt, `JAVA_BACKEND_URL=off`) | **9 / 9 PASS** |
@@ -163,8 +165,12 @@ Báo cáo E2E ở mục 4 ghi lại một lần chạy trước khi bổ sung c�
 - Đổi trạng thái phiếu đặt bàn được lưu qua `PATCH /api/reservations/{code}/status`.
 - Trạng thái bàn thống nhất: thanh toán xong bàn là `occupied`; KDS báo hoàn tất thì bàn chuyển `cleaning`, ở cả Java lẫn frontend.
 - Chế độ JDBC lưu đủ `items`, `variations`, `pre_orders`, có khoá ngoại và tự khởi tạo schema.
+- Id món được liên kết qua `admin_menu_links` thay cho ghép tên mỗi lần; đơn ghi lúc Java tắt được xếp hàng và gửi lại qua `POST /api/orders/sync`.
+- Dashboard, trang phân tích và khách hàng đọc từ Java; trang cài đặt sửa được Singleton `SystemConfigManager`.
 
 Còn lại:
-1. **Hai kho menu đánh số độc lập.** Món được ghép theo tên; món chỉ có ở frontend, hoặc biến thể có phụ thu, sẽ được lưu cục bộ. Đơn như vậy không đổi điểm được (POS báo lỗi thay vì thu đủ tiền).
-2. **Mất kết nối Java:** đơn, trạng thái KDS và thanh toán được ghi cục bộ như trước; khi Java trở lại, các đơn đó không tự đồng bộ ngược sang Java.
-3. **Khoá ngoại `NOT VALID`** không kiểm dữ liệu ghi trước khi nâng cấp, xem [DATABASE.md §4](DATABASE.md#4-giới-hạn-đã-biết).
+1. **Món chỉ có ở frontend** hoặc biến thể có phụ thu vẫn được lưu cục bộ trước rồi mới đồng bộ (không qua Facade), nên không đổi điểm được (POS báo lỗi thay vì thu đủ tiền). Lần ghép đầu tiên của một món vẫn dựa vào tên.
+2. **Đồng bộ offline chỉ đẩy đơn mới.** Trạng thái KDS hay thanh toán đổi lúc Java tắt trên một đơn Java đã có sẽ không được gửi lại; đơn mới tạo lúc offline thì mang theo trạng thái mới nhất khi đồng bộ.
+3. **Cài đặt trong `SystemConfigManager` không được lưu bền**: khởi động lại Java là về mặc định.
+4. **Luồng đồng bộ phía frontend** (`pushQueuedOrders`) chưa có test tự động đầu-cuối; phần Java của nó có test trong `ServerTest`.
+5. **Khoá ngoại `NOT VALID`** không kiểm dữ liệu ghi trước khi nâng cấp, xem [DATABASE.md §4](DATABASE.md#4-giới-hạn-đã-biết).

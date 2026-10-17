@@ -7,12 +7,14 @@ import com.dalatcafe.model.MenuItem;
 import com.dalatcafe.model.Order;
 import com.dalatcafe.model.OrderItem;
 import com.dalatcafe.model.OrderStatus;
+import com.dalatcafe.model.PaymentMethod;
 import com.dalatcafe.model.PaymentStatus;
 import com.dalatcafe.model.Table;
 import com.dalatcafe.model.TableStatus;
 import com.sun.net.httpserver.HttpExchange;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -25,13 +27,16 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * GET /api/analytics/overview (MANAGER+): revenue, order counts by status, best sellers,
- * low-stock items and floor occupancy, computed from the DAOs on each call.
+ * GET /api/analytics/overview?days=7 (MANAGER+): revenue (total, today, yesterday and per day),
+ * payment mix, order counts by status, best sellers, fulfillment time, low-stock items and
+ * floor occupancy, computed from the DAOs on each call.
  * Revenue counts paid orders only; refunded or cancelled orders are excluded.
  */
 public class AnalyticsHandler extends ApiHandler {
     static final ZoneId STORE_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final int TOP_ITEMS = 5;
+    static final int DEFAULT_DAYS = 7;
+    static final int MAX_DAYS = 90;
 
     private final IOrderDao orderDao;
     private final IMenuDao menuDao;
@@ -52,12 +57,42 @@ public class AnalyticsHandler extends ApiHandler {
         if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
             throw methodNotAllowed(exchange);
         }
-        sendOk(exchange, 200, overview(Instant.now()), null);
+        sendOk(exchange, 200, overview(Instant.now(), days(queryParam(exchange, "days"))), null);
     }
 
-    Map<String, Object> overview(Instant now) {
+    private static int days(String raw) {
+        if (raw == null) {
+            return DEFAULT_DAYS;
+        }
+        try {
+            int days = Integer.parseInt(raw);
+            if (days >= 1 && days <= MAX_DAYS) {
+                return days;
+            }
+        } catch (NumberFormatException ignored) {
+            // Falls through to the error below.
+        }
+        throw ApiException.badRequest("days must be a whole number between 1 and " + MAX_DAYS);
+    }
+
+    Map<String, Object> overview(Instant now, int days) {
         LocalDate today = now.atZone(STORE_ZONE).toLocalDate();
+        LocalDate yesterday = today.minusDays(1);
+        LocalDate firstDay = today.minusDays(days - 1L);
         List<Order> orders = orderDao.findAll();
+        Map<LocalDate, double[]> perDay = new LinkedHashMap<>();
+        for (LocalDate day = firstDay; !day.isAfter(today); day = day.plusDays(1)) {
+            perDay.put(day, new double[2]);
+        }
+        Map<PaymentMethod, Double> paymentMix = new EnumMap<>(PaymentMethod.class);
+        for (PaymentMethod method : PaymentMethod.values()) {
+            paymentMix.put(method, 0.0);
+        }
+        double revenueYesterday = 0;
+        int ordersToday = 0;
+        int ordersYesterday = 0;
+        List<Order> completedToday = new ArrayList<>();
+        List<Order> completedYesterday = new ArrayList<>();
 
         double revenue = 0;
         double revenueToday = 0;
@@ -72,19 +107,42 @@ public class AnalyticsHandler extends ApiHandler {
             if (order.getStatus() != null) {
                 byStatus.merge(order.getStatus(), 1, Integer::sum);
             }
+            LocalDate created = order.getCreatedAt() == null ? null : order.getCreatedAt().atZone(STORE_ZONE).toLocalDate();
+            if (today.equals(created)) {
+                ordersToday++;
+                if (order.getCompletedAt() != null) {
+                    completedToday.add(order);
+                }
+            } else if (yesterday.equals(created)) {
+                ordersYesterday++;
+                if (order.getCompletedAt() != null) {
+                    completedYesterday.add(order);
+                }
+            }
             if (order.getPaymentStatus() != PaymentStatus.PAID || order.getStatus() == OrderStatus.CANCELLED) {
                 continue;
             }
             paidOrders++;
             revenue += order.getTotal();
-            if (order.getCreatedAt() != null && order.getCreatedAt().atZone(STORE_ZONE).toLocalDate().equals(today)) {
+            if (today.equals(created)) {
                 paidToday++;
                 revenueToday += order.getTotal();
+            } else if (yesterday.equals(created)) {
+                revenueYesterday += order.getTotal();
             }
-            for (OrderItem item : order.getItems()) {
-                double[] totals = items.computeIfAbsent(item.getName(), name -> new double[2]);
-                totals[0] += item.getQty();
-                totals[1] += item.getLineTotal();
+            double[] day = created == null ? null : perDay.get(created);
+            if (day != null) {
+                day[0] += order.getTotal();
+                day[1]++;
+                if (order.getPaymentMethod() != null) {
+                    paymentMix.merge(order.getPaymentMethod(), order.getTotal(), Double::sum);
+                }
+                // Best sellers cover the same window as the chart.
+                for (OrderItem item : order.getItems()) {
+                    double[] totals = items.computeIfAbsent(item.getName(), name -> new double[2]);
+                    totals[0] += item.getQty();
+                    totals[1] += item.getLineTotal();
+                }
             }
         }
 
@@ -94,6 +152,24 @@ public class AnalyticsHandler extends ApiHandler {
         data.put("averageOrderValue", paidOrders == 0 ? 0 : revenue / paidOrders);
         data.put("revenueToday", revenueToday);
         data.put("paidOrdersToday", paidToday);
+        data.put("revenueYesterday", revenueYesterday);
+        data.put("ordersToday", ordersToday);
+        data.put("ordersYesterday", ordersYesterday);
+        data.put("fulfillmentMinutesToday", fulfillmentMinutes(completedToday));
+        data.put("fulfillmentMinutesYesterday", fulfillmentMinutes(completedYesterday));
+        data.put("days", days);
+        List<Object> series = new ArrayList<>();
+        perDay.forEach((day, totals) -> {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("date", day.toString());
+            row.put("revenue", totals[0]);
+            row.put("orders", (int) totals[1]);
+            series.add(row);
+        });
+        data.put("revenueByDay", series);
+        Map<String, Object> mix = new LinkedHashMap<>();
+        paymentMix.forEach((method, total) -> mix.put(method.name().toLowerCase(Locale.ROOT), total));
+        data.put("paymentMix", mix);
         Map<String, Object> statusCounts = new LinkedHashMap<>();
         byStatus.forEach((status, count) -> statusCounts.put(status.name().toLowerCase(Locale.ROOT), count));
         data.put("ordersByStatus", statusCounts);
@@ -101,6 +177,18 @@ public class AnalyticsHandler extends ApiHandler {
         data.put("lowStockItems", lowStock());
         data.put("tables", tables());
         return data;
+    }
+
+    /** Average minutes from creation to completion, one decimal; 0 when nothing finished. */
+    private static double fulfillmentMinutes(List<Order> completed) {
+        if (completed.isEmpty()) {
+            return 0;
+        }
+        double minutes = completed.stream()
+                .mapToDouble(order -> Duration.between(order.getCreatedAt(), order.getCompletedAt()).toSeconds() / 60.0)
+                .average()
+                .orElse(0);
+        return Math.round(minutes * 10) / 10.0;
     }
 
     private static List<Object> topItems(Map<String, double[]> items) {

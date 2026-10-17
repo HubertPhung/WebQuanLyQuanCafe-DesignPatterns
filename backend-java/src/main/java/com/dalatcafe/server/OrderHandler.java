@@ -1,11 +1,15 @@
 package com.dalatcafe.server;
 
 import com.dalatcafe.dao.ICustomerDao;
+import com.dalatcafe.dao.IMenuDao;
 import com.dalatcafe.dao.IOrderDao;
+import com.dalatcafe.dao.ITableDao;
 import com.dalatcafe.model.Customer;
+import com.dalatcafe.model.MenuItem;
 import com.dalatcafe.model.Order;
 import com.dalatcafe.model.OrderItem;
 import com.dalatcafe.model.OrderStatus;
+import com.dalatcafe.model.OrderType;
 import com.dalatcafe.model.PaymentMethod;
 import com.dalatcafe.model.PaymentStatus;
 import com.dalatcafe.patterns.factory.PaymentProcessorFactory;
@@ -15,6 +19,8 @@ import com.dalatcafe.patterns.observer.OrderEventSubject;
 import com.sun.net.httpserver.HttpExchange;
 
 import java.io.IOException;
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -31,20 +37,26 @@ import java.util.logging.Logger;
  * POST /api/orders/{code}/pay (settles an unpaid order, e.g. one transferred from a reservation).
  * Paying fires {@code onOrderPaid}; reaching COMPLETED fires {@code onOrderCompleted}, so the
  * Observer pattern keeps the floor plan and the KDS in step with the kitchen.
+ * POST /api/orders/sync imports orders the frontend recorded while this backend was offline.
  */
 public class OrderHandler extends ApiHandler {
     private static final Logger LOGGER = Logger.getLogger(OrderHandler.class.getName());
+    static final int MAX_SYNC_BATCH = 200;
     private static final List<OrderStatus> FLOW =
             List.of(OrderStatus.PENDING, OrderStatus.BREWING, OrderStatus.READY, OrderStatus.COMPLETED);
 
     private final IOrderDao orderDao;
+    private final IMenuDao menuDao;
+    private final ITableDao tableDao;
     private final ICustomerDao customerDao;
     private final OrderEventSubject eventSubject;
     private final BooleanSupplier databaseHealthy;
 
-    public OrderHandler(IOrderDao orderDao, ICustomerDao customerDao, OrderEventSubject eventSubject,
-                        BooleanSupplier databaseHealthy) {
+    public OrderHandler(IOrderDao orderDao, IMenuDao menuDao, ITableDao tableDao, ICustomerDao customerDao,
+                        OrderEventSubject eventSubject, BooleanSupplier databaseHealthy) {
         this.orderDao = Objects.requireNonNull(orderDao, "Order DAO must not be null");
+        this.menuDao = Objects.requireNonNull(menuDao, "Menu DAO must not be null");
+        this.tableDao = Objects.requireNonNull(tableDao, "Table DAO must not be null");
         this.customerDao = Objects.requireNonNull(customerDao, "Customer DAO must not be null");
         this.eventSubject = Objects.requireNonNull(eventSubject, "Event subject must not be null");
         this.databaseHealthy = Objects.requireNonNull(databaseHealthy, "Health check must not be null");
@@ -59,6 +71,13 @@ public class OrderHandler extends ApiHandler {
                 throw methodNotAllowed(exchange);
             }
             list(exchange);
+            return;
+        }
+        if (parts.size() == 3 && parts.get(2).equals("sync")) {
+            if (!method.equals("POST")) {
+                throw methodNotAllowed(exchange);
+            }
+            sync(exchange);
             return;
         }
         if (parts.size() == 4 && parts.get(3).equals("status")) {
@@ -178,6 +197,162 @@ public class OrderHandler extends ApiHandler {
         data.put("transactionId", payment.getTransactionId());
         data.put("warnings", warnings);
         sendOk(exchange, 200, data, "Order " + code + " paid");
+    }
+
+    /**
+     * Imports a batch of orders recorded elsewhere (the frontend while this backend was down).
+     * No payment is taken: the money already changed hands. Idempotent by order code, so a
+     * retried batch never duplicates an order. Stock is deducted for lines with a known menu id.
+     */
+    private void sync(HttpExchange exchange) throws IOException {
+        Map<String, Object> body = readJsonBody(exchange);
+        if (!databaseHealthy.getAsBoolean()) {
+            throw new ApiException(503, "DATABASE_UNAVAILABLE", "The primary database is unavailable; nothing was imported.");
+        }
+        List<Object> batch = list(body, "orders");
+        if (batch.isEmpty() || batch.size() > MAX_SYNC_BATCH) {
+            throw ApiException.badRequest("Field 'orders' must hold 1 to " + MAX_SYNC_BATCH + " orders");
+        }
+        List<Object> results = new ArrayList<>();
+        int created = 0;
+        int existing = 0;
+        int failed = 0;
+        for (Object raw : batch) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            String code = null;
+            try {
+                Map<String, Object> input = asObject(raw, "orders entry");
+                code = requireStr(input, "orderCode");
+                row.put("orderCode", code);
+                List<String> warnings = new ArrayList<>();
+                // Synchronized with pay(): an import and a payment of the same code cannot interleave.
+                synchronized (this) {
+                    if (orderDao.findByOrderCode(code).isPresent()) {
+                        row.put("result", "exists");
+                        existing++;
+                        results.add(row);
+                        continue;
+                    }
+                    Order order = importedOrder(input, code, warnings);
+                    save(order);
+                    deductStock(order, warnings);
+                    notifyImported(order, warnings);
+                }
+                row.put("result", "created");
+                row.put("warnings", warnings);
+                created++;
+            } catch (ApiException e) {
+                row.put("orderCode", code);
+                row.put("result", "failed");
+                row.put("error", e.getMessage());
+                failed++;
+            }
+            results.add(row);
+        }
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("created", created);
+        data.put("existing", existing);
+        data.put("failed", failed);
+        data.put("results", results);
+        sendOk(exchange, 200, data, created + " order(s) imported");
+    }
+
+    private Order importedOrder(Map<String, Object> input, String code, List<String> warnings) {
+        Integer tableId = input.get("tableId") == null ? null : requireInt(input, "tableId");
+        if (tableId != null && tableDao.findById(tableId).isEmpty()) {
+            warnings.add("Unknown table " + tableId + "; imported without a table");
+            tableId = null;
+        }
+        Order order = new Order(null, code, Objects.requireNonNullElse(str(input, "customer"), "Walk-in"), tableId,
+                orderType(str(input, "orderType")));
+        order.setPaymentMethod(paymentMethod(Objects.requireNonNullElse(str(input, "paymentMethod"), "cash")));
+        order.setNote(str(input, "note"));
+        String createdAt = str(input, "createdAt");
+        if (createdAt != null) {
+            try {
+                order.setCreatedAt(Instant.parse(createdAt));
+            } catch (DateTimeParseException e) {
+                throw ApiException.badRequest("createdAt must be an ISO-8601 instant");
+            }
+        }
+
+        List<Object> lines = list(input, "lines");
+        if (lines.isEmpty()) {
+            throw ApiException.badRequest("Order " + code + " has no lines");
+        }
+        for (Object rawLine : lines) {
+            Map<String, Object> line = asObject(rawLine, "lines entry");
+            int qty = requireInt(line, "qty");
+            Double price = num(line, "price");
+            if (qty <= 0 || price == null || price < 0) {
+                throw ApiException.badRequest("Order " + code + " has a line with an invalid qty or price");
+            }
+            Integer menuItemId = line.get("menuItemId") == null ? null : requireInt(line, "menuItemId");
+            if (menuItemId != null) {
+                MenuItem item = menuDao.findById(menuItemId).orElse(null);
+                if (item == null) {
+                    warnings.add("Unknown menu item " + menuItemId + "; stock not deducted");
+                    menuItemId = null;
+                }
+            }
+            order.addItem(new OrderItem(menuItemId, requireStr(line, "name"), qty, price, str(line, "variation"), null));
+        }
+        order.recalculateTotals();
+        Double total = num(input, "total");
+        if (total != null && Math.abs(total - order.getTotal()) > 1) {
+            warnings.add("Recorded total " + total + " differs from the recomputed " + order.getTotal());
+        }
+
+        order.setPaymentStatus(bool(input, "paid", false) ? PaymentStatus.PAID : PaymentStatus.UNPAID);
+        String status = str(input, "status");
+        order.setStatus(status == null ? OrderStatus.PENDING : parseStatus(status));
+        if (order.getStatus() == OrderStatus.COMPLETED && order.getPaymentStatus() != PaymentStatus.PAID) {
+            throw ApiException.badRequest("Order " + code + " is completed but not paid");
+        }
+        return order;
+    }
+
+    /** The sale already happened offline, so stock is taken even when it goes below what is left. */
+    private void deductStock(Order order, List<String> warnings) {
+        if (order.getStatus() == OrderStatus.CANCELLED) {
+            return;
+        }
+        for (OrderItem item : order.getItems()) {
+            if (item.getMenuItemId() == null) {
+                continue;
+            }
+            menuDao.findById(item.getMenuItemId()).ifPresent(menuItem -> {
+                if (menuItem.getStockQty() < item.getQty()) {
+                    warnings.add("Stock of " + menuItem.getName() + " ran out offline; set to 0");
+                }
+                menuDao.updateStock(menuItem.getId(), -item.getQty());
+            });
+        }
+    }
+
+    /** An imported order that is paid and still open seats its table and reaches the KDS. */
+    private void notifyImported(Order order, List<String> warnings) {
+        boolean open = order.getStatus() != OrderStatus.COMPLETED && order.getStatus() != OrderStatus.CANCELLED;
+        if (order.getPaymentStatus() != PaymentStatus.PAID || !open) {
+            return;
+        }
+        try {
+            eventSubject.notifyOrderPaid(order);
+        } catch (RuntimeException e) {
+            LOGGER.log(Level.WARNING, "Imported order observer failed: " + e.getMessage(), e);
+            warnings.add("Order event observer failed: " + e.getMessage());
+        }
+    }
+
+    private static OrderType orderType(String raw) {
+        if (raw == null) {
+            return OrderType.DINE_IN;
+        }
+        try {
+            return OrderType.valueOf(raw.trim().toUpperCase(Locale.ROOT).replace('-', '_'));
+        } catch (IllegalArgumentException e) {
+            throw ApiException.badRequest("orderType must be one of: dine-in, pickup, delivery");
+        }
     }
 
     private Customer phone(Map<String, Object> body) {
