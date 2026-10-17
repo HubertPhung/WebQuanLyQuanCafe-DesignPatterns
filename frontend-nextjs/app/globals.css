@@ -18,3 +18,22 @@
 /* Display serif for storefront and sign-in headings (Playfair Display, Vietnamese subset).
    Line height stays >= 1.2 so stacked Vietnamese diacritics never touch the line above. */
 .font-display,.hero h1,.section-heading h2,.story-copy h2,.journal>h2,.journal-grid h3,.footer-top h3,.empty-menu h3{font-family:var(--font-display),'Playfair Display',Georgia,serif;font-weight:600;letter-spacing:-0.005em;line-height:1.25}
+
+/* Storefront type scale, one step per role. The legacy rules above (unlayered, so they beat
+   Tailwind utilities) shrank text to 8-12px and made sizes drift between sections; these
+   restore one scale: display headings (Playfair) > 16-17px lead > 15px body > 14px secondary
+   > 11-12px labels. Nothing readable is smaller than 11px. */
+.eyebrow{font-size:11px;letter-spacing:.18em}
+.hero-description{font-size:17px;line-height:1.7;max-width:34rem}
+.hero-foot p{font-size:14px}.hero-foot small{font-size:12px}
+.photo-caption{font-size:11px}
+.values-strip>span{font-size:13px;color:#6b5a49}
+.section-heading>p{font-size:14px;line-height:1.6}
+.story-copy>p:not(.eyebrow){font-size:15px;line-height:1.75;max-width:30rem}
+.story-image>span{font-size:12px}
+.text-link{font-size:14px;font-weight:600}
+.journal>h2{font-size:clamp(28px,3vw,36px)}
+.journal-grid h3{font-size:20px}
+.journal-grid article>span{font-size:11px;letter-spacing:.12em}
+.journal-grid p{font-size:14px;line-height:1.75;color:#6f6255}
+@media(max-width:760px){.hero-description{font-size:16px}.values-strip>span{font-size:12px}}
