@@ -38,9 +38,9 @@ Hệ thống kết hợp giữa:
 | MSSV | Họ và tên | GitHub | Phân công nhiệm vụ & Design Patterns phụ trách |
 | :---: | :--- | :--- | :--- |
 | `2312585` | **Phùng Nguyễn Hoài Bo** | [@HubertPhung](https://github.com/HubertPhung) | • **Kiến trúc hệ thống & Điều phối tổng thể**<br>• **Facade Pattern** (`PosCheckoutFacade`: điều phối quy trình chốt đơn POS đa kênh)<br>• **Singleton Pattern** (`SystemConfigManager`: quản lý tham số & cấu hình toàn cục quán) |
-| `2312590` | **Nguyễn Ngọc Trường Dân** | [@0Yaam](https://github.com/0Yaam) | • **Tùy biến món & Xử lý thanh toán đa kênh**<br>• **Decorator Pattern** (`ToppingDecorator`: tính giá topping, kem cheese, nâng size L)<br>• **Factory Method Pattern** (`PaymentProcessorFactory`: bộ xử lý Tiền mặt, QR MoMo, Thẻ) |
+| `2312590` | **Nguyễn Ngọc Trường Dân** | [@0Yaam](https://github.com/0Yaam) | • **Tùy biến món & Xử lý thanh toán đa kênh**<br>• **Decorator Pattern** (`BeverageDecorator`: tính giá topping, kem cheese, nâng size L)<br>• **Factory Method Pattern** (`PaymentProcessorFactory`: bộ xử lý Tiền mặt, QR MoMo, Thẻ) |
 | `2312756` | **Nguyễn Hưng Thịnh** | [@elgthinhnguyen](https://github.com/elgthinhnguyen) | • **Đóng gói đơn hàng & Cơ chế lắng nghe sự kiện**<br>• **Builder Pattern** (`OrderBuilder`: khởi tạo thực thể đơn hàng phức tạp với nhiều tùy chọn)<br>• **Observer Pattern** (`OrderEventSubject`: tự động tích điểm loyalty CRM và giải phóng bàn) |
-| `2312639` | **Vũ Thế Huỳnh** | [@1convitt](https://github.com/1convitt) | • **Chuỗi kiểm định nghiệp vụ & Chiến lược khuyến mãi**<br>• **Chain of Responsibility** (`ReservationValidator`: chuỗi kiểm định thông tin đặt bàn 3 bước)<br>• **Strategy Pattern** (`DiscountStrategy`: thuật toán tính chiết khấu %, cố định, bậc thang) |
+| `2312639` | **Vũ Thế Huỳnh** | [@1convitt](https://github.com/1convitt) | • **Chuỗi kiểm định nghiệp vụ & Chiến lược khuyến mãi**<br>• **Chain of Responsibility** (`ReservationValidatorHandler`: chuỗi kiểm định đặt bàn 3 bước giờ mở cửa → sức chứa → lịch bàn)<br>• **Strategy Pattern** (`DiscountContext`: giảm theo %, số tiền cố định, hạng thành viên) |
 | `2312802` | **Phan Khánh Vương** | [@vuong123s](https://github.com/vuong123s) | • **Chuyển đổi dữ liệu & Bộ kiểm thử đơn vị**<br>• **Adapter Pattern** (`ReservationToOrderAdapter`: ánh xạ cấu trúc phiếu đặt bàn sang đơn POS)<br>• **State / DAO Pattern** & Viết bộ kiểm thử đơn vị **JUnit 5** toàn diện cho 9 Design Patterns |
 
 ---
@@ -61,8 +61,8 @@ Hệ thống kết hợp giữa:
 - **Kiến trúc:** Phân tầng thuần OOP (Server Handler, Model POJO, DAO Layer, Patterns Package).
 - **Mẫu thiết kế áp dụng:** Đầy đủ 9 mẫu thiết kế GoF:
   - *Creational:* Singleton (`SystemConfigManager`), Factory Method (`PaymentProcessorFactory`), Builder (`OrderBuilder`).
-  - *Structural:* Decorator (`ToppingDecorator`), Adapter (`ReservationToOrderAdapter`), Facade (`PosCheckoutFacade`).
-  - *Behavioral:* Strategy (`DiscountStrategy`), Chain of Responsibility (`ReservationValidator`), Observer (`OrderEventSubject`).
+  - *Structural:* Decorator (`BeverageDecorator`), Adapter (`ReservationToOrderAdapter`), Facade (`PosCheckoutFacade`).
+  - *Behavioral:* Strategy (`DiscountContext`), Chain of Responsibility (`ReservationValidatorHandler`), Observer (`OrderEventSubject`).
 - **Giao thức:** Java SE `HttpServer` (`com.sun.net.httpserver.HttpServer`) REST JSON trên cổng `8080`.
 - **Ràng buộc quan trọng:** Tuyệt đối không dùng Spring Boot, không Spring Security, không Spring Data JPA.
 
@@ -162,21 +162,28 @@ Kết quả kiểm thử mong đợi: **25 / 25 Test Cases Passed (100% Đạt)*
 
 ### 6.3. Khởi động Backend Java thuần OOP
 
-Khi triển khai mã nguồn Backend Java trong thư mục `backend-java/`:
+Yêu cầu JDK 17+ và Maven 3.9+.
 
 1. Điều hướng vào thư mục:
    ```bash
    cd backend-java
    ```
 
-2. Biên dịch toàn bộ mã nguồn Java:
+2. Biên dịch và chạy bộ kiểm thử JUnit 5:
    ```bash
-   javac -d bin -sourcepath src src/com/coffeeshop/Main.java
+   mvn clean test
    ```
 
-3. Khởi chạy ứng dụng Java SE:
+3. Khởi chạy máy chủ HTTP (chế độ In-Memory, không cần database):
    ```bash
-   java -cp bin com.coffeeshop.Main
+   mvn -q compile
+   java -cp target/classes com.dalatcafe.server.MainServer        # cổng mặc định 8080
+   java -cp target/classes com.dalatcafe.server.MainServer 9090   # hoặc chỉ định cổng khác
+   ```
+   Khi đặt biến môi trường `DATABASE_URL` (PostgreSQL/Supabase) và kết nối thành công, `DaoFactory` chuyển sang chế độ JDBC; nếu không kết nối được, máy chủ tự quay về In-Memory. Chế độ JDBC cần thêm driver PostgreSQL vào classpath:
+   ```bash
+   mvn -q dependency:build-classpath -Dmdep.outputFile=cp.txt
+   java -cp "target/classes;$(cat cp.txt)" com.dalatcafe.server.MainServer   # Windows (Git Bash); macOS/Linux dùng dấu ':'
    ```
    Máy chủ Java sẽ lắng nghe các request RESTful JSON tại `http://localhost:8080`.
 
