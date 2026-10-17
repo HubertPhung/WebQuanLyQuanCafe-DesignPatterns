@@ -19,11 +19,13 @@ public class InMemoryDatabase {
     private final Map<Integer, Order> orders = new ConcurrentHashMap<>();
     private final Map<Integer, Reservation> reservations = new ConcurrentHashMap<>();
     private final Map<Integer, Customer> customers = new ConcurrentHashMap<>();
+    private final Map<Integer, UserAccount> users = new ConcurrentHashMap<>();
 
     private final AtomicInteger nextOrderId = new AtomicInteger(100);
     private final AtomicInteger nextReservationId = new AtomicInteger(10);
     private final AtomicInteger nextCustomerId = new AtomicInteger(10);
     private final AtomicInteger nextMenuItemId = new AtomicInteger(50);
+    private final AtomicInteger nextUserId = new AtomicInteger(1);
 
     private InMemoryDatabase() {
         seedInitialData();
@@ -49,10 +51,12 @@ public class InMemoryDatabase {
         orders.clear();
         reservations.clear();
         customers.clear();
+        users.clear();
         nextOrderId.set(100);
         nextReservationId.set(10);
         nextCustomerId.set(10);
         nextMenuItemId.set(50);
+        nextUserId.set(1);
         seedInitialData();
     }
 
@@ -208,6 +212,15 @@ public class InMemoryDatabase {
 
     public int generateMenuItemId() {
         return nextMenuItemId.getAndIncrement();
+    }
+
+    /** Accounts are never seeded: the server creates the first admin at start-up (AdminBootstrap). */
+    public Map<Integer, UserAccount> getUsers() {
+        return users;
+    }
+
+    public int generateUserId() {
+        return nextUserId.getAndIncrement();
     }
 }
 

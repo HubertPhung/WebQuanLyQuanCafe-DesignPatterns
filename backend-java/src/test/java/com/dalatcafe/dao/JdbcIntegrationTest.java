@@ -10,6 +10,8 @@ import com.dalatcafe.model.PaymentStatus;
 import com.dalatcafe.model.Reservation;
 import com.dalatcafe.model.ReservationStatus;
 import com.dalatcafe.model.TableStatus;
+import com.dalatcafe.model.UserAccount;
+import com.dalatcafe.model.UserRole;
 import com.dalatcafe.model.Variation;
 import com.dalatcafe.patterns.facade.CheckoutLine;
 import com.dalatcafe.patterns.facade.CheckoutRequest;
@@ -176,6 +178,33 @@ class JdbcIntegrationTest {
         assertEquals(PaymentStatus.PAID, saved.getPaymentStatus());
         assertEquals(8.0, menu.findById(drink.getId()).orElseThrow().getStockQty());
         assertEquals(TableStatus.OCCUPIED, tables.findById(6).orElseThrow().getStatus());
+    }
+
+    @Test
+    void userAccountsRoundTripAndStayUnique() {
+        JdbcUserDao users = new JdbcUserDao();
+        UserAccount staff = new UserAccount(null, "Barista@DalatCafe.vn", "Barista", UserRole.STAFF);
+        staff.setPasswordHash("pbkdf2_sha256$10000$c2FsdA==$aGFzaA==");
+        assertTrue(users.save(staff));
+        assertNotNull(staff.getId());
+
+        UserAccount loaded = users.findByEmail("barista@dalatcafe.vn").orElseThrow();
+        assertEquals(UserRole.STAFF, loaded.getRole());
+        assertEquals(staff.getPasswordHash(), loaded.getPasswordHash());
+        assertTrue(loaded.isActive());
+
+        assertFalse(users.save(new UserAccount(null, "BARISTA@dalatcafe.vn", "Copy", UserRole.CUSTOMER)), "emails are unique");
+        loaded.setGoogleSubject("google-42");
+        loaded.setRole(UserRole.MANAGER);
+        loaded.setActive(false);
+        assertTrue(users.save(loaded));
+        UserAccount updated = users.findByGoogleSubject("google-42").orElseThrow();
+        assertEquals(UserRole.MANAGER, updated.getRole());
+        assertFalse(updated.isActive());
+        UserAccount sameGoogle = new UserAccount(null, "other@dalatcafe.vn", "Other", UserRole.CUSTOMER);
+        sameGoogle.setGoogleSubject("google-42");
+        assertFalse(users.save(sameGoogle), "Google ids are unique");
+        assertTrue(users.findAll().size() >= 1);
     }
 
     @Test

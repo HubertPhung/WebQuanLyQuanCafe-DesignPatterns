@@ -2,16 +2,23 @@ package com.dalatcafe.server;
 
 import com.dalatcafe.dao.DaoFactory;
 import com.dalatcafe.dao.DaoMode;
+import com.dalatcafe.dao.IUserDao;
 import com.dalatcafe.dao.JdbcDatabase;
 import com.dalatcafe.patterns.facade.PosCheckoutFacade;
 import com.dalatcafe.patterns.observer.KitchenNotificationObserver;
 import com.dalatcafe.patterns.observer.OrderEventSubject;
 import com.dalatcafe.patterns.observer.TableStatusSyncObserver;
+import com.dalatcafe.security.AdminBootstrap;
+import com.dalatcafe.security.AuthSettings;
+import com.dalatcafe.security.LoginThrottle;
+import com.dalatcafe.security.PasswordHasher;
+import com.dalatcafe.security.TokenService;
 import com.sun.net.httpserver.HttpContext;
 import com.sun.net.httpserver.HttpServer;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.time.Clock;
 import java.util.concurrent.Executors;
 import java.util.function.BooleanSupplier;
 import java.util.logging.Logger;
@@ -24,14 +31,33 @@ public class MainServer {
     public static final int DEFAULT_PORT = 8080;
 
     private final HttpServer server;
+    private final TokenService tokens;
+    private final IUserDao users;
+    private final boolean allowRoleHeader;
 
+    /**
+     * Development and test server: random token keys, the X-User-Role header accepted, and a
+     * cheap password hash so tests stay fast. {@link #main} uses the full constructor.
+     */
     public MainServer(int port, DaoFactory daos, BooleanSupplier databaseHealthy) throws IOException {
+        this(port, daos, databaseHealthy, AuthSettings.withRoleHeader(), new PasswordHasher(10_000));
+    }
+
+    public MainServer(int port, DaoFactory daos, BooleanSupplier databaseHealthy, AuthSettings auth,
+                      PasswordHasher hasher) throws IOException {
+        this.users = daos.getUserDao();
+        this.tokens = new TokenService(auth.jwtSecret(), auth.tokenTtl(), Clock.systemUTC());
+        this.allowRoleHeader = auth.allowRoleHeader();
         OrderEventSubject subject = new OrderEventSubject();
         subject.attach(new TableStatusSyncObserver(daos.getTableDao()));
         subject.attach(new KitchenNotificationObserver());
         PosCheckoutFacade facade = new PosCheckoutFacade(daos.getOrderDao(), daos.getMenuDao(), subject);
 
         server = HttpServer.create(new InetSocketAddress(port), 0);
+        register("/api/auth", new AuthHandler(users, hasher, tokens,
+                new LoginThrottle(LoginThrottle.DEFAULT_MAX_FAILURES, LoginThrottle.DEFAULT_WINDOW, Clock.systemUTC()),
+                auth.serviceKey()));
+        register("/api/users", new UserHandler(users, hasher));
         register("/api/menu", new MenuHandler(daos.getMenuDao()));
         register("/api/orders", new OrderHandler(daos.getOrderDao(), daos.getMenuDao(),
                 daos.getTableDao(), daos.getCustomerDao(), subject, databaseHealthy));
@@ -48,7 +74,7 @@ public class MainServer {
     private void register(String path, ApiHandler handler) {
         HttpContext context = server.createContext(path, handler);
         context.getFilters().add(new CorsHandler());
-        context.getFilters().add(new SimpleAuthFilter());
+        context.getFilters().add(new SimpleAuthFilter(tokens, users, allowRoleHeader));
     }
 
     public void start() {
@@ -73,7 +99,10 @@ public class MainServer {
         DaoFactory daos = DaoFactory.getInstance();
         // Fail closed: with a configured JDBC store, a lost connection must not fall back to memory.
         BooleanSupplier healthy = () -> daos.getMode() != DaoMode.JDBC || JdbcDatabase.isAvailable();
-        MainServer server = new MainServer(port, daos, healthy);
+        AuthSettings auth = AuthSettings.fromEnvironment(System.getenv());
+        PasswordHasher hasher = new PasswordHasher();
+        AdminBootstrap.ensureAdmin(daos.getUserDao(), hasher, System.getenv());
+        MainServer server = new MainServer(port, daos, healthy, auth, hasher);
         server.start();
         Runtime.getRuntime().addShutdownHook(new Thread(server::stop));
     }
