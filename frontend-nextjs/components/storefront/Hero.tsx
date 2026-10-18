@@ -1,13 +1,23 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { ArrowRight, Bean, Sparkles } from 'lucide-react'
+import { ArrowRight, Bean, Sparkles, CalendarCheck } from 'lucide-react'
+import { useReservationStore } from '@/lib/store/reservation-store'
 
 interface HeroProps {
   onBrowseBeans?: () => void
+  onOpenReservation?: () => void
 }
 
-export function Hero({ onBrowseBeans }: HeroProps) {
+export function Hero({ onBrowseBeans, onOpenReservation }: HeroProps) {
+  const handleOpenReservation = () => {
+    if (onOpenReservation) {
+      onOpenReservation()
+    } else {
+      useReservationStore.getState().openReservation()
+    }
+  }
+
   const handleBrowseBeans = () => {
     if (onBrowseBeans) {
       onBrowseBeans()
@@ -61,11 +71,12 @@ export function Hero({ onBrowseBeans }: HeroProps) {
 
           <button
             type="button"
-            onClick={handleBrowseBeans}
+            onClick={handleOpenReservation}
             className="group h-11 sm:h-12 px-5 sm:px-6 inline-flex items-center justify-center gap-2.5 rounded-xl border border-stone-300 bg-white text-stone-800 shadow-2xs transition-all duration-200 hover:border-[#3E2723] hover:bg-stone-50 hover:text-[#3E2723] active:scale-95 cursor-pointer"
           >
+            <CalendarCheck className="size-4 text-[#B45309] shrink-0 transition-transform duration-200 group-hover:scale-110" />
             <span className="font-semibold text-stone-800 group-hover:text-[#3E2723] transition-colors leading-none">
-              Khám phá hạt rang
+              Đặt bàn trực tuyến
             </span>
             <span className="sr-only">Explore our beans</span>
             <ArrowRight className="size-4 text-[#B45309] shrink-0 transition-transform duration-200 group-hover:translate-x-0.5" />

@@ -66,6 +66,10 @@ public class OrderHandler extends ApiHandler {
     protected void route(HttpExchange exchange) throws IOException {
         List<String> parts = segments(exchange);
         String method = exchange.getRequestMethod().toUpperCase(Locale.ROOT);
+        if (parts.size() == 3 && parts.get(2).equals("pay-tables") && method.equals("POST")) {
+            payTables(exchange);
+            return;
+        }
         if (parts.size() == 2) {
             if (!method.equals("GET")) {
                 throw methodNotAllowed(exchange);
@@ -105,6 +109,59 @@ public class OrderHandler extends ApiHandler {
                 .sorted(Comparator.comparing(Order::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
                 .forEach(order -> data.add(toJson(order)));
         sendOk(exchange, 200, data, null);
+    }
+
+    private void payTables(HttpExchange exchange) throws IOException {
+        Map<String, Object> body = readJsonBody(exchange);
+        List<Object> rawIds = list(body, "tableIds");
+        if (rawIds.size() < 2 || rawIds.size() > 10) throw ApiException.badRequest("Chọn từ 2 đến 10 bàn để thanh toán gộp.");
+        List<Integer> tableIds = new ArrayList<>();
+        for (Object raw : rawIds) {
+            if (raw == null) throw ApiException.badRequest("Mã bàn không hợp lệ.");
+            int id = requireInt(Map.of("id", raw), "id");
+            if (id < 1 || tableIds.contains(id)) throw ApiException.badRequest("Mã bàn bị trùng hoặc không hợp lệ.");
+            if (tableDao.findById(id).isEmpty()) throw ApiException.notFound("Table not found: " + id);
+            tableIds.add(id);
+        }
+        PaymentMethod method = paymentMethod(requireStr(body, "paymentMethod"));
+        String transaction;
+        double total;
+        List<Order> orders;
+        List<String> warnings = new ArrayList<>();
+        synchronized (this) {
+            if (!databaseHealthy.getAsBoolean()) throw new ApiException(503, "DATABASE_UNAVAILABLE", "Chưa thể thu tiền khi cơ sở dữ liệu gián đoạn.");
+            orders = orderDao.findAll().stream().filter(order -> order.getPaymentStatus() == PaymentStatus.UNPAID
+                    && order.getStatus() != OrderStatus.CANCELLED && order.getOrderType() == OrderType.DINE_IN
+                    && order.getTableIds().stream().anyMatch(tableIds::contains)).toList();
+            for (int id : tableIds) if (orders.stream().noneMatch(order -> order.getTableIds().contains(id))) {
+                throw conflict("Bàn " + id + " không còn đơn chưa thanh toán.");
+            }
+            if (orders.stream().anyMatch(order -> !tableIds.containsAll(order.getTableIds()))) throw conflict("Cần chọn đủ các bàn thuộc cùng một phiếu đặt bàn.");
+            total = orders.stream().mapToDouble(Order::getTotal).sum();
+            Double expected = num(body, "expectedTotal");
+            if (expected != null && Math.abs(expected - total) > 0.01) throw conflict("Hóa đơn vừa thay đổi. Vui lòng kiểm tra lại tổng tiền.");
+            Double tendered = num(body, "tenderedAmount");
+            if (method == PaymentMethod.CASH && (tendered == null || tendered < total)) throw ApiException.badRequest("Tiền khách đưa chưa đủ tổng hóa đơn gộp.");
+            transaction = "GROUP-" + java.util.UUID.randomUUID();
+            final double amount = total;
+            final String reference = transaction;
+            if (!orderDao.markPaidTogether(orders.stream().map(Order::getId).toList(), method, () -> {
+                PaymentResult payment = amount <= 0 ? new PaymentResult(true, reference, "Nothing to charge")
+                        : PaymentProcessorFactory.createProcessor(method).processPayment(amount, reference);
+                if (payment == null || !payment.isSuccess()) throw ApiException.badRequest("Thanh toán không thành công.");
+                return true;
+            })) throw new ApiException(503, "DATABASE_UNAVAILABLE", "Không thể ghi nhận toàn bộ thanh toán gộp.");
+            for (Order order : orders) {
+                order.setPaymentMethod(method);
+                order.setPaymentStatus(PaymentStatus.PAID);
+                try { eventSubject.notifyOrderPaid(order); }
+                catch (RuntimeException error) { warnings.add(error.getMessage()); }
+            }
+        }
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("transactionId", transaction); data.put("tableIds", tableIds); data.put("total", total);
+        data.put("orders", orders.stream().map(OrderHandler::toJson).toList()); data.put("warnings", warnings);
+        sendOk(exchange, 200, data, "Đã thanh toán gộp các bàn");
     }
 
     private void updateStatus(HttpExchange exchange, String code) throws IOException {
@@ -278,6 +335,17 @@ public class OrderHandler extends ApiHandler {
         }
         Order order = new Order(null, code, Objects.requireNonNullElse(str(input, "customer"), "Walk-in"), tableId,
                 orderType(str(input, "orderType")));
+        if (input.get("tableIds") != null) {
+            List<Integer> ids = new ArrayList<>();
+            for (Object raw : list(input, "tableIds")) {
+                if (raw == null) throw ApiException.badRequest("Invalid table id");
+                int id = requireInt(Map.of("id", raw), "id");
+                if (ids.contains(id) || tableDao.findById(id).isEmpty()) throw ApiException.badRequest("Invalid or duplicate table id");
+                ids.add(id);
+            }
+            if (ids.size() > 10) throw ApiException.badRequest("At most 10 tables");
+            order.setTableIds(ids);
+        }
         order.setPaymentMethod(paymentMethod(Objects.requireNonNullElse(str(input, "paymentMethod"), "cash")));
         order.setNote(str(input, "note"));
         Instant createdAt = instant(input, "createdAt");
@@ -436,6 +504,7 @@ public class OrderHandler extends ApiHandler {
         json.put("orderCode", order.getOrderCode());
         json.put("customer", order.getCustomer());
         json.put("tableId", order.getTableId());
+        json.put("tableIds", order.getTableIds());
         json.put("orderType", order.getOrderType() == null ? null
                 : order.getOrderType().name().toLowerCase(Locale.ROOT).replace('_', '-'));
         json.put("status", order.getStatus() == null ? null : label(order.getStatus()));

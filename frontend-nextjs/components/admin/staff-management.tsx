@@ -182,7 +182,6 @@ export function StaffManagement() {
   const [formRole, setFormRole] = useState<UserRole>('staff')
   const [formRoleTitle, setFormRoleTitle] = useState('')
   const [formSalaryOrPoints, setFormSalaryOrPoints] = useState('')
-  const [formPassword, setFormPassword] = useState('')
 
   // KPI Metrics tính toán động
   const totalUsers = users.length
@@ -263,7 +262,6 @@ export function StaffManagement() {
     setFormRole('staff')
     setFormRoleTitle('')
     setFormSalaryOrPoints('')
-    setFormPassword('')
   }
 
   // Cập nhật người dùng đang chỉnh sửa
@@ -340,7 +338,7 @@ export function StaffManagement() {
           </div>
         </div>
         <Badge variant="outline" className="border-amber-300 bg-amber-100 text-amber-950 font-semibold px-3 py-1 rounded-full">
-          Chi nhánh 1 · Trung tâm
+          123 Phan Đình Phùng
         </Badge>
       </div>
 
@@ -669,17 +667,7 @@ export function StaffManagement() {
                 </div>
               </div>
 
-              <div className="flex flex-col gap-1.5">
-                <label className="font-semibold text-stone-700">Mật khẩu tài khoản (hoặc Mã PIN POS) *</label>
-                <input
-                  required
-                  type="password"
-                  placeholder="••••••••"
-                  value={formPassword}
-                  onChange={(e) => setFormPassword(e.target.value)}
-                  className="h-10 rounded-lg bg-stone-50 border border-stone-200 px-3 text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:border-[#3E2723] focus:bg-white"
-                />
-              </div>
+              <p className="text-stone-500">Tạo tài khoản đăng nhập và đặt mật khẩu tại mục Tài khoản & phân quyền.</p>
 
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-stone-200">
                 <Button

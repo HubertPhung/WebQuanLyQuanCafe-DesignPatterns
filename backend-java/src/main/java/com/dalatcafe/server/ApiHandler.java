@@ -9,6 +9,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URLDecoder;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -89,7 +91,12 @@ public abstract class ApiHandler implements HttpHandler {
                 }
             }
         }
-        String text = buffer.toString(StandardCharsets.UTF_8);
+        String text;
+        try {
+            text = StandardCharsets.UTF_8.newDecoder().decode(ByteBuffer.wrap(buffer.toByteArray())).toString();
+        } catch (CharacterCodingException e) {
+            throw ApiException.badRequest("Request body must be valid UTF-8");
+        }
         if (text.isBlank()) {
             throw ApiException.badRequest("Request body is required");
         }

@@ -20,7 +20,7 @@ public class JdbcTableDao implements ITableDao {
     @Override
     public List<Table> findAll() {
         List<Table> list = new ArrayList<>();
-        String sql = "SELECT id, name, seats, zone, status, guest_count, occupied_since, updated_at FROM tables ORDER BY id ASC";
+        String sql = "SELECT id, name, seats, zone, status, guest_count, occupied_since, updated_at, image_url FROM tables WHERE deleted_at IS NULL ORDER BY id ASC";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
@@ -35,7 +35,7 @@ public class JdbcTableDao implements ITableDao {
 
     @Override
     public Optional<Table> findById(int id) {
-        String sql = "SELECT id, name, seats, zone, status, guest_count, occupied_since, updated_at FROM tables WHERE id = ?";
+        String sql = "SELECT id, name, seats, zone, status, guest_count, occupied_since, updated_at, image_url FROM tables WHERE id = ? AND deleted_at IS NULL";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, id);
@@ -53,7 +53,7 @@ public class JdbcTableDao implements ITableDao {
     @Override
     public List<Table> findByZone(String zone) {
         List<Table> list = new ArrayList<>();
-        String sql = "SELECT id, name, seats, zone, status, guest_count, occupied_since, updated_at FROM tables WHERE LOWER(zone) = LOWER(?) ORDER BY id ASC";
+        String sql = "SELECT id, name, seats, zone, status, guest_count, occupied_since, updated_at, image_url FROM tables WHERE LOWER(zone) = LOWER(?) AND deleted_at IS NULL ORDER BY id ASC";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, zone);
@@ -72,7 +72,7 @@ public class JdbcTableDao implements ITableDao {
     public List<Table> findByStatus(TableStatus status) {
         List<Table> list = new ArrayList<>();
         if (status == null) return list;
-        String sql = "SELECT id, name, seats, zone, status, guest_count, occupied_since, updated_at FROM tables WHERE UPPER(status) = ? ORDER BY id ASC";
+        String sql = "SELECT id, name, seats, zone, status, guest_count, occupied_since, updated_at, image_url FROM tables WHERE UPPER(status) = ? AND deleted_at IS NULL ORDER BY id ASC";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, status.name());
@@ -91,10 +91,10 @@ public class JdbcTableDao implements ITableDao {
     public boolean save(Table table) {
         if (table == null) return false;
         String sql = """
-            INSERT INTO tables (id, name, seats, zone, status, guest_count, occupied_since, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO tables (id, name, seats, zone, status, guest_count, occupied_since, updated_at, image_url)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (id) DO UPDATE SET
-                name = EXCLUDED.name,
+                image_url = EXCLUDED.image_url, name = EXCLUDED.name,
                 seats = EXCLUDED.seats,
                 zone = EXCLUDED.zone,
                 status = EXCLUDED.status,
@@ -110,6 +110,7 @@ public class JdbcTableDao implements ITableDao {
             ps.setString(4, table.getZone());
             ps.setString(5, table.getStatus() != null ? table.getStatus().name() : TableStatus.AVAILABLE.name());
             ps.setInt(6, table.getGuestCount());
+            ps.setString(9, table.getImageUrl());
             ps.setTimestamp(7, table.getOccupiedSince() != null ? Timestamp.from(table.getOccupiedSince()) : null);
             ps.setTimestamp(8, Timestamp.from(Instant.now()));
             return ps.executeUpdate() > 0;
@@ -126,7 +127,7 @@ public class JdbcTableDao implements ITableDao {
             UPDATE tables SET status = ?, guest_count = ?,
                 occupied_since = CASE WHEN ? THEN COALESCE(occupied_since, ?) END,
                 updated_at = ?
-            WHERE id = ?
+            WHERE id = ? AND deleted_at IS NULL
         """;
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -157,12 +158,37 @@ public class JdbcTableDao implements ITableDao {
         }
     }
 
+    @Override
+    public boolean archiveById(int id) {
+        try (Connection conn = JdbcDatabase.getConnection();
+             PreparedStatement ps = conn.prepareStatement("UPDATE tables SET deleted_at = now(), updated_at = now() WHERE id = ? AND deleted_at IS NULL")) {
+            ps.setInt(1, id);
+            return ps.executeUpdate() == 1;
+        } catch (SQLException e) {
+            LOGGER.log(Level.SEVERE, "Could not archive table " + id, e);
+            return false;
+        }
+    }
+
+    @Override
+    public int nextId() {
+        try (Connection conn = JdbcDatabase.getConnection();
+             PreparedStatement ps = conn.prepareStatement("SELECT COALESCE(MAX(id), 0) + 1 FROM tables");
+             ResultSet rs = ps.executeQuery()) {
+            rs.next();
+            return rs.getInt(1);
+        } catch (SQLException e) {
+            throw new IllegalStateException("Could not allocate table id", e);
+        }
+    }
+
     private Table mapResultSetToTable(ResultSet rs) throws SQLException {
         Table table = new Table();
         table.setId(rs.getInt("id"));
         table.setName(rs.getString("name"));
         table.setSeats(rs.getInt("seats"));
         table.setZone(rs.getString("zone"));
+        table.setImageUrl(rs.getString("image_url"));
 
         String statusStr = rs.getString("status");
         if (statusStr != null) {

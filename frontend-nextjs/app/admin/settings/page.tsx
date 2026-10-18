@@ -9,7 +9,8 @@ import { fetchConfig } from '@/lib/api-client'
 export const metadata = { title: 'Cài đặt' }
 
 const rows = [
-  { label: 'Chi nhánh vận hành', value: 'Chi nhánh 1 · Trung tâm' },
+  { label: 'Chi nhánh vận hành', value: '123 Phan Đình Phùng' },
+  { label: 'Chi nhánh bổ sung', value: '456 Bùi Thị Xuân' },
   { label: 'Đơn vị tiền tệ', value: 'Việt Nam Đồng (VNĐ)' },
   {
     label: (

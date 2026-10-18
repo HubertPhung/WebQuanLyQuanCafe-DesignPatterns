@@ -34,6 +34,7 @@ import java.util.Optional;
 public class SimpleAuthFilter extends Filter {
     /** Request attribute holding the authenticated {@link UserAccount} (absent on public calls). */
     public static final String USER_ATTRIBUTE = "auth.user";
+    public static final String STOREFRONT_SERVICE_ATTRIBUTE = "auth.storefrontService";
 
     /** What a request needs. */
     enum Access {
@@ -79,6 +80,8 @@ public class SimpleAuthFilter extends Filter {
         if (identity.user() != null) {
             exchange.setAttribute(USER_ATTRIBUTE, identity.user());
         }
+        exchange.setAttribute(STOREFRONT_SERVICE_ATTRIBUTE, identity.user() != null
+                && identity.user().getId() == null && "storefront@service.local".equals(identity.user().getEmail()));
         if (access == Access.PUBLIC) {
             // A stale token must not break the public menu or a booking: the caller is just anonymous.
             chain.doFilter(exchange);
@@ -173,7 +176,8 @@ public class SimpleAuthFilter extends Filter {
         if (method.equals("OPTIONS")) {
             return Access.PUBLIC;
         }
-        if (p.equals("/api/menu") && method.equals("GET")
+        if (p.equals("/api/tables/catalog") && method.equals("GET")
+                || p.equals("/api/menu") && method.equals("GET")
                 || p.equals("/api/reservations") && method.equals("POST")
                 || p.equals("/api/vouchers/validate") && method.equals("POST")) {
             return Access.PUBLIC;
@@ -191,6 +195,11 @@ public class SimpleAuthFilter extends Filter {
             return Access.ADMIN;
         }
         if (p.equals("/api/menu") && method.equals("POST") || p.startsWith("/api/analytics")) {
+            return Access.MANAGER;
+        }
+        if (p.equals("/api/tables") && method.equals("POST")
+                || p.matches("/api/tables/[0-9]+") && method.equals("DELETE")
+                || p.matches("/api/tables/[0-9]+/details")) {
             return Access.MANAGER;
         }
         return Access.STAFF;

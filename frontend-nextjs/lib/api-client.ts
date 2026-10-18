@@ -91,6 +91,17 @@ export function fetchMenu(): Promise<JavaResult<JavaMenuItem[]>> {
   return request<JavaMenuItem[]>('/api/menu', { method: 'GET' })
 }
 
+export type JavaTable = {
+  id: number; name: string; seats: number; zone: string; imageUrl?: string | null
+  status: 'available' | 'occupied' | 'reserved' | 'cleaning'; guestCount: number; occupiedSince: string | null
+}
+export function fetchTables() { return request<JavaTable[]>('/api/tables', { method: 'GET' }) }
+export function fetchReservationTables() { return request<Pick<JavaTable, 'id' | 'name' | 'seats' | 'zone'>[]>('/api/tables/catalog', { method: 'GET', auth: false }) }
+export function saveJavaTable(input: { name: string; seats: number; zone: string; imageUrl: string | null }, id?: number) {
+  return request<JavaTable>(id === undefined ? '/api/tables' : `/api/tables/${id}/details`, { method: id === undefined ? 'POST' : 'PUT', body: input })
+}
+export function deleteJavaTable(id: number) { return request<null>(`/api/tables/${id}`, { method: 'DELETE' }) }
+
 export type CheckoutPayload = {
   // customizations use the Java enum names (SIZE_L, CHEESE_FOAM, WHITE_PEARL), priced by its Decorators.
   lines: { menuItemId: number; qty: number; customizations?: string[] }[]
@@ -151,6 +162,7 @@ export function updateTable(tableId: number, payload: TableStatusPayload): Promi
 }
 
 export type ReservationPayload = {
+  tableIds?: number[]
   customer: string
   contact: string
   email?: string
@@ -167,6 +179,7 @@ export function createReservation(payload: ReservationPayload): Promise<JavaResu
 }
 
 export type JavaReservation = {
+  tableIds?: number[]
   id: string
   customer: string
   contact: string
@@ -190,6 +203,7 @@ export function updateJavaReservationStatus(code: string, status: 'pending' | 'c
 }
 
 export type TransferredOrder = {
+  tableIds?: number[]
   orderCode: string
   customer: string
   tableId: number | null
@@ -233,6 +247,12 @@ export function payJavaOrder(code: string, paymentMethod: string): Promise<JavaR
   return request<JavaOrder>(`/api/orders/${encodeURIComponent(code)}/pay`, { method: 'POST', body: { paymentMethod } })
 }
 
+export type GroupPaymentInput = { tableIds: number[]; paymentMethod: 'cash' | 'qr' | 'card'; tenderedAmount?: number; expectedTotal?: number }
+export type GroupPaymentReceipt = { transactionId: string; tableIds: number[]; total: number; orders: JavaOrder[]; warnings?: string[] }
+export function payJavaTables(input: GroupPaymentInput): Promise<JavaResult<GroupPaymentReceipt>> {
+  return request<GroupPaymentReceipt>('/api/orders/pay-tables', { method: 'POST', body: input })
+}
+
 export type StockPayload = { inStock?: boolean; change?: number; stockQty?: number }
 
 // PATCH /api/menu/{id}/stock
@@ -260,6 +280,7 @@ export function createJavaMenuItem(payload: NewJavaMenuItem): Promise<JavaResult
 }
 
 export type SyncOrderPayload = {
+  tableIds?: number[]
   orderCode: string
   customer: string
   tableId: number | null

@@ -8,7 +8,9 @@
     "build": "next build",
     "start": "next start",
     "test": "tsx scripts/test-ui-ux.mjs",
-    "test:e2e": "node --env-file-if-exists=.env.local scripts/test-e2e-stack.mjs"
+    "test:e2e": "node --env-file-if-exists=.env.local scripts/test-e2e-stack.mjs",
+    "test:table-delivery": "tsx scripts/test-table-delivery.ts",
+    "test:first-order": "node --conditions=react-server --import tsx scripts/test-first-online-order.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { matchesSchedulePeriod } from '@/lib/admin/schedule-rules'
 import {
   Calendar,
   CalendarCheck2,
@@ -182,13 +183,14 @@ export function ScheduleManagement() {
   const [formNote, setFormNote] = useState('')
 
   // KPI calculations
-  const totalShifts = shifts.length
-  const completedCount = shifts.filter((s) => s.status === 'completed').length
-  const activeCount = shifts.filter((s) => s.status === 'working' || s.status === 'scheduled').length
-  const absentCount = shifts.filter((s) => s.status === 'absent').length
+  const periodShifts = shifts.filter(s => matchesSchedulePeriod(s.date, filterMonth, filterYear))
+  const totalShifts = periodShifts.length
+  const completedCount = periodShifts.filter((s) => s.status === 'completed').length
+  const activeCount = periodShifts.filter((s) => s.status === 'working' || s.status === 'scheduled').length
+  const absentCount = periodShifts.filter((s) => s.status === 'absent').length
 
   // Filter logic
-  const filteredShifts = shifts.filter((shift) => {
+  const filteredShifts = periodShifts.filter((shift) => {
     if (filterStaff !== 'all' && shift.staffId !== filterStaff) return false
     return true
   })
@@ -228,7 +230,7 @@ export function ScheduleManagement() {
     const formattedDate = `${dayOfWeek}, ${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
 
     const newShift: ShiftRecord = {
-      id: `SH-${String(shifts.length + 1).padStart(2, '0')}`,
+      id: `SH-${crypto.randomUUID()}`,
       staffId: targetStaff.id,
       staffName: targetStaff.name,
       initials: targetStaff.initials,
@@ -257,7 +259,7 @@ export function ScheduleManagement() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-extrabold tracking-tight text-stone-900 tabular-nums">{totalShifts} ca</div>
-            <p className="text-xs text-stone-500 mt-1">Tháng {filterMonth}/{filterYear} · Chi nhánh 1</p>
+            <p className="text-xs text-stone-500 mt-1">Tháng {filterMonth}/{filterYear} · 123 Phan Đình Phùng</p>
           </CardContent>
         </Card>
 

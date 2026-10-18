@@ -80,6 +80,157 @@ class ServerTest {
     }
 
     @Test
+    void managerCanCreateEditAndDeleteTableWithImage() throws Exception {
+        String details = "{\"name\":\"Ban test CRUD\",\"seats\":4,\"zone\":\"San vuon\",\"imageUrl\":\"https://example.com/table.jpg\"}";
+        assertEquals(403, call("POST", "/api/tables", "STAFF", details).statusCode());
+        HttpResponse<String> created = call("POST", "/api/tables", "MANAGER", details);
+        assertEquals(201, created.statusCode(), created.body());
+        int id = ((Number) data(created).get("id")).intValue();
+        assertEquals("https://example.com/table.jpg", data(created).get("imageUrl"));
+        assertEquals(409, call("POST", "/api/tables", "MANAGER", details).statusCode());
+        HttpResponse<String> updated = call("PUT", "/api/tables/" + id + "/details", "MANAGER", details.replace("San vuon", "Tang 2"));
+        assertEquals(200, updated.statusCode(), updated.body());
+        assertEquals("Tang 2", data(updated).get("zone"));
+        assertEquals("https://example.com/table.jpg", DaoFactory.getInstance().getTableDao().findById(id).orElseThrow().getImageUrl());
+        assertEquals(200, call("DELETE", "/api/tables/" + id, "MANAGER", null).statusCode());
+        assertTrue(DaoFactory.getInstance().getTableDao().findById(id).isEmpty());
+    }
+
+    @Test
+    void tableDetailsRejectInvalidFieldsAndUsedTablesCannotBeDeleted() throws Exception {
+        String details = "{\"name\":\"Ban test\",\"seats\":0,\"zone\":\"Main\",\"imageUrl\":null}";
+        assertEquals(400, call("POST", "/api/tables", "MANAGER", details).statusCode());
+        assertEquals(400, call("POST", "/api/tables", "MANAGER", details.replace("\"seats\":0", "\"seats\":4").replace("null", "\"javascript:alert(1)\"")).statusCode());
+        assertEquals(409, call("DELETE", "/api/tables/2", "MANAGER", null).statusCode());
+        assertEquals(404, call("DELETE", "/api/tables/99999", "MANAGER", null).statusCode());
+    }
+
+    @Test
+    void deliveryCheckoutChargesTenThousandAndPickupHasNoShippingFee() throws Exception {
+        HttpResponse<String> delivery = call("POST", "/api/checkout", "STAFF", checkoutBody(1, ",\"orderType\":\"delivery\""));
+        assertEquals(200, delivery.statusCode(), delivery.body());
+        assertEquals(10000, number(data(delivery), "shippingFee"));
+        HttpResponse<String> pickup = call("POST", "/api/checkout", "STAFF", checkoutBody(1, ",\"orderType\":\"pickup\""));
+        assertEquals(200, pickup.statusCode(), pickup.body());
+        assertEquals(0, number(data(pickup), "shippingFee"));
+        assertEquals(10000, number(data(delivery), "finalTotal") - number(data(pickup), "finalTotal"));
+    }
+
+    @Test
+    void welcomeVoucherCannotBeRedeemedDirectlyAtPos() throws Exception {
+        HttpResponse<String> response = call("POST", "/api/checkout", "STAFF", checkoutBody(1, ",\"voucherCode\":\"WELCOME10\""));
+        assertEquals(400, response.statusCode(), response.body());
+        assertEquals("INVALID_VOUCHER", json(response).get("code"));
+        assertEquals(10, DaoFactory.getInstance().getMenuDao().findById(DRINK_ID).orElseThrow().getStockQty());
+    }
+
+    @Test
+    void groupedReservationValidatesAllTablesAndSeatsTheWholeGroup() throws Exception {
+        DaoFactory daos = DaoFactory.getInstance();
+        daos.getTableDao().save(new com.dalatcafe.model.Table(98001, "Group A", 4, "Garden"));
+        daos.getTableDao().save(new com.dalatcafe.model.Table(98002, "Group B", 4, "Garden"));
+        String date = LocalDate.now().plusDays(2).atTime(10, 0).toInstant(ZoneOffset.ofHours(7)).toString();
+        String booking = "{\"customer\":\"Group guest\",\"contact\":\"0901234567\",\"dateTime\":\"" + date
+                + "\",\"guests\":6,\"tableIds\":[98001,98002],\"preOrders\":[{\"menuItemId\":" + DRINK_ID + ",\"qty\":1}]}";
+        assertEquals(400, call("POST", "/api/reservations", null, booking.replace("98001,98002", "98001,98001")).statusCode());
+        assertEquals(400, call("POST", "/api/reservations", null, booking.replace("98001,98002", "98001")).statusCode());
+        HttpResponse<String> created = call("POST", "/api/reservations", null, booking);
+        assertEquals(201, created.statusCode(), created.body());
+        assertEquals(400, call("POST", "/api/reservations", null, booking.replace("98001,98002", "98002").replace("\"guests\":6", "\"guests\":2")).statusCode());
+        String edit = "{\"name\":\"Group A updated\",\"seats\":4,\"zone\":\"Garden\",\"imageUrl\":null}";
+        assertEquals(200, call("PUT", "/api/tables/98001/details", "MANAGER", edit).statusCode());
+        assertEquals(400, call("PUT", "/api/tables/98001/details", "MANAGER", edit.replace("\"seats\":4", "\"seats\":1")).statusCode());
+        assertEquals(409, call("DELETE", "/api/tables/98002", "MANAGER", null).statusCode(), "An active reservation on a secondary table must block archiving");
+        String code = (String) data(created).get("id");
+        HttpResponse<String> transferred = call("POST", "/api/reservations/" + code + "/transfer-pos", "STAFF", null);
+        assertEquals(200, transferred.statusCode(), transferred.body());
+        assertEquals(List.of(98001.0, 98002.0), data(transferred).get("tableIds"));
+        assertEquals(com.dalatcafe.model.TableStatus.OCCUPIED, daos.getTableDao().findById(98002).orElseThrow().getStatus());
+        assertEquals(1, daos.getOrderDao().findByTableId(98002).size());
+        HttpResponse<String> catalog = call("GET", "/api/tables/catalog", null, null);
+        assertEquals(200, catalog.statusCode());
+        assertFalse(catalog.body().contains("guestCount"));
+    }
+
+    @Test
+    void noShowExpiryUsesAppointmentTimeAndDoesNotCancelSeatedGuests() {
+        DaoFactory daos = DaoFactory.getInstance();
+        ReservationHandler handler = new ReservationHandler(daos.getReservationDao(), daos.getTableDao(), daos.getOrderDao(), daos.getMenuDao());
+        java.time.Instant now = java.time.Instant.now();
+        handler.expireNoShows(now);
+        for (int i = 0; i < 3; i++) {
+            com.dalatcafe.model.Reservation reservation = new com.dalatcafe.model.Reservation();
+            reservation.setReservationCode("NOSHOW-" + i);
+            reservation.setCustomer("No show test"); reservation.setContact("0901234567");
+            reservation.setTableId(1);
+            reservation.setDateTime(now.minusSeconds(i == 1 ? 899 : 900));
+            reservation.setStatus(i == 2 ? ReservationStatus.SEATED : ReservationStatus.CONFIRMED);
+            assertTrue(daos.getReservationDao().save(reservation));
+        }
+        assertEquals(1, handler.expireNoShows(now));
+        assertEquals(ReservationStatus.CANCELLED, daos.getReservationDao().findByReservationCode("NOSHOW-0").orElseThrow().getStatus());
+        assertEquals(ReservationStatus.CONFIRMED, daos.getReservationDao().findByReservationCode("NOSHOW-1").orElseThrow().getStatus());
+        assertEquals(ReservationStatus.SEATED, daos.getReservationDao().findByReservationCode("NOSHOW-2").orElseThrow().getStatus());
+        assertEquals(0, handler.expireNoShows(now));
+    }
+
+    @Test
+    void groupPaymentChargesOnceAndRejectsShortCashStaleTotalAndRepeatPayment() throws Exception {
+        DaoFactory daos = DaoFactory.getInstance();
+        for (int id : List.of(98003, 98004)) {
+            daos.getTableDao().save(new com.dalatcafe.model.Table(id, "Payment " + id, 4, "Garden"));
+            Order order = new Order(null, "GROUP-" + id, "Group buyer", id, com.dalatcafe.model.OrderType.DINE_IN);
+            order.addItem(new com.dalatcafe.model.OrderItem(DRINK_ID, "Drink", 1, 50000, null, null));
+            assertTrue(daos.getOrderDao().save(order));
+        }
+        String body = "{\"tableIds\":[98003,98004],\"paymentMethod\":\"cash\",\"tenderedAmount\":1000}";
+        assertEquals(400, call("POST", "/api/orders/pay-tables", "STAFF", body).statusCode());
+        assertEquals(409, call("POST", "/api/orders/pay-tables", "STAFF", body.replace("1000", "200000").replace("}", ",\"expectedTotal\":1}")).statusCode());
+        HttpResponse<String> paid = call("POST", "/api/orders/pay-tables", "STAFF", body.replace("1000", "200000"));
+        assertEquals(200, paid.statusCode(), paid.body());
+        assertEquals(108000, number(data(paid), "total"));
+        assertEquals(409, call("POST", "/api/orders/pay-tables", "STAFF", body.replace("1000", "200000")).statusCode());
+        assertTrue(daos.getOrderDao().findByOrderCode("GROUP-98003").orElseThrow().getPaymentStatus() == com.dalatcafe.model.PaymentStatus.PAID);
+        assertTrue(daos.getOrderDao().findByOrderCode("GROUP-98004").orElseThrow().getPaymentStatus() == com.dalatcafe.model.PaymentStatus.PAID);
+    }
+
+    @Test
+    void archivedTableDisappearsWhileCompletedOrderHistoryRemains() throws Exception {
+        DaoFactory daos = DaoFactory.getInstance();
+        int id = 98501;
+        daos.getTableDao().save(new Table(id, "Old table", 4, "Archive test"));
+        Order order = new Order(null, "ARCHIVE-HISTORY", "Buyer", id, com.dalatcafe.model.OrderType.DINE_IN);
+        order.setStatus(com.dalatcafe.model.OrderStatus.COMPLETED);
+        order.setPaymentStatus(PaymentStatus.PAID);
+        assertTrue(daos.getOrderDao().save(order));
+        HttpResponse<String> result = call("DELETE", "/api/tables/" + id, "MANAGER", null);
+        assertEquals(200, result.statusCode(), result.body());
+        assertTrue(daos.getTableDao().findById(id).isEmpty());
+        assertTrue(daos.getTableDao().findAll().stream().noneMatch(table -> table.getId() == id));
+        assertTrue(daos.getTableDao().findByZone("Archive test").isEmpty());
+        assertEquals(id, daos.getOrderDao().findByOrderCode("ARCHIVE-HISTORY").orElseThrow().getTableId());
+        assertFalse(daos.getTableDao().updateStatus(id, TableStatus.AVAILABLE, 0));
+        HttpResponse<String> replacement = call("POST", "/api/tables", "MANAGER", "{\"name\":\"New table\",\"seats\":4,\"zone\":\"Archive test\"}");
+        assertEquals(201, replacement.statusCode(), replacement.body());
+        assertTrue(((Number) data(replacement).get("id")).intValue() > id);
+    }
+
+    @Test
+    void unfinishedOrUnpaidGroupOrderPreventsArchivingSecondaryTable() throws Exception {
+        DaoFactory daos = DaoFactory.getInstance();
+        daos.getTableDao().save(new Table(98502, "Group first", 4, "Archive test"));
+        daos.getTableDao().save(new Table(98503, "Group second", 4, "Archive test"));
+        Order order = new Order(null, "ARCHIVE-OPEN", "Buyer", 98502, com.dalatcafe.model.OrderType.DINE_IN);
+        order.setTableIds(List.of(98502, 98503));
+        order.setStatus(com.dalatcafe.model.OrderStatus.COMPLETED);
+        assertTrue(daos.getOrderDao().save(order));
+        assertEquals(409, call("DELETE", "/api/tables/98503", "MANAGER", null).statusCode());
+        order.setPaymentStatus(PaymentStatus.PAID);
+        assertTrue(daos.getOrderDao().save(order));
+        assertEquals(200, call("DELETE", "/api/tables/98503", "MANAGER", null).statusCode());
+    }
+
+    @Test
     void menuIsPublicJsonWithCors() throws Exception {
         HttpResponse<String> response = call("GET", "/api/menu", null, null);
         assertEquals(200, response.statusCode());

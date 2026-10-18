@@ -56,9 +56,25 @@ public class InMemoryOrderDao implements IOrderDao {
     @Override
     public List<Order> findByTableId(int tableId) {
         return db.getOrders().values().stream()
-                .filter(o -> o.getTableId() != null && o.getTableId() == tableId)
+                .filter(o -> o.getTableIds().contains(tableId))
                 .sorted(Comparator.comparing(Order::getCreatedAt).reversed())
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public boolean markPaidTogether(List<Integer> ids, com.dalatcafe.model.PaymentMethod method, java.util.function.BooleanSupplier payment) {
+        synchronized (db) {
+            if (ids.isEmpty() || ids.stream().distinct().count() != ids.size()) return false;
+            if (ids.stream().anyMatch(id -> !db.getOrders().containsKey(id) || db.getOrders().get(id).getPaymentStatus() != PaymentStatus.UNPAID
+                    || db.getOrders().get(id).getStatus() == OrderStatus.CANCELLED)) return false;
+            if (!payment.getAsBoolean()) return false;
+            for (int id : ids) {
+                Order order = db.getOrders().get(id);
+                order.setPaymentMethod(method);
+                order.setPaymentStatus(PaymentStatus.PAID);
+            }
+            return true;
+        }
     }
 
     @Override

@@ -22,12 +22,14 @@ public final class CapacityGuestValidator extends ReservationValidatorHandler {
         if (reservation.getGuests() < 1 || reservation.getGuests() > maxGuests) {
             return ValidationResult.invalid("Số lượng khách phải từ 1 đến " + maxGuests + " người.");
         }
-        Table table = tableDao.findById(reservation.getTableId()).orElse(null);
-        if (table == null) {
-            return ValidationResult.invalid("Bàn được chọn không tồn tại.");
+        int seats = 0;
+        for (int id : reservation.getTableIds()) {
+            Table table = tableDao.findById(id).orElse(null);
+            if (table == null) return ValidationResult.invalid("Bàn được chọn không tồn tại.");
+            seats += table.getSeats();
         }
-        if (reservation.getGuests() > table.getSeats()) {
-            return ValidationResult.invalid("Số lượng khách vượt sức chứa của bàn (" + table.getSeats() + " người).");
+        if (reservation.getGuests() > seats) {
+            return ValidationResult.invalid("Số lượng khách vượt tổng sức chứa các bàn (" + seats + " người).");
         }
         return checkNext(reservation);
     }

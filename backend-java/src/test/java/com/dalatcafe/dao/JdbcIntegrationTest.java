@@ -108,6 +108,63 @@ class JdbcIntegrationTest {
     }
 
     @Test
+    void tableImageRoundTripsAndCanBeRemoved() {
+        com.dalatcafe.model.Table table = new com.dalatcafe.model.Table(97531, "Image table", 4, "Garden");
+        table.setImageUrl("https://example.com/table.webp");
+        assertTrue(tables.save(table));
+        assertEquals(table.getImageUrl(), tables.findById(table.getId()).orElseThrow().getImageUrl());
+        assertEquals(table.getImageUrl(), tables.findByZone("Garden").stream().filter(t -> t.getId() == table.getId()).findFirst().orElseThrow().getImageUrl());
+        table.setImageUrl(null);
+        assertTrue(tables.save(table));
+        assertNull(tables.findById(table.getId()).orElseThrow().getImageUrl());
+        assertTrue(tables.deleteById(table.getId()));
+    }
+
+    @Test
+    void tableArchivingPreservesRowsAndNeverReusesIds() throws Exception {
+        int id = 99531;
+        assertTrue(tables.save(new com.dalatcafe.model.Table(id, "Archived table", 4, "Archive test")));
+        Order order = new Order(null, "DB-ARCHIVED-HISTORY", "Buyer", id, OrderType.DINE_IN);
+        order.setStatus(OrderStatus.COMPLETED); order.setPaymentStatus(PaymentStatus.PAID);
+        assertTrue(orders.save(order));
+        assertTrue(tables.archiveById(id));
+        assertTrue(new JdbcTableDao().findById(id).isEmpty());
+        assertTrue(tables.findByZone("Archive test").isEmpty());
+        assertTrue(tables.findAll().stream().noneMatch(table -> table.getId() == id));
+        assertFalse(tables.updateStatus(id, TableStatus.AVAILABLE, 0));
+        assertTrue(tables.nextId() > id);
+        assertEquals(id, orders.findByOrderCode("DB-ARCHIVED-HISTORY").orElseThrow().getTableId());
+        try (Connection connection = JdbcDatabase.getConnection(); Statement statement = connection.createStatement();
+             ResultSet row = statement.executeQuery("SELECT deleted_at FROM tables WHERE id = " + id)) {
+            assertTrue(row.next()); assertNotNull(row.getTimestamp(1));
+        }
+    }
+
+    @Test
+    void groupedTablesAndAtomicPaymentRoundTripThroughPostgres() {
+        Reservation reservation = new Reservation();
+        reservation.setReservationCode("DB-GROUP-BOOKING"); reservation.setCustomer("Group"); reservation.setContact("0901234567");
+        reservation.setDateTime(Instant.now().plusSeconds(86400)); reservation.setTableIds(List.of(1, 3)); reservation.setGuests(5);
+        assertTrue(reservations.save(reservation));
+        assertEquals(List.of(1, 3), reservations.findById(reservation.getId()).orElseThrow().getTableIds());
+        Order first = new Order(null, "DB-GROUP-PAY-A", "Group", 1, OrderType.DINE_IN);
+        first.setTableIds(List.of(1, 3)); first.addItem(new OrderItem(null, "Drink", 1, 50000, null, null));
+        Order second = new Order(null, "DB-GROUP-PAY-B", "Group", 2, OrderType.DINE_IN);
+        second.addItem(new OrderItem(null, "Drink", 1, 40000, null, null));
+        assertTrue(orders.save(first)); assertTrue(orders.save(second));
+        assertEquals(List.of(1, 3), orders.findById(first.getId()).orElseThrow().getTableIds());
+        assertTrue(orders.findByTableId(3).stream().anyMatch(order -> order.getOrderCode().equals(first.getOrderCode())));
+        java.util.concurrent.atomic.AtomicInteger charges = new java.util.concurrent.atomic.AtomicInteger();
+        assertFalse(orders.markPaidTogether(List.of(first.getId(), second.getId()), PaymentMethod.CARD, () -> false));
+        assertEquals(PaymentStatus.UNPAID, orders.findById(first.getId()).orElseThrow().getPaymentStatus());
+        assertTrue(orders.markPaidTogether(List.of(first.getId(), second.getId()), PaymentMethod.CARD, () -> { charges.incrementAndGet(); return true; }));
+        assertFalse(orders.markPaidTogether(List.of(first.getId(), second.getId()), PaymentMethod.CARD, () -> { charges.incrementAndGet(); return true; }));
+        assertEquals(1, charges.get());
+        assertEquals(PaymentStatus.PAID, orders.findById(first.getId()).orElseThrow().getPaymentStatus());
+        assertEquals(PaymentStatus.PAID, orders.findById(second.getId()).orElseThrow().getPaymentStatus());
+    }
+
+    @Test
     void orderKeepsLineItemsAndPaidTotals() {
         Order order = new Order(null, null, "Khach le", 3, OrderType.DINE_IN);
         order.addItem(new OrderItem(1, "Latte", 2, 55_000, "Size L", "it da"));

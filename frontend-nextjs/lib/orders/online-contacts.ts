@@ -88,6 +88,15 @@ export async function listContactsForUser(userId: number, limit = 50): Promise<O
   return readContacts(userId, limit)
 }
 
+/** Eligibility checks must never silently treat a database failure as an empty history. */
+export async function hasOnlineOrderForUser(userId: number): Promise<boolean> {
+  if ([...memory.values()].some(contact => contact.userId === userId)) return true
+  if (!pool) return false
+  if (!(await tableReady())) throw new Error('Chưa kiểm tra được lịch sử đơn hàng. Vui lòng thử lại sau.')
+  const result = await pool.query('SELECT 1 FROM admin_order_contacts WHERE user_id = $1 LIMIT 1', [userId])
+  return Boolean(result.rowCount)
+}
+
 async function readContacts(userId: number | null, limit: number): Promise<OrderContact[]> {
   if (await tableReady()) {
     try {

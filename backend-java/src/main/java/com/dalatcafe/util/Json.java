@@ -11,6 +11,8 @@ import java.util.Map;
  */
 public final class Json {
     private static final int MAX_DEPTH = 64;
+    private static final java.util.regex.Pattern JSON_NUMBER = java.util.regex.Pattern.compile(
+            "-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?");
 
     private final String text;
     private int pos;
@@ -177,6 +179,13 @@ public final class Json {
                     if (pos + 4 > text.length()) {
                         throw new JsonException("Invalid unicode escape");
                     }
+                    for (int i = pos; i < pos + 4; i++) {
+                        char hex = text.charAt(i);
+                        if (!(hex >= '0' && hex <= '9') && !(hex >= 'a' && hex <= 'f')
+                                && !(hex >= 'A' && hex <= 'F')) {
+                            throw new JsonException("Invalid unicode escape at " + pos);
+                        }
+                    }
                     try {
                         sb.append((char) Integer.parseInt(text.substring(pos, pos + 4), 16));
                     } catch (NumberFormatException ex) {
@@ -198,8 +207,12 @@ public final class Json {
         if (start == pos) {
             throw new JsonException("Unexpected character '" + text.charAt(pos) + "' at " + pos);
         }
+        String number = text.substring(start, pos);
+        if (!JSON_NUMBER.matcher(number).matches()) {
+            throw new JsonException("Invalid number at " + start);
+        }
         try {
-            double value = Double.parseDouble(text.substring(start, pos));
+            double value = Double.parseDouble(number);
             if (!Double.isFinite(value)) {
                 throw new JsonException("Number out of range at " + start);
             }
@@ -224,7 +237,7 @@ public final class Json {
     }
 
     private void skipWhitespace() {
-        while (pos < text.length() && Character.isWhitespace(text.charAt(pos))) {
+        while (pos < text.length() && " \t\r\n".indexOf(text.charAt(pos)) >= 0) {
             pos++;
         }
     }

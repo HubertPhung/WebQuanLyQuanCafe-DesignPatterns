@@ -16,6 +16,7 @@ import { Hero } from '@/components/storefront/Hero'
 import { DrinkMenu } from '@/components/storefront/DrinkMenu'
 import { Header } from '@/components/storefront/Header'
 import { CafeSpace } from '@/components/storefront/CafeSpace'
+import { ReservationDialog } from '@/components/storefront/ReservationDialog'
 import type { StorefrontAccount } from '@/components/storefront/AccountDropdown'
 import { redirectToSignIn, useCartStore } from '@/lib/store/cart-store'
 import { toast } from 'sonner'
@@ -222,6 +223,9 @@ export function RoleSwitcherView({
             ))}
           </div>
         </section>
+
+        {/* Reservation Modal for Customer Table Booking */}
+        <ReservationDialog />
 
         {/* Footer Component */}
         <CoffeeFooter storeDomain={storeDomain} />

@@ -22,6 +22,15 @@ final class JsonColumns {
     private JsonColumns() {
     }
 
+    static List<Integer> toIds(String raw) {
+        if (raw == null || raw.isBlank()) return List.of();
+        Object value = Json.parse(raw);
+        if (!(value instanceof List<?> values)) throw new IllegalArgumentException("Table ids must be an array");
+        return values.stream().map(id -> ((Number) id).intValue()).toList();
+    }
+
+    static String fromIds(List<Integer> ids) { return Json.stringify(ids); }
+
     static String fromItems(List<OrderItem> items) {
         List<Object> json = new ArrayList<>();
         if (items != null) {

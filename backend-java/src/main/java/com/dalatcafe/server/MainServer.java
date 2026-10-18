@@ -38,6 +38,12 @@ public class MainServer {
     private final IUserDao users;
     private final boolean allowRoleHeader;
     private final String serviceKey;
+    private final java.util.concurrent.ScheduledExecutorService reservationTimer = Executors.newSingleThreadScheduledExecutor(task -> {
+        Thread thread = new Thread(task, "reservation-no-shows");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private final ReservationHandler reservations;
 
     /**
      * Development and test server: random token keys, the X-User-Role header accepted, and a
@@ -70,9 +76,9 @@ public class MainServer {
         register("/api/analytics", new AnalyticsHandler(daos.getOrderDao(), daos.getMenuDao(), daos.getTableDao()));
         register("/api/vouchers", new VoucherHandler());
         register("/api/config", new ConfigHandler());
-        register("/api/tables", new TableHandler(daos.getTableDao()));
-        register("/api/reservations", new ReservationHandler(daos.getReservationDao(), daos.getTableDao(), daos.getOrderDao(),
-                daos.getMenuDao()));
+        register("/api/tables", new TableHandler(daos.getTableDao(), daos.getOrderDao(), daos.getReservationDao()));
+        reservations = new ReservationHandler(daos.getReservationDao(), daos.getTableDao(), daos.getOrderDao(), daos.getMenuDao());
+        register("/api/reservations", reservations);
         register("/api/checkout", new CheckoutHandler(facade, daos.getCustomerDao(), daos.getTableDao(),
                 databaseHealthy));
         server.setExecutor(Executors.newFixedThreadPool(8));
@@ -86,10 +92,15 @@ public class MainServer {
 
     public void start() {
         server.start();
+        reservationTimer.scheduleAtFixedRate(() -> {
+            try { reservations.expireNoShows(java.time.Instant.now()); }
+            catch (RuntimeException error) { LOGGER.log(java.util.logging.Level.WARNING, "Could not expire no-show reservations", error); }
+        }, 30, 30, java.util.concurrent.TimeUnit.SECONDS);
         LOGGER.info("HTTP server listening on port " + getPort());
     }
 
     public void stop() {
+        reservationTimer.shutdownNow();
         server.stop(0);
         ((java.util.concurrent.ExecutorService) server.getExecutor()).shutdownNow();
     }

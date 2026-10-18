@@ -26,6 +26,7 @@ public class ReservationToOrderAdapter implements IPosOrderTarget {
         Order order = new Order(null, reservation.getReservationCode(), getCustomerIdentifier(),
                 reservation.getTableId(), OrderType.DINE_IN);
         order.setStatus(OrderStatus.PENDING);
+        order.setTableIds(reservation.getTableIds());
         order.setPaymentStatus(PaymentStatus.UNPAID);
         order.setNote(reservation.getNote());
 

@@ -34,28 +34,29 @@ public class TableStatusSyncObserver implements IOrderObserver {
         if (order.getTableId() == null) {
             return;
         }
-        Table table = tableDao.findById(order.getTableId())
-                .orElseThrow(() -> new IllegalStateException("Table not found: " + order.getTableId()));
-        int guests = Math.max(1, table.getGuestCount());
-        tableDao.updateStatus(table.getId(), TableStatus.OCCUPIED, guests);
+        for (int tableId : order.getTableIds()) {
+            Table table = tableDao.findById(tableId).orElseThrow(() -> new IllegalStateException("Table not found: " + tableId));
+            int guests = Math.max(1, table.getGuestCount());
+            tableDao.updateStatus(table.getId(), TableStatus.OCCUPIED, guests);
+        }
     }
 
     @Override
     public void onOrderCompleted(Order order) {
         Objects.requireNonNull(order, "Order must not be null");
-        if (order.getTableId() == null || hasOtherOpenOrder(order)) {
-            return;
-        }
-        if (!tableDao.updateStatus(order.getTableId(), TableStatus.CLEANING, 0)) {
-            throw new IllegalStateException("Table not found: " + order.getTableId());
+        for (int tableId : order.getTableIds()) {
+            if (hasOtherOpenOrder(order, tableId)) continue;
+            if (!tableDao.updateStatus(tableId, TableStatus.CLEANING, 0)) {
+                throw new IllegalStateException("Table not found: " + tableId);
+            }
         }
     }
 
-    private boolean hasOtherOpenOrder(Order order) {
+    private boolean hasOtherOpenOrder(Order order, int tableId) {
         if (orderDao == null) {
             return false;
         }
-        return orderDao.findByTableId(order.getTableId()).stream()
+        return orderDao.findByTableId(tableId).stream()
                 .filter(other -> !Objects.equals(other.getOrderCode(), order.getOrderCode()))
                 .anyMatch(other -> other.getStatus() != OrderStatus.COMPLETED
                         && other.getStatus() != OrderStatus.CANCELLED);

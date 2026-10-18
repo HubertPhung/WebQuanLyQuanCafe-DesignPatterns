@@ -26,13 +26,14 @@ public class InMemoryTableDao implements ITableDao {
     @Override
     public List<Table> findAll() {
         return db.getTables().values().stream()
+                .filter(table -> !table.isArchived())
                 .sorted(Comparator.comparingInt(Table::getId))
                 .collect(Collectors.toList());
     }
 
     @Override
     public Optional<Table> findById(int id) {
-        return Optional.ofNullable(db.getTables().get(id));
+        return Optional.ofNullable(db.getTables().get(id)).filter(table -> !table.isArchived());
     }
 
     @Override
@@ -40,6 +41,7 @@ public class InMemoryTableDao implements ITableDao {
         if (zone == null) return new ArrayList<>();
         return db.getTables().values().stream()
                 .filter(t -> zone.equalsIgnoreCase(t.getZone()))
+                .filter(table -> !table.isArchived())
                 .sorted(Comparator.comparingInt(Table::getId))
                 .collect(Collectors.toList());
     }
@@ -49,6 +51,7 @@ public class InMemoryTableDao implements ITableDao {
         if (status == null) return new ArrayList<>();
         return db.getTables().values().stream()
                 .filter(t -> t.getStatus() == status)
+                .filter(table -> !table.isArchived())
                 .sorted(Comparator.comparingInt(Table::getId))
                 .collect(Collectors.toList());
     }
@@ -63,7 +66,7 @@ public class InMemoryTableDao implements ITableDao {
     @Override
     public boolean updateStatus(int id, TableStatus status, int guestCount) {
         Table table = db.getTables().get(id);
-        if (table == null) return false;
+        if (table == null || table.isArchived()) return false;
         table.setStatus(status);
         table.setGuestCount(guestCount);
         return true;
@@ -72,6 +75,16 @@ public class InMemoryTableDao implements ITableDao {
     @Override
     public boolean deleteById(int id) {
         return db.getTables().remove(id) != null;
+    }
+
+    @Override
+    public boolean archiveById(int id) {
+        return findById(id).map(table -> { table.setArchived(true); return true; }).orElse(false);
+    }
+
+    @Override
+    public int nextId() {
+        return db.getTables().keySet().stream().mapToInt(Integer::intValue).max().orElse(0) + 1;
     }
 }
 

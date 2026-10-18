@@ -24,7 +24,7 @@ public final class SystemConfigManager implements Serializable {
     public static final int DEFAULT_LOYALTY_RATE_VND = 10000;
     public static final int DEFAULT_POINT_REDEEM_VND = 1000;
     public static final int DEFAULT_MAX_RESERVATION_GUESTS = 20;
-    public static final int DEFAULT_AUTO_CANCEL_MINUTES = 30;
+    public static final int DEFAULT_AUTO_CANCEL_MINUTES = 15;
     public static final LocalTime DEFAULT_OPENING_TIME = LocalTime.of(7, 0);
     public static final LocalTime DEFAULT_CLOSING_TIME = LocalTime.of(22, 0);
     private static final ZoneId CAFE_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");

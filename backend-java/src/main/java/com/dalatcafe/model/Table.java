@@ -14,6 +14,14 @@ public class Table implements Serializable {
     private String name;
     private int seats;
     private String zone;
+    private String imageUrl;
+    private boolean archived;
+
+    public boolean isArchived() { return archived; }
+    public void setArchived(boolean archived) { this.archived = archived; }
+
+    public String getImageUrl() { return imageUrl; }
+    public void setImageUrl(String imageUrl) { this.imageUrl = imageUrl; }
     private TableStatus status;
     private int guestCount;
     private Instant occupiedSince;

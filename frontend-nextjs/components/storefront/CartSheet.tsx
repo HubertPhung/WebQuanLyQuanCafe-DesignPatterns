@@ -13,10 +13,12 @@ import {
   X,
   CreditCard,
   Sparkles,
+  CalendarCheck,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Cart, Money } from '@/lib/shopify'
 import { Button } from '@/components/ui/button'
+import { useReservationStore } from '@/lib/store/reservation-store'
 import {
   Sheet,
   SheetContent,
@@ -309,6 +311,26 @@ export function CartSheet({
               >
                 <span>Tiến hành đặt hàng</span>
                 <ArrowRight className="size-4" />
+              </Button>
+
+              {/* Secondary Action: Đặt bàn tại chỗ với các món đã chọn */}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setIsOpen(false)
+                  const preOrders = lineItems.map((line, idx) => ({
+                    id: idx + 1,
+                    title: line.merchandise.product.title,
+                    quantity: line.quantity,
+                    price: Number(line.merchandise.price.amount) || 0,
+                  }))
+                  useReservationStore.getState().openReservation(preOrders)
+                }}
+                className="w-full h-11 rounded-xl border-[#B4703F]/40 bg-amber-50/50 hover:bg-amber-100/70 text-[#3E2723] font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all shadow-2xs"
+              >
+                <CalendarCheck className="size-4 text-[#B45309]" />
+                <span>Đặt bàn tại chỗ (Kèm {cart?.totalQuantity ?? 0} món đã chọn)</span>
               </Button>
 
               {/* Secondary CTA: Xem giỏ hàng */}

@@ -20,7 +20,7 @@ public class JdbcOrderDao implements IOrderDao {
     @Override
     public List<Order> findAll() {
         List<Order> list = new ArrayList<>();
-        String sql = "SELECT id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items FROM orders ORDER BY created_at DESC";
+        String sql = "SELECT id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items, table_ids FROM orders ORDER BY created_at DESC";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
@@ -35,7 +35,7 @@ public class JdbcOrderDao implements IOrderDao {
 
     @Override
     public Optional<Order> findById(int id) {
-        String sql = "SELECT id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items FROM orders WHERE id = ?";
+        String sql = "SELECT id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items, table_ids FROM orders WHERE id = ?";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, id);
@@ -53,7 +53,7 @@ public class JdbcOrderDao implements IOrderDao {
     @Override
     public Optional<Order> findByOrderCode(String orderCode) {
         if (orderCode == null) return Optional.empty();
-        String sql = "SELECT id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items FROM orders WHERE LOWER(order_code) = LOWER(?)";
+        String sql = "SELECT id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items, table_ids FROM orders WHERE LOWER(order_code) = LOWER(?)";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, orderCode);
@@ -72,7 +72,7 @@ public class JdbcOrderDao implements IOrderDao {
     public List<Order> findByStatus(OrderStatus status) {
         List<Order> list = new ArrayList<>();
         if (status == null) return list;
-        String sql = "SELECT id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items FROM orders WHERE UPPER(status) = ? ORDER BY created_at DESC";
+        String sql = "SELECT id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items, table_ids FROM orders WHERE UPPER(status) = ? ORDER BY created_at DESC";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, status.name());
@@ -90,10 +90,11 @@ public class JdbcOrderDao implements IOrderDao {
     @Override
     public List<Order> findByTableId(int tableId) {
         List<Order> list = new ArrayList<>();
-        String sql = "SELECT id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items FROM orders WHERE table_id = ? ORDER BY created_at DESC";
+        String sql = "SELECT id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items, table_ids FROM orders WHERE (table_id = ? OR table_ids @> CAST(? AS JSONB)) ORDER BY created_at DESC";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, tableId);
+            ps.setString(2, JsonColumns.fromIds(List.of(tableId)));
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     list.add(mapResultSetToOrder(rs));
@@ -110,8 +111,8 @@ public class JdbcOrderDao implements IOrderDao {
         if (order == null) return false;
         if (order.getId() != null && order.getId() > 0) {
             String sql = """
-                INSERT INTO orders (id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB))
+                INSERT INTO orders (id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items, table_ids)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB), CAST(? AS JSONB))
                 ON CONFLICT (id) DO UPDATE SET
                     order_code = EXCLUDED.order_code,
                     customer = EXCLUDED.customer,
@@ -126,7 +127,7 @@ public class JdbcOrderDao implements IOrderDao {
                     status = EXCLUDED.status,
                     note = EXCLUDED.note,
                     completed_at = EXCLUDED.completed_at,
-                    items = EXCLUDED.items
+                    items = EXCLUDED.items, table_ids = EXCLUDED.table_ids
             """;
             try (Connection conn = JdbcDatabase.getConnection();
                  PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -138,8 +139,8 @@ public class JdbcOrderDao implements IOrderDao {
             }
         } else {
             String sql = """
-                INSERT INTO orders (order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB))
+                INSERT INTO orders (order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items, table_ids)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB), CAST(? AS JSONB))
             """;
             try (Connection conn = JdbcDatabase.getConnection();
                  PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
@@ -165,6 +166,7 @@ public class JdbcOrderDao implements IOrderDao {
                 ps.setTimestamp(13, Timestamp.from(order.getCreatedAt() != null ? order.getCreatedAt() : Instant.now()));
                 ps.setTimestamp(14, order.getCompletedAt() != null ? Timestamp.from(order.getCompletedAt()) : null);
                 ps.setString(15, JsonColumns.fromItems(order.getItems()));
+                ps.setString(16, JsonColumns.fromIds(order.getTableIds()));
 
                 int rows = ps.executeUpdate();
                 if (rows > 0) {
@@ -213,6 +215,7 @@ public class JdbcOrderDao implements IOrderDao {
         ps.setTimestamp(14, Timestamp.from(order.getCreatedAt() != null ? order.getCreatedAt() : Instant.now()));
         ps.setTimestamp(15, order.getCompletedAt() != null ? Timestamp.from(order.getCompletedAt()) : null);
         ps.setString(16, JsonColumns.fromItems(order.getItems()));
+        ps.setString(17, JsonColumns.fromIds(order.getTableIds()));
     }
 
     @Override
@@ -260,6 +263,7 @@ public class JdbcOrderDao implements IOrderDao {
 
     private Order mapResultSetToOrder(ResultSet rs) throws SQLException {
         Order order = new Order();
+        order.setTableIds(JsonColumns.toIds(rs.getString("table_ids")));
         order.setId(rs.getInt("id"));
         order.setOrderCode(rs.getString("order_code"));
         order.setCustomer(rs.getString("customer"));
@@ -318,6 +322,38 @@ public class JdbcOrderDao implements IOrderDao {
             order.setCompletedAt(completed.toInstant());
         }
         return order;
+    }
+
+    @Override
+    public boolean markPaidTogether(List<Integer> ids, PaymentMethod method, java.util.function.BooleanSupplier payment) {
+        if (ids.isEmpty() || ids.stream().distinct().count() != ids.size()) return false;
+        try (Connection connection = JdbcDatabase.getConnection()) {
+            connection.setAutoCommit(false);
+            try (PreparedStatement lock = connection.prepareStatement("SELECT payment_status, status FROM orders WHERE id = ? FOR UPDATE")) {
+                for (int id : ids.stream().sorted().toList()) {
+                    lock.setInt(1, id);
+                    try (ResultSet row = lock.executeQuery()) {
+                        if (!row.next() || !"UNPAID".equalsIgnoreCase(row.getString(1)) || "CANCELLED".equalsIgnoreCase(row.getString(2))) {
+                            connection.rollback(); return false;
+                        }
+                    }
+                }
+                if (!payment.getAsBoolean()) { connection.rollback(); return false; }
+            } catch (SQLException | RuntimeException error) { connection.rollback(); throw error; }
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "UPDATE orders SET payment_status = 'PAID', payment_method = ? WHERE id = ? AND UPPER(payment_status) = 'UNPAID' AND UPPER(status) <> 'CANCELLED'")) {
+                for (int id : ids.stream().sorted().toList()) {
+                    statement.setString(1, method.name());
+                    statement.setInt(2, id);
+                    if (statement.executeUpdate() != 1) { connection.rollback(); return false; }
+                }
+                connection.commit();
+                return true;
+            } catch (SQLException error) { connection.rollback(); throw error; }
+        } catch (SQLException error) {
+            LOGGER.log(Level.SEVERE, "Could not settle grouped orders", error);
+            return false;
+        }
     }
 }
 

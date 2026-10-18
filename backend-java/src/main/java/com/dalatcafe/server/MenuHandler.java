@@ -92,6 +92,7 @@ public class MenuHandler extends ApiHandler {
         Double change = num(body, "change");
         Double stockQty = num(body, "stockQty");
         boolean hasSwitch = body.get("inStock") != null;
+        boolean inStock = bool(body, "inStock", item.isInStock());
         if (change == null && stockQty == null && !hasSwitch) {
             throw ApiException.badRequest("Provide at least one of: inStock, change, stockQty");
         }
@@ -117,7 +118,7 @@ public class MenuHandler extends ApiHandler {
             }
         }
         if (hasSwitch) {
-            menuDao.toggleInStock(id, bool(body, "inStock", item.isInStock()));
+            menuDao.toggleInStock(id, inStock);
         }
         MenuItem updated = menuDao.findById(id).orElseThrow(() -> ApiException.notFound("Menu item not found: " + id));
         sendOk(exchange, 200, toJson(updated), "Stock updated");

@@ -232,6 +232,12 @@ class AuthTest {
         HttpResponse<String> placed = call("POST", "/api/checkout", null, checkout, "X-Service-Key", SERVICE_KEY);
         assertEquals(200, placed.statusCode(), placed.body());
 
+        String welcomeCheckout = checkout.replace("\"customer\":", "\"voucherCode\":\"WELCOME10\",\"customer\":");
+        HttpResponse<String> welcome = call("POST", "/api/checkout", null, welcomeCheckout, "X-Service-Key", SERVICE_KEY);
+        assertEquals(200, welcome.statusCode(), welcome.body());
+        assertEquals(((Number) data(placed).get("finalTotal")).doubleValue() * 0.9,
+                ((Number) data(welcome).get("finalTotal")).doubleValue(), 0.01);
+
         String sync = "{\"orders\":[{\"orderCode\":\"AC-SVC0-001\",\"customer\":\"Khach COD\",\"orderType\":\"pickup\","
                 + "\"paymentMethod\":\"cash\",\"paid\":false,\"status\":\"pending\",\"createdAt\":\"2026-10-18T02:00:00Z\","
                 + "\"total\":48600,\"lines\":[{\"menuItemId\":1,\"name\":\"Ca phe Muoi\",\"qty\":1,\"price\":45000}]}]}";

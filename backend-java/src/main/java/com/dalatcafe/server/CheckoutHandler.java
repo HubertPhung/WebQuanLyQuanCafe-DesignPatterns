@@ -61,6 +61,10 @@ public class CheckoutHandler extends ApiHandler {
             throw ApiException.notFound("Unknown checkout resource");
         }
         Map<String, Object> body = readJsonBody(exchange);
+        if (VoucherCatalog.WELCOME10.equalsIgnoreCase(str(body, "voucherCode"))
+                && !Boolean.TRUE.equals(exchange.getAttribute(SimpleAuthFilter.STOREFRONT_SERVICE_ATTRIBUTE))) {
+            throw new ApiException(400, "INVALID_VOUCHER", "WELCOME10 chỉ dùng cho đơn online đầu tiên qua cửa hàng.");
+        }
         if (!databaseHealthy.getAsBoolean()) {
             throw new ApiException(503, "DATABASE_UNAVAILABLE",
                     "The primary database is unavailable; payment was not taken. Please retry.");
@@ -311,6 +315,7 @@ public class CheckoutHandler extends ApiHandler {
         data.put("discountAmount", order.getDiscountAmount());
         data.put("vatAmount", order.getVatAmount());
         data.put("finalTotal", order.getTotal());
+        data.put("shippingFee", order.getShippingFee());
         double change = method == PaymentMethod.CASH && tendered != null
                 ? Math.max(0, tendered - order.getTotal()) : 0;
         data.put("changeDue", change);

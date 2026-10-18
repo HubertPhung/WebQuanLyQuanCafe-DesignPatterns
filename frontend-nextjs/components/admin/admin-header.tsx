@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Bell, Check, ChevronsUpDown, Coffee, LogOut, Search, Store, UserCheck } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -45,6 +46,7 @@ export function AdminHeader({
   user,
 }: HeaderProps) {
   const router = useRouter()
+  const [branch, setBranch] = useState('123 Phan Đình Phùng')
   const notificationCount = lowStock.length + readyOrders.length
 
   return (
@@ -58,7 +60,7 @@ export function AdminHeader({
           className="hidden sm:flex h-10 rounded-lg px-3.5 text-xs md:text-sm font-semibold border border-stone-200/80 bg-white hover:bg-stone-50 gap-2 items-center cursor-pointer transition-colors shadow-2xs whitespace-nowrap min-w-fit flex-shrink-0"
         >
           <Store className="size-4 text-[#5A3E2B]" />
-          <span className="font-semibold tracking-tight text-stone-800 whitespace-nowrap">Chi nhánh 1 · Trung tâm</span>
+          <span className="font-semibold tracking-tight text-stone-800 whitespace-nowrap">{branch}</span>
           <ChevronsUpDown className="size-3.5 text-stone-400" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-64 p-1.5 rounded-xl bg-white border-stone-200 text-stone-900 shadow-xl">
@@ -66,17 +68,13 @@ export function AdminHeader({
             <DropdownMenuLabel className="text-xs font-bold uppercase tracking-wider text-stone-500 px-3 py-2 whitespace-nowrap">
               Chi nhánh cửa hàng
             </DropdownMenuLabel>
-            <DropdownMenuItem className="h-10 rounded-lg px-3 text-sm font-medium hover:bg-stone-100 text-stone-900 cursor-pointer whitespace-nowrap">
-              <Store className="size-4 text-[#5A3E2B]" />
-              Chi nhánh 1 · Trung tâm
-              <Check className="ml-auto size-4 text-[#5A3E2B]" />
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
-          <DropdownMenuSeparator className="bg-stone-100" />
-          <DropdownMenuGroup>
-            <DropdownMenuItem disabled className="h-9 rounded-lg px-3 text-xs text-stone-400 whitespace-nowrap">
-              Chi nhánh 2 · Sân bay (Đang nâng cấp)
-            </DropdownMenuItem>
+            {['123 Phan Đình Phùng', '456 Bùi Thị Xuân'].map((name) => (
+              <DropdownMenuItem key={name} onClick={() => setBranch(name)} className="h-10 rounded-lg px-3 text-sm font-medium hover:bg-stone-100 text-stone-900 cursor-pointer whitespace-nowrap">
+                <Store className="size-4 text-[#5A3E2B]" />
+                {name}
+                {branch === name && <Check className="ml-auto size-4 text-[#5A3E2B]" />}
+              </DropdownMenuItem>
+            ))}
           </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
