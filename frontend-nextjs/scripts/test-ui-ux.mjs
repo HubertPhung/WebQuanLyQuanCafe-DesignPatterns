@@ -364,6 +364,21 @@ async function runAdminUITests() {
       recordTest(route.id, route.title, 'Admin UI', 'FAIL', err.message)
     }
   }
+
+  // TC-ADM-10: the header has no search box; its bell links each alert to the page that resolves it
+  try {
+    const res = await fetchPage(`${BASE_URL}/admin`, { headers: { Cookie: adminCookie } })
+    const noSearch = !res.body.includes('role="search"') && !res.body.includes('Tìm kiếm nhanh')
+    const bell = res.body.includes('aria-label="Thông báo (')
+    const kitchenLink = res.body.includes('href="/admin/pos?tab=kitchen"')
+    if (res.status === 200 && noSearch && bell && kitchenLink) {
+      recordTest('TC-ADM-10', 'Admin Header Without Search, Bell and Kitchen Link', 'Admin UI', 'PASS', 'No search form; bell and live-order link to the kitchen tab present')
+    } else {
+      recordTest('TC-ADM-10', 'Admin Header Without Search, Bell and Kitchen Link', 'Admin UI', 'FAIL', JSON.stringify({ status: res.status, noSearch, bell, kitchenLink }))
+    }
+  } catch (err) {
+    recordTest('TC-ADM-10', 'Admin Header Without Search, Bell and Kitchen Link', 'Admin UI', 'FAIL', err.message)
+  }
 }
 
 async function runAdminMutationTests() {

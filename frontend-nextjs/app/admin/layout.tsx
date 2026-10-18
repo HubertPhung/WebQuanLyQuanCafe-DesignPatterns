@@ -28,7 +28,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
       <TooltipProvider>
         <SidebarProvider data-admin className="bg-[#F7F5F0] text-stone-900 font-sans antialiased">
-          <AdminSidebar role={session.role} badges={{ orders: header.activeCount }} />
+          <AdminSidebar role={session.role} badges={{ orders: header.activeCount, reservations: header.pendingReservations.length }} />
           <SidebarInset className="min-w-0 relative bg-[#F7F5F0] text-stone-900 overflow-x-hidden">
             {/* Ambient subtle warm coffee glow accents */}
             <div

@@ -192,13 +192,20 @@ export async function getOverview(days = 7) {
   }
 }
 
+// What needs a staff action right now, shown in the header bell and as sidebar badges; each
+// entry links to the page that resolves it.
 export async function getHeaderData() {
-  const active = await getActiveOrders()
+  const [active, { reservations }, pendingSync] = await Promise.all([getActiveOrders(), getReservations(), getPendingSyncCount()])
   return {
     readyOrders: active
       .filter((order) => order.status === 'ready')
       .map((order) => ({ id: order.id, orderCode: order.orderCode, customer: order.customer })),
-    activeCount: active.filter((order) => order.status !== 'ready').length,
+    pendingReservations: reservations
+      .filter((reservation) => reservation.status === 'Chờ xác nhận')
+      .map((reservation) => ({ id: reservation.id, customer: reservation.customer, dateTime: reservation.dateTime, guests: reservation.guests })),
+    pendingSync,
+    // Same count as the kitchen tab: every order the bar has not completed yet.
+    activeCount: active.length,
   }
 }
 

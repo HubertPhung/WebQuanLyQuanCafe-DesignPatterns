@@ -26,7 +26,8 @@ export default async function PosPage({ searchParams }: { searchParams: Promise<
       <PageHeading title="Đơn hàng & POS" description="Gọi món nhanh tại quầy và điều phối quy trình pha chế theo thời gian thực.">
         <OfflineSyncButton pending={pendingSync} />
       </PageHeading>
-      <Tabs defaultValue={tab === 'kitchen' ? 'kitchen' : 'pos'} className="gap-4">
+      {/* Keyed by the tab so a link to ?tab=kitchen switches tabs even when the POS page is already open. */}
+      <Tabs key={tab === 'kitchen' ? 'kitchen' : 'pos'} defaultValue={tab === 'kitchen' ? 'kitchen' : 'pos'} className="gap-4">
         <TabsList>
           <TabsTrigger value="pos">
             Máy bán hàng POS <span className="sr-only">Point of sale</span>

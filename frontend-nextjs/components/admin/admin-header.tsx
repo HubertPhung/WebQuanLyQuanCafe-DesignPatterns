@@ -3,10 +3,9 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Bell, Check, ChevronsUpDown, Coffee, LogOut, Search, Store, UserCheck } from 'lucide-react'
+import { Bell, CalendarClock, Check, ChevronsUpDown, Coffee, LogOut, RefreshCw, Store, UserCheck } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,6 +23,8 @@ import { roleLabels, type Role } from '@/lib/auth/roles'
 
 type HeaderProps = {
   readyOrders?: { id: number; orderCode: string; customer: string }[]
+  pendingReservations?: { id: string; customer: string; dateTime: string; guests: number }[]
+  pendingSync?: number
   activeCount?: number
   user: { name: string; email: string; role: Role }
 }
@@ -40,12 +41,14 @@ function initials(name: string) {
 
 export function AdminHeader({
   readyOrders = [],
+  pendingReservations = [],
+  pendingSync = 0,
   activeCount = 0,
   user,
 }: HeaderProps) {
   const router = useRouter()
   const [branch, setBranch] = useState('123 Phan Đình Phùng')
-  const notificationCount = readyOrders.length
+  const notificationCount = readyOrders.length + pendingReservations.length + (pendingSync > 0 ? 1 : 0)
 
   return (
     <header className="sticky top-0 z-20 flex h-20 shrink-0 items-center gap-3 border-b border-stone-200/50 bg-[#F7F5F0]/90 backdrop-blur-md px-4 md:px-8 text-stone-900 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
@@ -77,29 +80,8 @@ export function AdminHeader({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Search Input Bar */}
-      <form
-        role="search"
-        className="ml-auto w-full max-w-md min-w-0 md:ml-4"
-        onSubmit={(event) => {
-          event.preventDefault()
-          const query = new FormData(event.currentTarget).get('q')?.toString().trim() ?? ''
-          router.push(query ? `/admin/menu?q=${encodeURIComponent(query)}` : '/admin/menu')
-        }}
-      >
-        <div className="relative flex items-center min-w-0">
-          <Search className="absolute left-3.5 size-4 text-stone-400 pointer-events-none" />
-          <input
-            name="q"
-            className="w-full h-10 pl-10 pr-4 rounded-lg border border-stone-200/80 bg-white text-xs md:text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:border-[#5A3E2B] focus:ring-1 focus:ring-[#5A3E2B]/30 font-sans shadow-2xs transition-colors truncate"
-            placeholder="Tìm kiếm nhanh món, đơn, bàn..."
-            aria-label="Tìm kiếm món, kho, đơn hàng"
-          />
-        </div>
-      </form>
-
       {/* Actions: Live Order Button, Notification, Admin Profile */}
-      <div className="flex items-center gap-2.5 flex-shrink-0 md:ml-auto">
+      <div className="ml-auto flex items-center gap-2.5 flex-shrink-0">
         <Link
           href="/admin/pos?tab=kitchen"
           className="hidden md:flex h-10 items-center rounded-lg px-3 text-xs font-semibold border border-stone-200/80 bg-white hover:bg-stone-50 gap-2 transition-colors cursor-pointer text-stone-800 shadow-2xs whitespace-nowrap min-w-fit flex-shrink-0"
@@ -128,7 +110,7 @@ export function AdminHeader({
                 <span>Thông báo trực tiếp</span>
                 <Badge className="bg-[#5A3E2B] text-white text-[10px] whitespace-nowrap">{notificationCount} mới</Badge>
               </DropdownMenuLabel>
-              {readyOrders.length === 0 && (
+              {notificationCount === 0 && (
                 <DropdownMenuItem disabled className="px-3 py-3 text-xs text-stone-400 text-center whitespace-nowrap">
                   Không có thông báo mới nào
                 </DropdownMenuItem>
@@ -145,6 +127,27 @@ export function AdminHeader({
                   </span>
                 </DropdownMenuItem>
               ))}
+              {pendingReservations.map((reservation) => (
+                <DropdownMenuItem
+                  key={reservation.id}
+                  className="h-10 rounded-lg px-3 gap-2.5 hover:bg-stone-100 cursor-pointer text-xs whitespace-nowrap"
+                  onClick={() => router.push('/admin/reservations')}
+                >
+                  <CalendarClock className="size-4 text-sky-600 shrink-0" />
+                  <span className="truncate font-medium text-stone-800">
+                    Đặt bàn chờ xác nhận: {reservation.customer} · {reservation.guests} khách · {reservation.dateTime}
+                  </span>
+                </DropdownMenuItem>
+              ))}
+              {pendingSync > 0 && (
+                <DropdownMenuItem
+                  className="h-10 rounded-lg px-3 gap-2.5 hover:bg-stone-100 cursor-pointer text-xs whitespace-nowrap"
+                  onClick={() => router.push('/admin/pos')}
+                >
+                  <RefreshCw className="size-4 text-rose-600 shrink-0" />
+                  <span className="truncate font-medium text-stone-800">{pendingSync} đơn offline chờ đồng bộ sang Java</span>
+                </DropdownMenuItem>
+              )}
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
