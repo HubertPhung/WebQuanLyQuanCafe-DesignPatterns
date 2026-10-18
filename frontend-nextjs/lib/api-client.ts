@@ -85,7 +85,7 @@ async function request<T>(path: string, init: CallOptions): Promise<JavaResult<T
   return { ok: false, unreachable: false, status: response.status, code, error }
 }
 
-export type JavaMenuItem = { id: number; name: string; kind: string; sellPrice: number; inStock: boolean; stockQty: number }
+export type JavaMenuItem = { id: number; name: string; kind: string; sellPrice: number; inStock: boolean }
 
 export function fetchMenu(): Promise<JavaResult<JavaMenuItem[]>> {
   return request<JavaMenuItem[]>('/api/menu', { method: 'GET' })
@@ -253,7 +253,8 @@ export function payJavaTables(input: GroupPaymentInput): Promise<JavaResult<Grou
   return request<GroupPaymentReceipt>('/api/orders/pay-tables', { method: 'POST', body: input })
 }
 
-export type StockPayload = { inStock?: boolean; change?: number; stockQty?: number }
+// Quantities are not tracked: the endpoint only switches an item on or off for sale.
+export type StockPayload = { inStock: boolean }
 
 // PATCH /api/menu/{id}/stock
 export function updateJavaStock(menuItemId: number, payload: StockPayload): Promise<JavaResult<JavaMenuItem>> {
@@ -266,9 +267,7 @@ export type NewJavaMenuItem = {
   kind: string
   sellPrice: number
   costPrice: number
-  stockQty: number
   unit: string
-  lowStockThreshold: number
   recipe?: string
   imageUrl?: string
   variations: { name: string; price: number }[]

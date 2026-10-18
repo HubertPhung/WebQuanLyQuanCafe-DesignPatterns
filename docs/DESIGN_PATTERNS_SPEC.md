@@ -45,7 +45,7 @@
   - KDS: Kanban `Pending → Brewing → Ready → Completed`, cảnh báo đơn trễ quá 10 phút.
   - Sơ đồ 15 bàn.
   - Đặt bàn trước: món đặt trước, xuất CSV.
-  - Kho & thực đơn.
+  - Thực đơn: thêm món, bật / tắt bán (không theo dõi số lượng tồn kho).
   - CRM: 10.000 VNĐ = 1 điểm.
   - Báo cáo doanh thu.
 
@@ -156,7 +156,7 @@ Dự án áp dụng trọn vẹn **9 Design Patterns chuẩn Gang of Four (GoF)*
 | **03** | **Builder** | Creational | Xây dựng từng bước đối tượng Đơn hàng (`Order`) có nhiều trường tùy chọn (bàn, khách, loại đơn, món, thanh toán, giảm giá, ghi chú). | `OrderBuilder`<br>`Order`<br>`OrderItem` | Thao tác lên đơn và thanh toán trên POS (`pos-terminal.tsx`). | Đã cài đặt (#06), `BuilderTest` |
 | **04** | **Decorator** | Structural | Bọc món nước cơ sở để cộng dồn giá tiền và mô tả khi khách chọn thêm Topping (Trân châu, Cheese Foam) hoặc nâng Size L. | `IBeverage`<br>`BaseCoffee`<br>`BeverageDecorator`<br>`LargeSizeDecorator`<br>`CheeseFoamDecorator`<br>`PearlToppingDecorator` | Modal tuỳ biến đồ uống `DrinkMenu.tsx` (Storefront). Chọn Size L / Topping trên POS (`pos-terminal.tsx`), Java tính giá qua Decorator. | Đã cài đặt (#05), `DecoratorTest` |
 | **05** | **Adapter** | Structural | Chuyển đổi Phiếu đặt bàn trước (`Reservation`) sang Đơn hàng POS (`Order`) khi khách đến nhận bàn mà không sửa code cũ. | `IPosOrderTarget`<br>`ReservationToOrderAdapter` | Nút "Sang POS" trong `reservations-management.tsx` gọi `POST /api/reservations/{code}/transfer-pos`. | Đã cài đặt (#10), `AdapterTest` |
-| **06** | **Facade** | Structural | Một lời gọi `checkout(CheckoutRequest)` gom toàn bộ quy trình: tính giá, giảm giá, giữ kho, thanh toán, lưu đơn, phát sự kiện. | `PosCheckoutFacade`<br>`CheckoutRequest`<br>`CheckoutResult` | Nút thanh toán trên POS (`pos-terminal.tsx`) qua `POST /api/checkout`. | Đã cài đặt (#11), `FacadeTest` |
+| **06** | **Facade** | Structural | Một lời gọi `checkout(CheckoutRequest)` gom toàn bộ quy trình: tính giá, giảm giá, kiểm món còn bán, thanh toán, lưu đơn, phát sự kiện. | `PosCheckoutFacade`<br>`CheckoutRequest`<br>`CheckoutResult` | Nút thanh toán trên POS (`pos-terminal.tsx`) qua `POST /api/checkout`. | Đã cài đặt (#11), `FacadeTest` |
 | **07** | **Strategy** | Behavioral | Hoán đổi thuật toán giảm giá (`Phần trăm có trần`, `Số tiền cố định`, `Hạng thành viên`, `Không giảm`) tại thời điểm chạy. | `IDiscountStrategy`<br>`PercentageDiscountStrategy`<br>`FixedAmountDiscountStrategy`<br>`LoyaltyTierDiscountStrategy`<br>`NoDiscountStrategy`<br>`DiscountContext` | Mã giảm giá `WELCOME10` và ưu đãi khách quen khi checkout. | Đã cài đặt (#07), `StrategyTest` |
 | **08** | **Chain of Resp.** | Behavioral | Chuỗi kiểm tra phiếu đặt bàn: Giờ mở cửa ➔ Bàn tồn tại & sức chứa (1–20 khách) ➔ Không trùng lịch bàn. | `ReservationValidatorHandler`<br>`OperatingHoursValidator`<br>`CapacityGuestValidator`<br>`TableAvailabilityValidator`<br>`ReservationValidationChainFactory` | Đặt bàn qua `POST /api/reservations` và màn hình `reservations-management.tsx`. | Đã cài đặt (#09), `ChainTest` |
 | **09** | **Observer** | Behavioral | Khi đơn hàng hoàn tất, tự động cộng điểm thành viên, chuyển bàn sang `Cleaning` và báo bếp gỡ phiếu. | `IOrderObserver`<br>`OrderEventSubject`<br>`LoyaltyPointObserver`<br>`TableStatusSyncObserver`<br>`KitchenNotificationObserver` | Sơ đồ bàn `floor-plan.tsx`, KDS và xếp hạng khách hàng `customers/page.tsx`. | Đã cài đặt (#08), `ObserverTest` |
@@ -713,12 +713,11 @@ public class ReservationToOrderAdapter implements IPosOrderTarget {
   Nếu để Controller hoặc Handler xử lý trực tiếp toàn bộ 7 bước trên, mã nguồn sẽ bị phân mảnh, liên kết chặt (High Coupling) và cực kỳ khó kiểm thử.
 - **Giải pháp kỹ thuật (Pure Java OOP):**  
   Áp dụng **Facade Pattern**. `PosCheckoutFacade` cung cấp một lời gọi duy nhất `checkout(CheckoutRequest)` (được đồng bộ hóa) và trả về `CheckoutResult` thay vì ném ngoại lệ cho lỗi nghiệp vụ. Bên trong, Facade điều phối năm pattern khác theo thứ tự đảm bảo nhất quán:
-  1. Tra menu qua `IMenuDao`, kiểm tra món tồn tại, còn bán và đủ tồn kho (`NOT_FOUND` / `OUT_OF_STOCK`).
+  1. Tra menu qua `IMenuDao`, kiểm tra món tồn tại và đang bật bán (`inStock`) (`NOT_FOUND` / `OUT_OF_STOCK`). Hệ thống không theo dõi số lượng tồn kho, nên không có bước giữ hay hoàn kho.
   2. Bọc từng món bằng **Decorator** theo `Customization` (`SIZE_L`, `CHEESE_FOAM`, `WHITE_PEARL`), dựng đơn bằng **Builder**, áp giảm giá bằng **Strategy** (`DiscountContext`).
-  3. Giữ chỗ tồn kho bằng `IMenuDao.deductStockIfAvailable` (chỉ trừ khi còn đủ, nguyên tử ở DAO), nên một lần bán khác xen vào sau bước 1 làm checkout trả `OUT_OF_STOCK` thay vì bán vượt kho; nếu một món thất bại thì hoàn lại đúng phần đã trừ.
-  4. Tạo bộ xử lý qua **Factory** và thanh toán; đơn được giảm còn 0 VNĐ thì không thu tiền. Thanh toán lỗi → hoàn tồn kho, `PAYMENT_FAILED`.
-  5. Đánh dấu `PAID` với trạng thái `PENDING` (đơn chờ quầy pha chế) và lưu qua `IOrderDao`; lưu lỗi → hoàn tồn kho, `PERSISTENCE_FAILED` kèm mã giao dịch cần hủy.
-  6. Phát sự kiện `notifyOrderPaid` cho các **Observer**; lỗi của observer chỉ thành cảnh báo trong `CheckoutResult.getWarnings()`, không hoàn tác đơn đã lưu. Sự kiện hoàn tất (`notifyOrderCompleted`) do `OrderHandler` phát khi KDS chuyển đơn sang `completed`.
+  3. Tạo bộ xử lý qua **Factory** và thanh toán; đơn được giảm còn 0 VNĐ thì không thu tiền. Thanh toán lỗi → `PAYMENT_FAILED`, không lưu gì.
+  4. Đánh dấu `PAID` với trạng thái `PENDING` (đơn chờ quầy pha chế) và lưu qua `IOrderDao`; lưu lỗi → `PERSISTENCE_FAILED` kèm mã giao dịch cần hủy.
+  5. Phát sự kiện `notifyOrderPaid` cho các **Observer**; lỗi của observer chỉ thành cảnh báo trong `CheckoutResult.getWarnings()`, không hoàn tác đơn đã lưu. Sự kiện hoàn tất (`notifyOrderCompleted`) do `OrderHandler` phát khi KDS chuyển đơn sang `completed`.
 
   `CheckoutHandler` (`POST /api/checkout`) là client: chuyển JSON thành `CheckoutRequest`, gọi Facade và ánh xạ `FailureType` sang mã HTTP (404, 409, 400, 503). Khi có `useLoyaltyPoints`, nó kiểm tra số dư điểm, rồi giữ (trừ) số điểm đó **trước** khi gọi Facade, để không bao giờ giảm giá cho số điểm không trừ được. Strategy tính giảm giá trên bản chụp số dư lúc đọc. Sau khi Facade chạy xong, số điểm chưa dùng được hoàn lại qua `ICustomerDao.restorePoints`; checkout thất bại thì hoàn đủ.
 - **Bảng ánh xạ thành phần (Participants Mapping):**
@@ -741,9 +740,8 @@ classDiagram
         +getEventSubject() OrderEventSubject
         +checkout(CheckoutRequest request) CheckoutResult
         -buildOrder(CheckoutRequest request, Map menu) Order
+        -resolveMenu(CheckoutRequest request, Map menu) CheckoutResult
         -decorate(MenuItem item, CheckoutLine line) IBeverage
-        -reserveStock(Map demand) boolean
-        -releaseStock(Map demand)
     }
 
     class CheckoutRequest {
@@ -796,16 +794,12 @@ classDiagram
 public synchronized CheckoutResult checkout(CheckoutRequest request) {
     Objects.requireNonNull(request, "Request must not be null");
     Map<Integer, MenuItem> menu = new LinkedHashMap<>();
-    Map<Integer, Integer> demand = new LinkedHashMap<>();
-    CheckoutResult problem = resolveMenu(request, menu, demand);
+    CheckoutResult problem = resolveMenu(request, menu);
     if (problem != null) {
         return problem;
     }
     // Steps 1-3: decorate drinks, build the order, apply the discount.
     Order order = buildOrder(request, menu);
-    if (!reserveStock(demand)) {
-        return CheckoutResult.failure(CheckoutResult.FailureType.OUT_OF_STOCK, "Could not reserve inventory", null);
-    }
     // Step 4: payment.
     PaymentResult payment;
     try {
@@ -816,11 +810,10 @@ public synchronized CheckoutResult checkout(CheckoutRequest request) {
             payment = processor.processPayment(order.getTotal(), order.getOrderCode());
         }
     } catch (RuntimeException e) {
-        releaseStock(demand);
         return CheckoutResult.failure(CheckoutResult.FailureType.PAYMENT_FAILED, "Payment error: " + e.getMessage(), null);
     }
-    // ... payment declined -> releaseStock + PAYMENT_FAILED
-    // Step 5: persist the paid order; it waits on the KDS (save failure -> releaseStock + PERSISTENCE_FAILED).
+    // ... payment declined -> PAYMENT_FAILED
+    // Step 5: persist the paid order; it waits on the KDS (save failure -> PERSISTENCE_FAILED).
     order.setPaymentStatus(PaymentStatus.PAID);
     order.setStatus(OrderStatus.PENDING);
     // ...
@@ -834,7 +827,7 @@ public synchronized CheckoutResult checkout(CheckoutRequest request) {
     return CheckoutResult.success(order, payment, warnings);
 }
 ```
-- **Kiểm thử:** `FacadeTest` (toàn bộ quy trình bằng một lời gọi, cộng dồn tùy chọn, giảm giá không làm tổng âm, thiếu tồn kho không gây tác dụng phụ, kho bị bán bớt sau bước kiểm tra không bị bán vượt, mã đơn trùng được sinh lại trước khi thu tiền, dòng đơn giữ `menuItemId`, món không tồn tại/hết hàng, hoàn kho khi lưu lỗi, lỗi observer không hoàn tác đơn, kiểm tra cấu trúc yêu cầu).
+- **Kiểm thử:** `FacadeTest` (toàn bộ quy trình bằng một lời gọi, cộng dồn tùy chọn, giảm giá không làm tổng âm, số lượng lớn vẫn bán được khi món đang bật, mã đơn trùng được sinh lại trước khi thu tiền, dòng đơn giữ `menuItemId`, món không tồn tại/đang tắt bán (không thu tiền), báo lỗi khi lưu đơn thất bại, lỗi observer không hoàn tác đơn, kiểm tra cấu trúc yêu cầu).
 
 ---
 

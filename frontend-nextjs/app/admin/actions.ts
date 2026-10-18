@@ -64,7 +64,6 @@ import {
   markMockOrderPaid,
   updateMockTableStatus,
   setMockItemInStock,
-  changeMockStock,
   cashTenderError,
   createMockOrder,
   createMockMenuItem,
@@ -75,7 +74,6 @@ import {
   getMockOrdersByCode,
   updateMockReservationStatus,
   reservationStatuses,
-  shortStockError,
   type ReservationStatusLabel,
   transferMockReservation,
   type ExternalOrderInput,
@@ -234,7 +232,7 @@ type NewOrderInput = {
   tenderedAmount?: number
 }
 
-type LocalMenuItem = Pick<MenuItem, 'id' | 'name' | 'kind' | 'inStock' | 'variations' | 'sellPrice' | 'unit' | 'stockQty'>
+type LocalMenuItem = Pick<MenuItem, 'id' | 'name' | 'kind' | 'inStock' | 'variations' | 'sellPrice'>
 
 type CheckoutOutcome =
   | { kind: 'accepted'; receipt: CheckoutReceipt }
@@ -315,8 +313,6 @@ function newLocalOrderCode() {
   return `AC-${stamp}-${random}`
 }
 
-class ShortStock extends Error {}
-
 async function recordOrderLocally(input: LocalOrderInput, quantities: Map<number, number>): Promise<ActionResult> {
   await ensureOrderTableGroups()
   if (!isDbConfigured || !db) {
@@ -366,15 +362,6 @@ async function recordOrderLocally(input: LocalOrderInput, quantities: Map<number
         paymentStatus: input.paid ? 'paid' : 'unpaid',
         status: 'pending',
       })
-      for (const [id, qty] of quantities) {
-        // Java sold it from its own stock, so the copy follows; otherwise never sell what is not there.
-        const updated = await tx
-          .update(adminMenuItems)
-          .set({ stockQty: sql`greatest(${adminMenuItems.stockQty} - ${qty}, 0)` })
-          .where(input.javaSold ? eq(adminMenuItems.id, id) : sql`${adminMenuItems.id} = ${id} and ${adminMenuItems.stockQty} >= ${qty}`)
-          .returning({ id: adminMenuItems.id })
-        if (updated.length === 0) throw new ShortStock(shortStockError(menu, quantities) ?? 'One of the items just sold out.')
-      }
       if (input.tableId) {
         await tx
           .update(adminTables)
@@ -383,9 +370,7 @@ async function recordOrderLocally(input: LocalOrderInput, quantities: Map<number
       }
     })
     return { ok: true, message: `Order sent to the bar for ${customer}.` }
-  } catch (error) {
-    // Out of stock is an answer, not an outage: the in-memory store must not take the order instead.
-    if (error instanceof ShortStock) return { ok: false, error: error.message }
+  } catch {
     const res = createMockOrder(input)
     return res.ok ? { ok: true, message: res.message } : { ok: false, error: res.error ?? 'Failed' }
   }
@@ -443,8 +428,6 @@ export async function createOrder(input: NewOrderInput): Promise<ActionResult> {
       return !item || item.kind !== 'menu' || !item.inStock
     })
     if (unavailable) throw new Error('One of the items is no longer available.')
-    const shortStock = shortStockError(localMenu, quantities)
-    if (shortStock) throw new Error(shortStock)
 
     const member: MemberCheckout = customerPhone ? { customerPhone, useLoyaltyPoints: points || undefined } : {}
     const outcome = await forwardCheckout(order, localMenu, member)
@@ -461,7 +444,6 @@ export async function createOrder(input: NewOrderInput): Promise<ActionResult> {
         ...order,
         orderCode,
         totals: receipt ? { subtotal: receipt.subtotal, total: receipt.finalTotal } : undefined,
-        javaSold: Boolean(receipt),
       },
       quantities,
     )
@@ -581,8 +563,6 @@ export async function placeOnlineOrder(input: OnlineOrderInput): Promise<OnlineO
       return !item || item.kind !== 'menu' || !item.inStock
     })
     if (unavailable) throw new Error('Một món trong giỏ vừa hết, hãy cập nhật giỏ hàng.')
-    const short = localMenu.find((item) => (quantities.get(item.id) ?? 0) > item.stockQty)
-    if (short) throw new Error(`Chỉ còn ${Math.max(0, short.stockQty)} ${short.unit} ${short.name}, hãy giảm số lượng trong giỏ.`)
 
     return await withFirstOnlineOrder<OnlineOrderResult>(session.userId, async ({ isFirstOrder, markPlaced }) => {
       const paid = input.payment !== 'cod'
@@ -616,7 +596,7 @@ export async function placeOnlineOrder(input: OnlineOrderInput): Promise<OnlineO
       }
 
       const orderCode = receipt?.orderCode ?? newLocalOrderCode()
-      const recorded = await recordOrderLocally({ ...order, orderCode, totals, javaSold: Boolean(receipt) }, quantities)
+      const recorded = await recordOrderLocally({ ...order, orderCode, totals }, quantities)
       if (!recorded.ok) return recorded
       markPlaced()
       await saveOrderContact({
@@ -880,44 +860,11 @@ export async function setItemInStock(itemId: number, inStock: boolean): Promise<
   }
 }
 
-// Stock received (positive change) or written off (negative) from the inventory screen. Java
-// refuses a write-off larger than what is left (409); the frontend store follows the same rule.
-export async function adjustStock(itemId: number, change: number): Promise<ActionResult> {
-  try {
-    await assertAdminAccess()
-    if (!Number.isInteger(itemId)) throw new Error('Invalid item.')
-    if (!Number.isFinite(change) || change === 0 || Math.abs(change) > 100000) throw new Error('Enter a quantity between 0 and 100,000.')
-    const amount = Math.round(change * 100) / 100
-    const javaId = await javaMenuIdFor(itemId)
-    if (javaId !== undefined) {
-      const refused = javaRefusal(await updateJavaStock(javaId, { change: amount }))
-      if (refused) return { ok: false, error: refused }
-    }
-    if (!isDbConfigured || !db) {
-      const res = changeMockStock(itemId, amount)
-      refresh()
-      return res.ok ? { ok: true } : { ok: false, error: res.error ?? 'Failed' }
-    }
-    const updated = await db
-      .update(adminMenuItems)
-      .set({ stockQty: sql`${adminMenuItems.stockQty} + ${amount}` })
-      .where(sql`${adminMenuItems.id} = ${itemId} and ${adminMenuItems.stockQty} + ${amount} >= 0`)
-      .returning({ id: adminMenuItems.id })
-    if (updated.length === 0) return { ok: false, error: 'Not enough stock left for that write-off.' }
-    refresh()
-    return { ok: true }
-  } catch (error) {
-    return fail(error)
-  }
-}
-
 type NewItemInput = {
   name: string
   category: string
   kind: 'menu' | 'ingredient'
-  stockQty: number
   unit: string
-  lowStockThreshold: number
   costPrice: number
   sellPrice: number
   recipe: string
@@ -950,9 +897,7 @@ export async function createMenuItem(input: NewItemInput): Promise<ActionResult>
       kind: input.kind === 'ingredient' ? 'ingredient' : 'menu',
       sellPrice: money(input.sellPrice, 'Selling price'),
       costPrice: money(input.costPrice, 'Cost price'),
-      stockQty: money(input.stockQty, 'Stock'),
       unit: input.unit.trim().slice(0, 12) || 'pcs',
-      lowStockThreshold: money(input.lowStockThreshold, 'Low-stock threshold'),
       recipe: input.recipe.trim().slice(0, 1000) || undefined,
       imageUrl: imageUrl || undefined,
       variations,
@@ -963,9 +908,7 @@ export async function createMenuItem(input: NewItemInput): Promise<ActionResult>
       name,
       category,
       kind: input.kind === 'ingredient' ? ('ingredient' as const) : ('menu' as const),
-      stockQty: money(input.stockQty, 'Stock'),
       unit: input.unit.trim().slice(0, 12) || 'pcs',
-      lowStockThreshold: money(input.lowStockThreshold, 'Low-stock threshold'),
       costPrice: money(input.costPrice, 'Cost price'),
       sellPrice: money(input.sellPrice, 'Selling price'),
       recipe: input.recipe.trim().slice(0, 1000) || '',
@@ -984,7 +927,7 @@ export async function createMenuItem(input: NewItemInput): Promise<ActionResult>
           .insert(adminMenuItems)
           .values({
             ...localInput,
-            inStock: input.stockQty > 0,
+            inStock: true,
             recipe: localInput.recipe || null,
             imageUrl: imageUrl || null,
           })
@@ -994,7 +937,7 @@ export async function createMenuItem(input: NewItemInput): Promise<ActionResult>
         localId = createMockMenuItem(localInput).id
       }
     }
-    // Created on both sides: keep the id pair so stock changes and checkouts never rely on the name.
+    // Created on both sides: keep the id pair so on/off switches and checkouts never rely on the name.
     if (remote.ok && localId !== undefined) await linkMenuItem(localId, remote.data.id)
     refresh()
     return { ok: true, message: `${name} added.` }

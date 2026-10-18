@@ -16,25 +16,25 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.util.Optional;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Stock changes against a menu DAO where another counter sells right after the handler reads. */
+/** The stock endpoint only switches an item on or off for sale; quantities are not tracked. */
 class MenuHandlerTest {
     private static final int ITEM_ID = 900;
 
     private final HttpClient client = HttpClient.newHttpClient();
-    private RacingMenuDao menu;
+    private InMemoryMenuDao menu;
     private HttpServer server;
 
     @BeforeEach
     void setUp() throws IOException {
         InMemoryDatabase database = InMemoryDatabase.getInstance();
         database.reset();
-        menu = new RacingMenuDao(database);
-        MenuItem item = new MenuItem(ITEM_ID, "Ca phe sua", "Coffee", 50_000, 20_000, 10);
+        menu = new InMemoryMenuDao(database);
+        MenuItem item = new MenuItem(ITEM_ID, "Ca phe sua", "Coffee", 50_000, 20_000);
         item.setInStock(true);
         menu.save(item);
 
@@ -49,36 +49,30 @@ class MenuHandlerTest {
     }
 
     @Test
-    void writingOffMoreThanIsLeftAfterAConcurrentSaleIsRefused() throws Exception {
-        menu.sellNineOnNextLookup();
+    void switchesAnItemOffAndOnAgain() throws Exception {
+        HttpResponse<String> off = patchStock("{\"inStock\":false}");
+        assertEquals(200, off.statusCode(), off.body());
+        assertFalse(onSale());
+        assertFalse(off.body().contains("stockQty"), "quantities are no longer reported");
 
-        HttpResponse<String> response = patchStock("{\"change\":-3}");
-
-        assertEquals(409, response.statusCode(), response.body());
-        assertEquals(1.0, stock(), "the one unit left is not written off");
-    }
-
-    @Test
-    void settingAnAbsoluteQuantityIsNotRefused() throws Exception {
-        menu.sellNineOnNextLookup();
-
-        HttpResponse<String> response = patchStock("{\"stockQty\":4}");
-
-        assertEquals(200, response.statusCode(), response.body());
+        HttpResponse<String> on = patchStock("{\"inStock\":true}");
+        assertEquals(200, on.statusCode(), on.body());
+        assertTrue(onSale());
     }
 
     @ParameterizedTest
     @ValueSource(strings = {
-            "{\"change\":3,\"inStock\":\"false\"}",
-            "{\"change\":-3,\"inStock\":1}",
-            "{\"stockQty\":4,\"inStock\":{}}"
+            "{}",
+            "{\"change\":-3}",
+            "{\"stockQty\":4}",
+            "{\"inStock\":\"false\"}",
+            "{\"inStock\":1}"
     })
-    void invalidStockSwitchDoesNotChangeInventory(String body) throws Exception {
+    void anythingButAnInStockSwitchIsRefused(String body) throws Exception {
         HttpResponse<String> response = patchStock(body);
 
         assertEquals(400, response.statusCode(), response.body());
-        assertEquals(10.0, stock(), "rejected requests must not change stock");
-        assertEquals(true, menu.findById(ITEM_ID).orElseThrow().isInStock());
+        assertTrue(onSale(), "rejected requests must not switch the item off");
     }
 
     private HttpResponse<String> patchStock(String body) throws Exception {
@@ -90,36 +84,7 @@ class MenuHandlerTest {
         return client.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
-    private double stock() {
-        return menu.findById(ITEM_ID).orElseThrow().getStockQty();
-    }
-
-    /** Hands out a copy, like the JDBC DAO, and can sell 9 units right after one lookup. */
-    private static final class RacingMenuDao extends InMemoryMenuDao {
-        private final AtomicBoolean sellNine = new AtomicBoolean();
-
-        RacingMenuDao(InMemoryDatabase database) {
-            super(database);
-        }
-
-        void sellNineOnNextLookup() {
-            sellNine.set(true);
-        }
-
-        @Override
-        public Optional<MenuItem> findById(int id) {
-            Optional<MenuItem> live = super.findById(id);
-            if (live.isEmpty()) {
-                return live;
-            }
-            MenuItem item = live.get();
-            MenuItem copy = new MenuItem(item.getId(), item.getName(), item.getCategory(),
-                    item.getSellPrice(), item.getCostPrice(), item.getStockQty());
-            copy.setInStock(item.isInStock());
-            if (sellNine.getAndSet(false)) {
-                super.updateStock(id, -9);
-            }
-            return Optional.of(copy);
-        }
+    private boolean onSale() {
+        return menu.findById(ITEM_ID).orElseThrow().isInStock();
     }
 }

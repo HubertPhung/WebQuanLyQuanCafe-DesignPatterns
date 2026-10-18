@@ -193,11 +193,8 @@ export async function getOverview(days = 7) {
 }
 
 export async function getHeaderData() {
-  const [menu, active] = await Promise.all([getMenuItems(), getActiveOrders()])
+  const active = await getActiveOrders()
   return {
-    lowStock: menu
-      .filter((item) => item.stockQty <= item.lowStockThreshold)
-      .map((item) => ({ id: item.id, name: item.name, stockQty: item.stockQty, unit: item.unit })),
     readyOrders: active
       .filter((order) => order.status === 'ready')
       .map((order) => ({ id: order.id, orderCode: order.orderCode, customer: order.customer })),

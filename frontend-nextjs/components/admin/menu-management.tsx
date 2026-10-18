@@ -124,13 +124,11 @@ export function MenuManagement({ items }: { items: MenuItem[] }) {
                     <th className="py-3 px-3">Tên món</th>
                     <th className="py-3 px-3">Danh mục</th>
                     <th className="py-3 px-3">Đơn giá</th>
-                    <th className="py-3 px-3">Tồn kho</th>
                     <th className="py-3 px-3 text-right">Trạng thái bán</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
                   {filteredItems.map((item) => {
-                    const low = item.stockQty <= item.lowStockThreshold
                     return (
                       <tr key={item.id} className="hover:bg-stone-50/60 transition-colors">
                         <td className="py-3 px-3">
@@ -152,10 +150,6 @@ export function MenuManagement({ items }: { items: MenuItem[] }) {
                           </span>
                         </td>
                         <td className="py-3 px-3 font-extrabold text-[#5A3E2B] tabular-nums">{item.sellPrice.toLocaleString('vi-VN')} đ</td>
-                        <td className={cn('py-3 px-3 tabular-nums', low ? 'font-bold text-rose-700' : 'text-stone-700')}>
-                          {item.stockQty.toLocaleString('vi-VN')} {item.unit}
-                          {low && <span className="ml-1.5 text-xs font-semibold">· sắp hết</span>}
-                        </td>
                         <td className="py-3 px-3 text-right">
                           <div className="flex items-center justify-end gap-2">
                             <Badge
@@ -184,7 +178,7 @@ export function MenuManagement({ items }: { items: MenuItem[] }) {
                   })}
                   {filteredItems.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="py-10 text-center text-sm text-stone-500">
+                      <td colSpan={5} className="py-10 text-center text-sm text-stone-500">
                         Không có món nào khớp với bộ lọc.
                       </td>
                     </tr>

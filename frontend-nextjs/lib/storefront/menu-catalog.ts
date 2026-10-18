@@ -39,7 +39,7 @@ function fallbackImage(item: MenuItem) {
 }
 
 function toProduct(item: MenuItem): Product {
-  const available = item.inStock && item.stockQty > 0
+  const available = item.inStock
   const price = (amount: number) => ({ amount: String(amount), currencyCode: 'VND' })
   const drink = isDrink(item)
   return {

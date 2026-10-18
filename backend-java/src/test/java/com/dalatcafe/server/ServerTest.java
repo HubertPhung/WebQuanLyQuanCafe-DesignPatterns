@@ -40,7 +40,7 @@ class ServerTest {
     void setUp() throws Exception {
         InMemoryDatabase.getInstance().reset();
         DaoFactory daos = DaoFactory.getInstance();
-        MenuItem drink = new MenuItem(DRINK_ID, "Ca phe muoi", "Coffee", 45_000, 15_000, 10);
+        MenuItem drink = new MenuItem(DRINK_ID, "Ca phe muoi", "Coffee", 45_000, 15_000);
         drink.setInStock(true);
         daos.getMenuDao().save(drink);
         dbUp.set(true);
@@ -121,7 +121,6 @@ class ServerTest {
         HttpResponse<String> response = call("POST", "/api/checkout", "STAFF", checkoutBody(1, ",\"voucherCode\":\"WELCOME10\""));
         assertEquals(400, response.statusCode(), response.body());
         assertEquals("INVALID_VOUCHER", json(response).get("code"));
-        assertEquals(10, DaoFactory.getInstance().getMenuDao().findById(DRINK_ID).orElseThrow().getStockQty());
     }
 
     @Test
@@ -394,14 +393,15 @@ class ServerTest {
         assertEquals("paid", data.get("paymentStatus"));
         assertTrue(((Number) data.get("finalTotal")).doubleValue() > 0);
         assertTrue(((Number) data.get("changeDue")).doubleValue() > 0);
-        assertEquals(8.0, DaoFactory.getInstance().getMenuDao().findById(DRINK_ID).orElseThrow().getStockQty());
     }
 
     @Test
     void checkoutRejectsBadRequestsWithStandardCodes() throws Exception {
         assertEquals(401, call("POST", "/api/checkout", null, checkoutBody(1, "")).statusCode());
         assertEquals(403, call("POST", "/api/checkout", "CUSTOMER", checkoutBody(1, "")).statusCode());
-        assertEquals(409, call("POST", "/api/checkout", "STAFF", checkoutBody(99, "")).statusCode());
+        DaoFactory.getInstance().getMenuDao().toggleInStock(DRINK_ID, false);
+        assertEquals(409, call("POST", "/api/checkout", "STAFF", checkoutBody(1, "")).statusCode());
+        DaoFactory.getInstance().getMenuDao().toggleInStock(DRINK_ID, true);
         HttpResponse<String> voucher = call("POST", "/api/checkout", "STAFF", checkoutBody(1, ",\"voucherCode\":\"NOPE\""));
         assertEquals(400, voucher.statusCode());
         assertEquals("INVALID_VOUCHER", json(voucher).get("code"));
@@ -416,7 +416,6 @@ class ServerTest {
                 + "\"lines\":[{\"menuItemId\":" + DRINK_ID + ",\"qty\":1}]}");
 
         assertEquals(404, response.statusCode(), response.body());
-        assertEquals(10.0, DaoFactory.getInstance().getMenuDao().findById(DRINK_ID).orElseThrow().getStockQty());
         assertEquals(ordersBefore, DaoFactory.getInstance().getOrderDao().findAll().size());
     }
 
@@ -428,7 +427,6 @@ class ServerTest {
 
         assertEquals(400, response.statusCode(), response.body());
         assertEquals("INVALID_INPUT", json(response).get("code"));
-        assertEquals(10.0, DaoFactory.getInstance().getMenuDao().findById(DRINK_ID).orElseThrow().getStockQty());
         assertEquals(ordersBefore, DaoFactory.getInstance().getOrderDao().findAll().size());
         assertEquals(400, call("POST", "/api/checkout", "STAFF", "{\"paymentMethod\":\"cash\",\"tenderedAmount\":-5,"
                 + "\"lines\":[{\"menuItemId\":" + DRINK_ID + ",\"qty\":1}]}").statusCode());
@@ -440,7 +438,6 @@ class ServerTest {
         HttpResponse<String> response = call("POST", "/api/checkout", "STAFF", checkoutBody(1, ""));
         assertEquals(503, response.statusCode());
         assertEquals("DATABASE_UNAVAILABLE", json(response).get("code"));
-        assertEquals(10.0, DaoFactory.getInstance().getMenuDao().findById(DRINK_ID).orElseThrow().getStockQty());
     }
 
     @SuppressWarnings("unchecked")
@@ -465,9 +462,9 @@ class ServerTest {
     }
 
     @Test
-    void managerCreatesMenuItemAndStaffAdjustsStock() throws Exception {
+    void managerCreatesMenuItemAndStaffSwitchesItOffSale() throws Exception {
         String item = "{\"name\":\"Tra atiso\",\"category\":\"Tea\",\"sellPrice\":39000,\"costPrice\":12000,"
-                + "\"stockQty\":20,\"variations\":[{\"name\":\"It ngot\",\"price\":0}]}";
+                + "\"variations\":[{\"name\":\"It ngot\",\"price\":0}]}";
         assertEquals(401, call("POST", "/api/menu", null, item).statusCode());
         assertEquals(403, call("POST", "/api/menu", "STAFF", item).statusCode());
         HttpResponse<String> created = call("POST", "/api/menu", "MANAGER", item);
@@ -479,17 +476,15 @@ class ServerTest {
         assertTrue(call("GET", "/api/menu", null, null).body().contains("Tra atiso"));
 
         String stock = "/api/menu/" + id + "/stock";
-        assertEquals(401, call("PATCH", stock, null, "{\"change\":-1}").statusCode());
-        HttpResponse<String> used = call("PATCH", stock, "STAFF", "{\"change\":-3}");
-        assertEquals(200, used.statusCode(), used.body());
-        assertEquals(17.0, number(data(used), "stockQty"));
-        assertEquals(409, call("PATCH", stock, "STAFF", "{\"change\":-100}").statusCode());
-        HttpResponse<String> off = call("PATCH", stock, "STAFF", "{\"inStock\":false,\"stockQty\":5}");
+        assertEquals(Boolean.TRUE, data(created).get("inStock"), "a new item is on sale");
+        assertFalse(data(created).containsKey("stockQty"));
+        assertEquals(401, call("PATCH", stock, null, "{\"inStock\":false}").statusCode());
+        HttpResponse<String> off = call("PATCH", stock, "STAFF", "{\"inStock\":false}");
+        assertEquals(200, off.statusCode(), off.body());
         assertEquals(Boolean.FALSE, data(off).get("inStock"));
-        assertEquals(5.0, number(data(off), "stockQty"));
         assertEquals(400, call("PATCH", stock, "STAFF", "{}").statusCode());
-        assertEquals(400, call("PATCH", stock, "STAFF", "{\"change\":1,\"stockQty\":2}").statusCode());
-        assertEquals(404, call("PATCH", "/api/menu/99999/stock", "STAFF", "{\"change\":1}").statusCode());
+        assertEquals(400, call("PATCH", stock, "STAFF", "{\"change\":-1}").statusCode());
+        assertEquals(404, call("PATCH", "/api/menu/99999/stock", "STAFF", "{\"inStock\":true}").statusCode());
         assertEquals(405, call("DELETE", "/api/menu", "ADMIN", null).statusCode());
     }
 
@@ -707,13 +702,12 @@ class ServerTest {
         assertEquals(200, first.statusCode(), first.body());
         assertEquals(2, ((Number) data(first).get("created")).intValue());
         assertEquals(2, ((Number) data(first).get("failed")).intValue());
-        assertTrue(first.body().contains("stock not deducted"));
+        assertTrue(first.body().contains("without a menu link"));
 
         Order imported = daos.getOrderDao().findByOrderCode("AC-0901-OFF").orElseThrow();
         assertEquals(PaymentStatus.PAID, imported.getPaymentStatus());
         assertEquals(97_200, imported.getTotal());
         assertEquals("2026-10-17T02:00:00Z", imported.getCreatedAt().toString());
-        assertEquals(8.0, daos.getMenuDao().findById(DRINK_ID).orElseThrow().getStockQty());
         assertEquals(TableStatus.OCCUPIED, daos.getTableDao().findById(12).orElseThrow().getStatus());
         assertEquals(PaymentStatus.UNPAID, daos.getOrderDao().findByOrderCode("AC-0902-OFF").orElseThrow().getPaymentStatus());
         assertTrue(daos.getOrderDao().findByOrderCode("AC-0903-OFF").isEmpty());
@@ -721,7 +715,6 @@ class ServerTest {
         HttpResponse<String> again = call("POST", "/api/orders/sync", "STAFF", batch);
         assertEquals(2, ((Number) data(again).get("existing")).intValue());
         assertEquals(0, ((Number) data(again).get("created")).intValue());
-        assertEquals(8.0, daos.getMenuDao().findById(DRINK_ID).orElseThrow().getStockQty());
 
         // An imported order follows the normal KDS lifecycle afterwards.
         assertEquals(200, setOrderStatus("AC-0901-OFF", "completed").statusCode());

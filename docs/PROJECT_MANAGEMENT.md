@@ -77,12 +77,12 @@ Cột *Frontend* là `frontend-nextjs/`, cột *Java* là `backend-java/`. Cột
 | `FEAT-RES-03` | Chuyển phiếu đặt bàn sang đơn POS | **Adapter** | 🟢 Nút "Sang POS" (`transferReservationToPos`) | 🟢 `POST /api/reservations/{code}/transfer-pos` | 🟢 (phiếu cục bộ dùng bản sao Adapter phía frontend) |
 | `FEAT-RES-04` | Xuất CSV danh sách đặt bàn | 🔷 Template Method | 🟢 `handleExportCSV` | — | — |
 
-### 1.7. Kho, CRM & Báo cáo
+### 1.7. Thực đơn, CRM & Báo cáo
 
 | Mã | Tính năng | Pattern | Frontend | Java | Tích hợp |
 | :--- | :--- | :---: | :---: | :---: | :---: |
-| `FEAT-INV-01` | Danh sách tồn kho & menu | — | 🟢 `menu-management.tsx` (trang Kho riêng đã gỡ) | 🟢 `IMenuDao` | ⚪ |
-| `FEAT-INV-02` | Cảnh báo sắp hết hàng | — | 🟢 `menu-management.tsx`, chuông thông báo admin | 🟢 `MenuItem` | — |
+| `FEAT-INV-01` | Danh sách thực đơn | — | 🟢 `menu-management.tsx` (trang Kho riêng đã gỡ) | 🟢 `IMenuDao` | ⚪ |
+| `FEAT-INV-02` | Theo dõi số lượng tồn kho, cảnh báo sắp hết hàng | — | ⛔ Đã gỡ (món chỉ bật / tắt bán; cột `stock_qty`, `low_stock_threshold` đã xoá) | ⛔ Đã gỡ | — |
 | `FEAT-INV-03` | Bật/tắt bán món | — | 🟢 `setItemInStock` | 🟢 `PATCH /api/menu/{id}/stock` | 🟢 ghép theo tên món |
 | `FEAT-INV-04` | Thêm món mới | — | 🟢 `add-item-dialog.tsx` | 🟢 `POST /api/menu` (MANAGER) | 🟢 |
 | `FEAT-CRM-01` | Xếp hạng khách hàng | — | 🟢 `admin/customers` (điểm, hạng) | 🟢 `GET /api/customers` | 🟢 tổng hợp đơn cục bộ khi Java tắt |

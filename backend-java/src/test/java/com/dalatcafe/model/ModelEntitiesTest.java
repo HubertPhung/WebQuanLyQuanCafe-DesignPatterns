@@ -211,26 +211,19 @@ class ModelEntitiesTest {
     class MenuItemTest {
 
         @Test
-        @DisplayName("Should detect low stock correctly based on threshold")
-        void testLowStockDetection() {
-            MenuItem item = new MenuItem(1, "Hạt Cà Phê Cầu Đất Arabica", "Cà Phê", 85000.0, 45000.0, 15.0);
+        @DisplayName("A new item is on sale until it is switched off")
+        void testInStockSwitch() {
+            MenuItem item = new MenuItem(1, "Hạt Cà Phê Cầu Đất Arabica", "Cà Phê", 85000.0, 45000.0);
 
-            assertFalse(item.isLowStock(), "15 units should not be low stock when threshold is 10");
-
-            item.setStockQty(10.0);
-            assertTrue(item.isLowStock(), "10 units equals threshold, should be low stock");
-
-            item.setStockQty(5.0);
-            assertTrue(item.isLowStock(), "5 units is below threshold, should be low stock");
-
-            item.setLowStockThreshold(4.0);
-            assertFalse(item.isLowStock(), "5 units should not be low stock when threshold is lowered to 4");
+            assertTrue(item.isInStock());
+            item.setInStock(false);
+            assertFalse(item.isInStock());
         }
 
         @Test
         @DisplayName("Should manage variations safely with defensive copying")
         void testMenuItemVariations() {
-            MenuItem item = new MenuItem(2, "Latte Đà Lạt Sương Mù", "Cà Phê", 55000.0, 25000.0, 50.0);
+            MenuItem item = new MenuItem(2, "Latte Đà Lạt Sương Mù", "Cà Phê", 55000.0, 25000.0);
 
             item.addVariation(new Variation("Nóng", 0.0));
             item.addVariation(new Variation("Đá", 0.0));
@@ -253,9 +246,9 @@ class ModelEntitiesTest {
         @Test
         @DisplayName("MenuItem getters, setters, and equality")
         void testMenuItemProperties() {
-            MenuItem item1 = new MenuItem(10, "Bạc Xỉu", "Cà Phê", 39000.0, 15000.0, 100.0);
-            MenuItem item2 = new MenuItem(10, "Bạc Xỉu Đà Lạt", "Cà Phê", 42000.0, 15000.0, 80.0);
-            MenuItem item3 = new MenuItem(11, "Americano", "Cà Phê", 35000.0, 12000.0, 50.0);
+            MenuItem item1 = new MenuItem(10, "Bạc Xỉu", "Cà Phê", 39000.0, 15000.0);
+            MenuItem item2 = new MenuItem(10, "Bạc Xỉu Đà Lạt", "Cà Phê", 42000.0, 15000.0);
+            MenuItem item3 = new MenuItem(11, "Americano", "Cà Phê", 35000.0, 12000.0);
 
             item1.setRecipe("1 shot espresso, sữa đặc, sữa tươi");
             item1.setImageUrl("/images/bac-xiu.jpg");

@@ -272,7 +272,7 @@ public class OrderHandler extends ApiHandler {
     /**
      * Imports a batch of orders recorded elsewhere (the frontend while this backend was down).
      * No payment is taken: the money already changed hands. Idempotent by order code, so a
-     * retried batch never duplicates an order. Stock is deducted for lines with a known menu id.
+     * retried batch never duplicates an order.
      */
     private void sync(HttpExchange exchange) throws IOException {
         Map<String, Object> body = readJsonBody(exchange);
@@ -305,7 +305,6 @@ public class OrderHandler extends ApiHandler {
                     }
                     Order order = importedOrder(input, code, warnings);
                     save(order);
-                    deductStock(order, warnings);
                     notifyImported(order, warnings);
                 }
                 row.put("result", "created");
@@ -368,7 +367,7 @@ public class OrderHandler extends ApiHandler {
             if (menuItemId != null) {
                 MenuItem item = menuDao.findById(menuItemId).orElse(null);
                 if (item == null) {
-                    warnings.add("Unknown menu item " + menuItemId + "; stock not deducted");
+                    warnings.add("Unknown menu item " + menuItemId + "; line kept without a menu link");
                     menuItemId = null;
                 }
             }
@@ -409,24 +408,6 @@ public class OrderHandler extends ApiHandler {
             return Instant.parse(raw);
         } catch (DateTimeParseException e) {
             throw ApiException.badRequest(key + " must be an ISO-8601 instant");
-        }
-    }
-
-    /** The sale already happened offline, so stock is taken even when it goes below what is left. */
-    private void deductStock(Order order, List<String> warnings) {
-        if (order.getStatus() == OrderStatus.CANCELLED) {
-            return;
-        }
-        for (OrderItem item : order.getItems()) {
-            if (item.getMenuItemId() == null) {
-                continue;
-            }
-            menuDao.findById(item.getMenuItemId()).ifPresent(menuItem -> {
-                if (menuItem.getStockQty() < item.getQty()) {
-                    warnings.add("Stock of " + menuItem.getName() + " ran out offline; set to 0");
-                }
-                menuDao.updateStock(menuItem.getId(), -item.getQty());
-            });
         }
     }
 

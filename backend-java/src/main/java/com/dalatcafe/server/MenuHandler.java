@@ -62,8 +62,7 @@ public class MenuHandler extends ApiHandler {
             throw new ApiException(409, "RESOURCE_CONFLICT", "Menu item already exists: " + name);
         }
         MenuItem item = new MenuItem(null, name, requireStr(body, "category"),
-                nonNegative(body, "sellPrice", null), nonNegative(body, "costPrice", 0.0),
-                nonNegative(body, "stockQty", 0.0));
+                nonNegative(body, "sellPrice", null), nonNegative(body, "costPrice", 0.0));
         String kind = str(body, "kind");
         if (kind != null) {
             item.setKind(kind);
@@ -72,10 +71,9 @@ public class MenuHandler extends ApiHandler {
         if (unit != null) {
             item.setUnit(unit);
         }
-        item.setLowStockThreshold(nonNegative(body, "lowStockThreshold", item.getLowStockThreshold()));
         item.setRecipe(str(body, "recipe"));
         item.setImageUrl(str(body, "imageUrl"));
-        item.setInStock(bool(body, "inStock", item.getStockQty() > 0));
+        item.setInStock(bool(body, "inStock", true));
         for (Object raw : list(body, "variations")) {
             Map<String, Object> variation = asObject(raw, "variations entry");
             item.addVariation(new Variation(requireStr(variation, "name"), nonNegative(variation, "price", 0.0)));
@@ -86,42 +84,19 @@ public class MenuHandler extends ApiHandler {
         sendOk(exchange, 201, toJson(item), "Menu item created");
     }
 
+    /**
+     * Switches an item on or off for sale. Quantities are no longer tracked, so the body is just
+     * {@code {"inStock": true|false}}; the path keeps its name for existing clients.
+     */
     private void updateStock(HttpExchange exchange, int id) throws IOException {
         Map<String, Object> body = readJsonBody(exchange);
-        MenuItem item = menuDao.findById(id).orElseThrow(() -> ApiException.notFound("Menu item not found: " + id));
-        Double change = num(body, "change");
-        Double stockQty = num(body, "stockQty");
-        boolean hasSwitch = body.get("inStock") != null;
-        boolean inStock = bool(body, "inStock", item.isInStock());
-        if (change == null && stockQty == null && !hasSwitch) {
-            throw ApiException.badRequest("Provide at least one of: inStock, change, stockQty");
+        menuDao.findById(id).orElseThrow(() -> ApiException.notFound("Menu item not found: " + id));
+        if (body.get("inStock") == null) {
+            throw ApiException.badRequest("Field 'inStock' is required; stock quantities are not tracked");
         }
-        if (change != null && stockQty != null) {
-            throw ApiException.badRequest("Use either change or stockQty, not both");
-        }
-        if (stockQty != null) {
-            if (stockQty < 0) {
-                throw ApiException.badRequest("stockQty must not be negative");
-            }
-            change = stockQty - item.getStockQty();
-        }
-        if (change != null) {
-            // A relative write-off is checked again by the DAO, in case a sale took stock after the read above.
-            boolean writeOff = stockQty == null && change < 0;
-            if (item.getStockQty() + change < 0 || (writeOff && !menuDao.deductStockIfAvailable(id, -change))) {
-                double left = menuDao.findById(id).map(MenuItem::getStockQty).orElse(0.0);
-                throw new ApiException(409, "RESOURCE_CONFLICT",
-                        "Only " + left + " " + item.getUnit() + " of " + item.getName() + " left");
-            }
-            if (!writeOff) {
-                menuDao.updateStock(id, change);
-            }
-        }
-        if (hasSwitch) {
-            menuDao.toggleInStock(id, inStock);
-        }
+        menuDao.toggleInStock(id, bool(body, "inStock", true));
         MenuItem updated = menuDao.findById(id).orElseThrow(() -> ApiException.notFound("Menu item not found: " + id));
-        sendOk(exchange, 200, toJson(updated), "Stock updated");
+        sendOk(exchange, 200, toJson(updated), updated.isInStock() ? "Item is on sale" : "Item is off sale");
     }
 
     private static double nonNegative(Map<String, Object> body, String key, Double fallback) {
@@ -144,9 +119,7 @@ public class MenuHandler extends ApiHandler {
         json.put("name", item.getName());
         json.put("category", item.getCategory());
         json.put("kind", item.getKind());
-        json.put("stockQty", item.getStockQty());
         json.put("unit", item.getUnit());
-        json.put("lowStockThreshold", item.getLowStockThreshold());
         json.put("costPrice", item.getCostPrice());
         json.put("sellPrice", item.getSellPrice());
         json.put("inStock", item.isInStock());

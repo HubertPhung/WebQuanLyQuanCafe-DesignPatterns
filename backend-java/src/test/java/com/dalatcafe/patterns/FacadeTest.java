@@ -42,7 +42,7 @@ class FacadeTest {
         database.reset();
         menuDao = new InMemoryMenuDao(database);
         orderDao = new InMemoryOrderDao(database);
-        MenuItem drink = new MenuItem(DRINK_ID, "Ca phe sua", "Coffee", 50_000, 20_000, 10);
+        MenuItem drink = new MenuItem(DRINK_ID, "Ca phe sua", "Coffee", 50_000, 20_000);
         drink.setInStock(true);
         menuDao.save(drink);
         subject = new OrderEventSubject();
@@ -54,10 +54,6 @@ class FacadeTest {
         return new CheckoutRequest(List.of(new CheckoutLine(DRINK_ID, qty, extras)), 3,
                 OrderType.DINE_IN, method, null,
                 discount ? new FixedAmountDiscountStrategy(30_000) : null, "no ice");
-    }
-
-    private double stock() {
-        return menuDao.findById(DRINK_ID).orElseThrow().getStockQty();
     }
 
     @Test
@@ -82,7 +78,6 @@ class FacadeTest {
         assertEquals(DRINK_ID, order.getItems().get(0).getMenuItemId(), "line keeps its menu item");
         assertNotNull(order.getId());
         assertTrue(orderDao.findById(order.getId()).isPresent());
-        assertEquals(8, stock());
         assertEquals(List.of(order), notified);
         assertTrue(result.getPaymentResult().isSuccess());
         assertTrue(result.getWarnings().isEmpty());
@@ -105,16 +100,14 @@ class FacadeTest {
         assertTrue(result.isSuccess());
         assertEquals(0, result.getOrder().getTotal());
         assertEquals(50_000, result.getOrder().getDiscountAmount());
-        assertEquals(9, stock());
     }
 
     @Test
-    void rejectsInsufficientStockWithoutSideEffects() {
-        CheckoutResult result = facade.checkout(request(11, PaymentMethod.CASH, Set.of(), false));
-        assertFalse(result.isSuccess());
-        assertNull(result.getOrder());
-        assertEquals(10, stock());
-        assertTrue(orderDao.findAll().stream().noneMatch(o -> o.getTableId() != null && o.getTableId() == 3));
+    void anyQuantityIsSoldWhileTheItemIsOnSale() {
+        // Quantities are not tracked, so only the in-stock switch can refuse a line.
+        CheckoutResult result = facade.checkout(request(50, PaymentMethod.CASH, Set.of(), false));
+        assertTrue(result.isSuccess(), result.getMessage());
+        assertEquals(50, result.getOrder().getItems().get(0).getQty());
     }
 
     @Test
@@ -124,12 +117,15 @@ class FacadeTest {
         assertFalse(facade.checkout(unknown).isSuccess());
 
         menuDao.toggleInStock(DRINK_ID, false);
-        assertFalse(facade.checkout(request(1, PaymentMethod.CASH, Set.of(), false)).isSuccess());
-        assertEquals(10, stock());
+        CheckoutResult offSale = facade.checkout(request(1, PaymentMethod.CASH, Set.of(), false));
+        assertFalse(offSale.isSuccess());
+        assertEquals(CheckoutResult.FailureType.OUT_OF_STOCK, offSale.getFailureType());
+        assertNull(offSale.getPaymentResult(), "no payment is taken");
+        assertTrue(orderDao.findAll().stream().noneMatch(o -> o.getTableId() != null && o.getTableId() == 3));
     }
 
     @Test
-    void restoresStockWhenOrderCannotBeSaved() {
+    void reportsFailureWhenOrderCannotBeSaved() {
         IOrderDao failingDao = new InMemoryOrderDao(InMemoryDatabase.getInstance()) {
             @Override
             public boolean save(Order order) {
@@ -141,32 +137,6 @@ class FacadeTest {
         assertFalse(result.isSuccess());
         assertNull(result.getOrder());
         assertNotNull(result.getPaymentResult());
-        assertEquals(10, stock());
-    }
-
-    @Test
-    void stockSoldElsewhereAfterTheCheckIsNotOversold() {
-        // Another counter sells 9 of the 10 drinks right after this checkout has read the stock.
-        IMenuDao racingDao = new InMemoryMenuDao(InMemoryDatabase.getInstance()) {
-            @Override
-            public java.util.Optional<MenuItem> findById(int id) {
-                MenuItem live = super.findById(id).orElseThrow();
-                MenuItem seen = new MenuItem(live.getId(), live.getName(), live.getCategory(),
-                        live.getSellPrice(), live.getCostPrice(), live.getStockQty());
-                seen.setInStock(live.isInStock());
-                super.updateStock(id, -9);
-                return java.util.Optional.of(seen);
-            }
-        };
-        PosCheckoutFacade racing = new PosCheckoutFacade(orderDao, racingDao, subject);
-
-        CheckoutResult result = racing.checkout(request(5, PaymentMethod.CASH, Set.of(), false));
-
-        assertFalse(result.isSuccess());
-        assertEquals(CheckoutResult.FailureType.OUT_OF_STOCK, result.getFailureType());
-        assertNull(result.getPaymentResult(), "no payment is taken");
-        assertEquals(1, stock(), "the one drink left is still there");
-        assertTrue(orderDao.findAll().stream().noneMatch(o -> o.getTableId() != null && o.getTableId() == 3));
     }
 
     @Test
@@ -200,7 +170,6 @@ class FacadeTest {
         assertTrue(result.isSuccess());
         assertEquals(1, result.getWarnings().size());
         assertTrue(orderDao.findById(result.getOrder().getId()).isPresent());
-        assertEquals(9, stock());
     }
 
     @Test
