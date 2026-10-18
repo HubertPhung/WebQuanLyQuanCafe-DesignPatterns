@@ -2,6 +2,7 @@
 
 import { eq, inArray, sql } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
+import { cookies } from 'next/headers'
 import { db, isDbConfigured } from '@/lib/db'
 import {
   adminMenuItems,
@@ -19,6 +20,7 @@ import {
   type Variation,
 } from '@/lib/db/schema'
 import { assertAdminAccess } from '@/lib/admin/access'
+import { getSession } from '@/lib/auth/session'
 import { TAX_RATE } from '@/lib/admin/format'
 import {
   customizationSurcharge,
@@ -46,14 +48,21 @@ import {
   type JavaResult,
   type StoreConfigChange,
   type SyncOrderPayload,
+  validateVoucher,
 } from '@/lib/api-client'
+import type { Cart } from '@/lib/shopify'
+import { parseMenuVariant } from '@/lib/storefront/menu-catalog'
+import { saveOrderContact, type Fulfilment } from '@/lib/orders/online-contacts'
 import { dequeueSync, enqueueSync, listSyncQueue } from '@/lib/admin/local-links'
 import { linkMenuItem, normalizeMenuName, resolveJavaMenuIds } from '@/lib/admin/menu-link'
+import { hasReservationTimePassed } from '@/lib/reservation-rules'
 import {
   updateMockOrderStatus,
   markMockOrderPaid,
   updateMockTableStatus,
   setMockItemInStock,
+  changeMockStock,
+  cashTenderError,
   createMockOrder,
   createMockMenuItem,
   getMockMenuItems,
@@ -63,6 +72,7 @@ import {
   getMockOrdersByCode,
   updateMockReservationStatus,
   reservationStatuses,
+  shortStockError,
   type ReservationStatusLabel,
   transferMockReservation,
   type ExternalOrderInput,
@@ -212,9 +222,11 @@ type NewOrderInput = {
   // Member phone and the loyalty points to redeem; redeeming needs the Java backend.
   customerPhone?: string
   useLoyaltyPoints?: number
+  // Optional cash handed over for a paid cash order; it must cover the total.
+  tenderedAmount?: number
 }
 
-type LocalMenuItem = Pick<MenuItem, 'id' | 'name' | 'kind' | 'inStock' | 'variations'>
+type LocalMenuItem = Pick<MenuItem, 'id' | 'name' | 'kind' | 'inStock' | 'variations' | 'sellPrice' | 'unit' | 'stockQty'>
 
 type CheckoutOutcome =
   | { kind: 'accepted'; receipt: CheckoutReceipt }
@@ -259,12 +271,14 @@ async function toJavaLines(
 
 type LocalOrderInput = NewMockOrderInput
 
-type MemberCheckout = { customerPhone?: string; useLoyaltyPoints?: number }
+type MemberCheckout = Pick<CheckoutPayload, 'customerPhone' | 'useLoyaltyPoints' | 'enrollMember' | 'customerEmail'>
 
 async function forwardCheckout(
   order: LocalOrderInput,
   localMenu: LocalMenuItem[],
   member: MemberCheckout,
+  extra: Pick<CheckoutPayload, 'voucherCode' | 'note'> = {},
+  asService = false,
 ): Promise<CheckoutOutcome> {
   // POST /api/checkout always takes payment, so open tabs are recorded locally and synced.
   if (!order.paid) return { kind: 'local', javaDown: false }
@@ -278,8 +292,10 @@ async function forwardCheckout(
     tableId: order.tableId,
     orderType: order.orderType,
     paymentMethod: order.paymentMethod,
+    tenderedAmount: order.tenderedAmount,
     ...member,
-  })
+    ...extra,
+  }, { asService })
   if (receipt.ok) return { kind: 'accepted', receipt: receipt.data }
   return receipt.unreachable ? { kind: 'local', javaDown: true } : { kind: 'rejected', error: receipt.error }
 }
@@ -290,6 +306,8 @@ function newLocalOrderCode() {
   const random = Math.floor(Math.random() * 36 ** 3).toString(36).toUpperCase().padStart(3, '0')
   return `AC-${stamp}-${random}`
 }
+
+class ShortStock extends Error {}
 
 async function recordOrderLocally(input: LocalOrderInput, quantities: Map<number, number>): Promise<ActionResult> {
   if (!isDbConfigured || !db) {
@@ -318,6 +336,9 @@ async function recordOrderLocally(input: LocalOrderInput, quantities: Map<number
     // Java's receipt wins when it priced the order (member discount, redeemed points).
     const subtotal = input.totals?.subtotal ?? Math.round(items.reduce((sum, item) => sum + item.price * item.qty, 0) * 100) / 100
     const total = input.totals?.total ?? Math.round(subtotal * (1 + TAX_RATE) * 100) / 100
+    const tenderError = cashTenderError(input, total)
+    // Returned, not thrown: a throw here falls back to the in-memory store.
+    if (tenderError) return { ok: false, error: tenderError }
     const customer = input.customer.trim().slice(0, 60) || 'Walk-in'
 
     await db.transaction(async (tx) => {
@@ -337,10 +358,13 @@ async function recordOrderLocally(input: LocalOrderInput, quantities: Map<number
         status: 'pending',
       })
       for (const [id, qty] of quantities) {
-        await tx
+        // Java sold it from its own stock, so the copy follows; otherwise never sell what is not there.
+        const updated = await tx
           .update(adminMenuItems)
           .set({ stockQty: sql`greatest(${adminMenuItems.stockQty} - ${qty}, 0)` })
-          .where(eq(adminMenuItems.id, id))
+          .where(input.javaSold ? eq(adminMenuItems.id, id) : sql`${adminMenuItems.id} = ${id} and ${adminMenuItems.stockQty} >= ${qty}`)
+          .returning({ id: adminMenuItems.id })
+        if (updated.length === 0) throw new ShortStock(shortStockError(menu, quantities) ?? 'One of the items just sold out.')
       }
       if (input.tableId) {
         await tx
@@ -350,7 +374,9 @@ async function recordOrderLocally(input: LocalOrderInput, quantities: Map<number
       }
     })
     return { ok: true, message: `Order sent to the bar for ${customer}.` }
-  } catch {
+  } catch (error) {
+    // Out of stock is an answer, not an outage: the in-memory store must not take the order instead.
+    if (error instanceof ShortStock) return { ok: false, error: error.message }
     const res = createMockOrder(input)
     return res.ok ? { ok: true, message: res.message } : { ok: false, error: res.error ?? 'Failed' }
   }
@@ -385,6 +411,10 @@ export async function createOrder(input: NewOrderInput): Promise<ActionResult> {
     if (input.customerPhone?.trim() && !customerPhone) throw new Error('Enter a phone number with 8 to 15 digits.')
     if (points > 0 && !customerPhone) throw new Error('Look up the member phone number before redeeming points.')
     if (points > 0 && !input.paid) throw new Error('Points can only be redeemed when the order is paid now.')
+    const tendered = input.tenderedAmount
+    if (tendered !== undefined && (!Number.isFinite(tendered) || tendered < 0 || tendered > 1_000_000_000)) {
+      throw new Error('Enter the cash received as an amount between 0 and 1,000,000,000 đ.')
+    }
 
     const order: LocalOrderInput = {
       lines,
@@ -393,6 +423,8 @@ export async function createOrder(input: NewOrderInput): Promise<ActionResult> {
       orderType,
       paymentMethod,
       paid: input.paid,
+      // Only a cash payment taken now has cash to count.
+      tenderedAmount: input.paid && paymentMethod === 'cash' ? tendered : undefined,
     }
 
     // Check availability locally first so the backend never charges for an order we cannot record.
@@ -402,6 +434,8 @@ export async function createOrder(input: NewOrderInput): Promise<ActionResult> {
       return !item || item.kind !== 'menu' || !item.inStock
     })
     if (unavailable) throw new Error('One of the items is no longer available.')
+    const shortStock = shortStockError(localMenu, quantities)
+    if (shortStock) throw new Error(shortStock)
 
     const member: MemberCheckout = customerPhone ? { customerPhone, useLoyaltyPoints: points || undefined } : {}
     const outcome = await forwardCheckout(order, localMenu, member)
@@ -418,6 +452,7 @@ export async function createOrder(input: NewOrderInput): Promise<ActionResult> {
         ...order,
         orderCode,
         totals: receipt ? { subtotal: receipt.subtotal, total: receipt.finalTotal } : undefined,
+        javaSold: Boolean(receipt),
       },
       quantities,
     )
@@ -432,14 +467,155 @@ export async function createOrder(input: NewOrderInput): Promise<ActionResult> {
       const pushed = await pushQueuedOrders([orderCode])
       return pushed.sent > 0 ? { ok: true, message: `${res.message} Order ${orderCode} synced to the Java backend.` } : res
     }
+    const change = receipt.changeDue > 0 ? ` Change due: ${receipt.changeDue.toLocaleString('vi-VN')} đ.` : ''
     const redeemed = receipt.pointsRedeemed > 0 ? ` Redeemed ${receipt.pointsRedeemed} points.` : ''
     const earned = receipt.pointsEarned > 0 ? ` Earned ${receipt.pointsEarned} points.` : ''
     return {
       ok: true,
-      message: `Order ${receipt.orderCode} recorded by the Java backend: ${receipt.finalTotal.toLocaleString('vi-VN')} đ.${redeemed}${earned}`,
+      message: `Order ${receipt.orderCode} recorded by the Java backend: ${receipt.finalTotal.toLocaleString('vi-VN')} đ.${change}${redeemed}${earned}`,
     }
   } catch (error) {
     return fail(error)
+  }
+}
+
+const CART_COOKIE = 'dalatcafe-local-cart'
+const onlinePayments = { vietqr: 'qr', card: 'card', cod: 'cash' } as const
+
+export type OnlineOrderInput = {
+  name: string
+  phone: string
+  email?: string
+  fulfilment: Fulfilment
+  address?: string
+  payment: keyof typeof onlinePayments
+  note?: string
+}
+
+export type OnlineOrderResult = { ok: true; orderCode: string; total: number; paid: boolean } | { ok: false; error: string }
+
+function readCart(raw: string | undefined): Cart | null {
+  if (!raw) return null
+  try {
+    const cart = JSON.parse(raw) as Cart
+    return Array.isArray(cart?.lines?.nodes) ? cart : null
+  } catch {
+    return null
+  }
+}
+
+// Cash on delivery is not charged now, so Java does not price it: the same rules apply here
+// (menu price, size L surcharge, the voucher as Java validates it, VAT on what is left).
+async function cashOnDeliveryTotals(lines: LocalOrderInput['lines'], localMenu: LocalMenuItem[], voucherCode?: string) {
+  const byId = new Map(localMenu.map((item) => [item.id, item]))
+  const raw = lines.reduce((sum, line) => sum + (byId.get(line.menuItemId)!.sellPrice + customizationSurcharge(line.customizations ?? [])) * line.qty, 0)
+  const subtotal = Math.round(raw * 100) / 100
+  let discount = 0
+  if (voucherCode) {
+    const verdict = await validateVoucher(voucherCode, subtotal)
+    if (verdict.ok && verdict.data.valid) discount = verdict.data.discountAmount
+  }
+  return { subtotal, total: Math.round((subtotal - discount) * (1 + TAX_RATE) * 100) / 100 }
+}
+
+// Storefront checkout, open to guests. What is ordered and at what price comes from the
+// server-side cart and the menu, never from the request. A paid order (VietQR, card) is charged
+// through Java's POST /api/checkout like a POS sale; cash on delivery is recorded here and
+// synced to Java. Either way the kitchen display gets the ticket.
+export async function placeOnlineOrder(input: OnlineOrderInput): Promise<OnlineOrderResult> {
+  try {
+    const session = await getSession()
+    if (!session) throw new Error('Vui lòng đăng nhập để đặt hàng.')
+    const name = String(input.name ?? '').trim().slice(0, 60)
+    if (name.length < 2) throw new Error('Nhập họ tên người nhận.')
+    const phone = normalizePhone(input.phone)
+    if (!phone) throw new Error('Nhập số điện thoại có 8 đến 15 chữ số.')
+    const email = String(input.email ?? '').trim().slice(0, 120) || null
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('Email không hợp lệ.')
+    const fulfilment: Fulfilment | null = input.fulfilment === 'delivery' || input.fulfilment === 'pickup' ? input.fulfilment : null
+    if (!fulfilment) throw new Error('Chọn giao hàng tận nơi hoặc tự đến lấy.')
+    const address = String(input.address ?? '').trim().slice(0, 200)
+    if (fulfilment === 'delivery' && address.length < 8) throw new Error('Nhập địa chỉ giao hàng.')
+    if (!Object.hasOwn(onlinePayments, input.payment)) throw new Error('Chọn phương thức thanh toán.')
+    const paymentMethod = onlinePayments[input.payment]
+    const note = String(input.note ?? '').trim().slice(0, 300)
+
+    const jar = await cookies()
+    const cart = readCart(jar.get(CART_COOKIE)?.value)
+    const cartLines = cart?.lines.nodes ?? []
+    if (cartLines.length === 0) throw new Error('Giỏ hàng đang trống.')
+    if (cartLines.length > 40) throw new Error('Mỗi đơn có tối đa 40 dòng món.')
+
+    const quantities = new Map<number, number>()
+    const lines: LocalOrderInput['lines'] = []
+    const lineNotes: string[] = []
+    for (const line of cartLines) {
+      const variant = parseMenuVariant(String(line.merchandise?.id ?? ''))
+      if (!variant || !Number.isInteger(line.quantity) || line.quantity < 1 || line.quantity > 20) {
+        throw new Error('Giỏ hàng có món không còn hợp lệ, hãy thêm lại món đó.')
+      }
+      quantities.set(variant.menuItemId, (quantities.get(variant.menuItemId) ?? 0) + line.quantity)
+      lines.push({ menuItemId: variant.menuItemId, qty: line.quantity, customizations: variant.large ? ['SIZE_L'] : [] })
+      const options = (line.attributes ?? []).map((attribute) => String(attribute.value).slice(0, 40)).join(', ')
+      if (options) lineNotes.push(`${String(line.merchandise.product?.title ?? '').slice(0, 80)} x${line.quantity}: ${options}`)
+    }
+    if ([...quantities.values()].some((qty) => qty > 50)) throw new Error('Mỗi món có tối đa 50 phần trong một đơn.')
+
+    const localMenu = await loadLocalMenu([...quantities.keys()])
+    const unavailable = lines.some((line) => {
+      const item = localMenu.find((candidate) => candidate.id === line.menuItemId)
+      return !item || item.kind !== 'menu' || !item.inStock
+    })
+    if (unavailable) throw new Error('Một món trong giỏ vừa hết, hãy cập nhật giỏ hàng.')
+    const short = localMenu.find((item) => (quantities.get(item.id) ?? 0) > item.stockQty)
+    if (short) throw new Error(`Chỉ còn ${Math.max(0, short.stockQty)} ${short.unit} ${short.name}, hãy giảm số lượng trong giỏ.`)
+
+    const paid = input.payment !== 'cod'
+    const order: LocalOrderInput = { lines, customer: name, tableId: null, orderType: fulfilment, paymentMethod, paid }
+    const voucherCode = cart?.discountCodes?.find((code) => code.applicable)?.code
+    const javaNote = ['Đơn online', fulfilment === 'delivery' ? `Giao tới: ${address}` : 'Khách tự đến lấy', `SĐT ${phone}`, note, ...lineNotes]
+      .filter(Boolean)
+      .join(' · ')
+      .slice(0, 1000)
+
+    let receipt: CheckoutReceipt | undefined
+    let totals: { subtotal: number; total: number }
+    if (paid) {
+      // Only money taken now earns points (cash on delivery does not): the buyer's phone becomes a member.
+      const member: MemberCheckout = { customerPhone: phone, enrollMember: true, customerEmail: email ?? session.email }
+      const outcome = await forwardCheckout(order, localMenu, member, { voucherCode, note: javaNote }, true)
+      if (outcome.kind === 'rejected') return { ok: false, error: outcome.error }
+      // Online payment is taken by Java; without it nothing may be charged or promised.
+      if (outcome.kind === 'local') {
+        return { ok: false, error: 'Chưa thể thanh toán trực tuyến lúc này. Hãy thử lại sau ít phút hoặc chọn thanh toán khi nhận hàng.' }
+      }
+      receipt = outcome.receipt
+      totals = { subtotal: receipt.subtotal, total: receipt.finalTotal }
+    } else {
+      totals = await cashOnDeliveryTotals(lines, localMenu, voucherCode)
+    }
+
+    const orderCode = receipt?.orderCode ?? newLocalOrderCode()
+    const recorded = await recordOrderLocally({ ...order, orderCode, totals, javaSold: Boolean(receipt) }, quantities)
+    if (!recorded.ok) return recorded
+    await saveOrderContact({
+      orderCode,
+      userId: session.userId,
+      phone,
+      email,
+      address: fulfilment === 'delivery' ? address : null,
+      fulfilment,
+      note: [note, ...lineNotes].filter(Boolean).join(' · ') || null,
+    })
+    if (!receipt) {
+      await enqueueSync(orderCode)
+      await pushQueuedOrders([orderCode], true)
+    }
+    jar.delete(CART_COOKIE)
+    refresh()
+    return { ok: true, orderCode, total: totals.total, paid }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Không thể đặt hàng lúc này.' }
   }
 }
 
@@ -493,12 +669,17 @@ export async function createReservation(input: NewReservationInput): Promise<Act
     const customer = input.customer.trim().slice(0, 60)
     const contact = input.contact.trim().slice(0, 30)
     if (!customer || !contact) throw new Error('Customer name and contact are required.')
-    if (!Number.isInteger(input.guests) || input.guests < 1 || input.guests > 20) {
-      throw new Error('Guests must be a whole number between 1 and 20.')
+    // The upper limit is Java's configurable maxReservationGuests; the local fallback checks the default.
+    if (!Number.isInteger(input.guests) || input.guests < 1) {
+      throw new Error('Guests must be a whole number of at least 1.')
     }
     if (!Number.isInteger(input.tableId)) throw new Error('Choose a table.')
     const dateTime = new Date(input.dateTime)
     if (Number.isNaN(dateTime.getTime())) throw new Error('Choose a valid date and time.')
+    // Answered before the network round trip; createMockReservation repeats it with the other Java rules.
+    if (hasReservationTimePassed(dateTime)) {
+      throw new Error('Choose a date and time that has not passed yet.')
+    }
 
     const booking = {
       customer,
@@ -517,7 +698,13 @@ export async function createReservation(input: NewReservationInput): Promise<Act
       return { ok: true, message: `Reservation ${remote.data.id} received by the Java backend.` }
     }
     if (!remote.unreachable) return { ok: false, error: remote.error }
+    // With a real database the bookings live only in Java: a local copy could not see them (double
+    // booking) and would vanish on restart, so nothing is promised until Java is back.
+    if (isDbConfigured) {
+      return { ok: false, error: 'The reservation service is unavailable, so nothing was booked. Please retry in a moment.' }
+    }
 
+    // Demo mode without a database: the local store applies the same chain with the Java defaults.
     const res = createMockReservation({ ...booking, email: booking.email ?? null, note: booking.note ?? null, dateTime })
     refresh()
     return res.ok ? { ok: true, message: `Reservation ${res.code} saved locally.` } : { ok: false, error: res.error ?? 'Failed' }
@@ -668,6 +855,37 @@ export async function setItemInStock(itemId: number, inStock: boolean): Promise<
   }
 }
 
+// Stock received (positive change) or written off (negative) from the inventory screen. Java
+// refuses a write-off larger than what is left (409); the frontend store follows the same rule.
+export async function adjustStock(itemId: number, change: number): Promise<ActionResult> {
+  try {
+    await assertAdminAccess()
+    if (!Number.isInteger(itemId)) throw new Error('Invalid item.')
+    if (!Number.isFinite(change) || change === 0 || Math.abs(change) > 100000) throw new Error('Enter a quantity between 0 and 100,000.')
+    const amount = Math.round(change * 100) / 100
+    const javaId = await javaMenuIdFor(itemId)
+    if (javaId !== undefined) {
+      const refused = javaRefusal(await updateJavaStock(javaId, { change: amount }))
+      if (refused) return { ok: false, error: refused }
+    }
+    if (!isDbConfigured || !db) {
+      const res = changeMockStock(itemId, amount)
+      refresh()
+      return res.ok ? { ok: true } : { ok: false, error: res.error ?? 'Failed' }
+    }
+    const updated = await db
+      .update(adminMenuItems)
+      .set({ stockQty: sql`${adminMenuItems.stockQty} + ${amount}` })
+      .where(sql`${adminMenuItems.id} = ${itemId} and ${adminMenuItems.stockQty} + ${amount} >= 0`)
+      .returning({ id: adminMenuItems.id })
+    if (updated.length === 0) return { ok: false, error: 'Not enough stock left for that write-off.' }
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
 type NewItemInput = {
   name: string
   category: string
@@ -694,7 +912,7 @@ export async function createMenuItem(input: NewItemInput): Promise<ActionResult>
     const category = input.category.trim().slice(0, 40)
     if (!name || !category) throw new Error('Name and category are required.')
     const imageUrl = input.imageUrl.trim()
-    if (imageUrl && !/^(https:\/\/|\/)/.test(imageUrl)) throw new Error('Image must be an https URL or a site path.')
+    if (imageUrl && !/^(https:\/\/|\/|data:image\/)/.test(imageUrl)) throw new Error('Image must be an https URL, a site path, or an uploaded image.')
     const variations = input.variations
       .filter((option) => option.name.trim())
       .slice(0, 12)
@@ -790,7 +1008,7 @@ type PushSummary = { sent: number; failed: string[]; unreachable: boolean }
 
 // Sends queued local orders to POST /api/orders/sync (idempotent by order code) and removes
 // the ones Java now has. Orders that Java refuses stay queued with the reason reported.
-async function pushQueuedOrders(codes: string[]): Promise<PushSummary> {
+async function pushQueuedOrders(codes: string[], asService = false): Promise<PushSummary> {
   const summary: PushSummary = { sent: 0, failed: [], unreachable: false }
   if (codes.length === 0) return summary
   const orders = await loadOrdersByCode(codes)
@@ -811,6 +1029,7 @@ async function pushQueuedOrders(codes: string[]): Promise<PushSummary> {
     paid: order.paymentStatus === 'paid',
     status: order.status,
     createdAt: order.createdAt.toISOString(),
+    completedAt: order.completedAt ? order.completedAt.toISOString() : null,
     total: order.total,
     lines: order.items.map((item) => {
       const localId = localIdByName.get(normalizeMenuName(item.name))
@@ -825,7 +1044,7 @@ async function pushQueuedOrders(codes: string[]): Promise<PushSummary> {
   }))
 
   for (let start = 0; start < payload.length; start += 200) {
-    const result = await syncJavaOrders(payload.slice(start, start + 200))
+    const result = await syncJavaOrders(payload.slice(start, start + 200), { asService })
     if (!result.ok) {
       if (result.unreachable) return { ...summary, unreachable: true }
       summary.failed.push(result.error)

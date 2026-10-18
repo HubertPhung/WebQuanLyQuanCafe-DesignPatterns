@@ -42,20 +42,23 @@ public class ConfigHandler extends ApiHandler {
     private void update(HttpExchange exchange) throws IOException {
         Map<String, Object> body = readJsonBody(exchange);
         SystemConfigManager config = SystemConfigManager.getInstance();
-        // Validate everything first so a bad field never leaves the settings half-applied.
-        String storeName = text(body, "storeName", config.getStoreName());
-        String storeAddress = text(body, "storeAddress", config.getStoreAddress());
-        String storePhone = text(body, "storePhone", config.getStorePhone());
-        LocalTime opening = time(body, "openingTime", config.getOpeningTime());
-        LocalTime closing = time(body, "closingTime", config.getClosingTime());
-        if (!opening.isBefore(closing)) {
-            throw ApiException.badRequest("openingTime must be before closingTime");
-        }
-        int maxGuests = whole(body, "maxReservationGuests", config.getMaxReservationGuests(), 1, 100);
-        int earnRate = whole(body, "loyaltyRateVndPerPoint", config.getLoyaltyRateVndPerPoint(), 1_000, 1_000_000);
-        int redeemValue = whole(body, "pointRedeemValueVnd", config.getPointRedeemValueVnd(), 0, 100_000);
-
+        Map<String, Object> saved;
+        // Read, check and write under one lock: two partial updates (say, one moving the opening
+        // time and one the closing time) must not each pass against the other's old value.
         synchronized (config) {
+            // Validate everything first so a bad field never leaves the settings half-applied.
+            String storeName = text(body, "storeName", config.getStoreName());
+            String storeAddress = text(body, "storeAddress", config.getStoreAddress());
+            String storePhone = text(body, "storePhone", config.getStorePhone());
+            LocalTime opening = time(body, "openingTime", config.getOpeningTime());
+            LocalTime closing = time(body, "closingTime", config.getClosingTime());
+            if (!opening.isBefore(closing)) {
+                throw ApiException.badRequest("openingTime must be before closingTime");
+            }
+            int maxGuests = whole(body, "maxReservationGuests", config.getMaxReservationGuests(), 1, 100);
+            int earnRate = whole(body, "loyaltyRateVndPerPoint", config.getLoyaltyRateVndPerPoint(), 1_000, 1_000_000);
+            int redeemValue = whole(body, "pointRedeemValueVnd", config.getPointRedeemValueVnd(), 0, 100_000);
+
             config.setStoreName(storeName);
             config.setStoreAddress(storeAddress);
             config.setStorePhone(storePhone);
@@ -64,8 +67,9 @@ public class ConfigHandler extends ApiHandler {
             config.setMaxReservationGuests(maxGuests);
             config.setLoyaltyRateVndPerPoint(earnRate);
             config.setPointRedeemValueVnd(redeemValue);
+            saved = toJson(config);
         }
-        sendOk(exchange, 200, toJson(config), "Settings updated");
+        sendOk(exchange, 200, saved, "Settings updated");
     }
 
     private static String text(Map<String, Object> body, String key, String current) {
@@ -103,6 +107,12 @@ public class ConfigHandler extends ApiHandler {
     }
 
     static Map<String, Object> toJson(SystemConfigManager config) {
+        synchronized (config) {
+            return snapshot(config);
+        }
+    }
+
+    private static Map<String, Object> snapshot(SystemConfigManager config) {
         Map<String, Object> json = new LinkedHashMap<>();
         json.put("storeName", config.getStoreName());
         json.put("storeAddress", config.getStoreAddress());

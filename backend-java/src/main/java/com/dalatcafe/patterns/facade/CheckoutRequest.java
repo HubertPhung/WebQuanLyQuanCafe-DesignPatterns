@@ -10,7 +10,7 @@ import java.util.Objects;
 
 /**
  * Immutable input of {@link PosCheckoutFacade#checkout(CheckoutRequest)}.
- * {@code customer} and {@code discountStrategy} are optional.
+ * {@code customer}, {@code discountStrategy} and {@code tenderedAmount} are optional.
  */
 public final class CheckoutRequest {
     private final List<CheckoutLine> lines;
@@ -20,10 +20,18 @@ public final class CheckoutRequest {
     private final Customer customer;
     private final IDiscountStrategy discountStrategy;
     private final String note;
+    private final Double tenderedAmount;
 
     public CheckoutRequest(List<CheckoutLine> lines, Integer tableId, OrderType orderType,
                            PaymentMethod paymentMethod, Customer customer,
                            IDiscountStrategy discountStrategy, String note) {
+        this(lines, tableId, orderType, paymentMethod, customer, discountStrategy, note, null);
+    }
+
+    /** {@code tenderedAmount} is the cash the customer handed over; a cash sale must cover the total. */
+    public CheckoutRequest(List<CheckoutLine> lines, Integer tableId, OrderType orderType,
+                           PaymentMethod paymentMethod, Customer customer,
+                           IDiscountStrategy discountStrategy, String note, Double tenderedAmount) {
         Objects.requireNonNull(lines, "Lines must not be null");
         if (lines.isEmpty()) {
             throw new IllegalArgumentException("Checkout must contain at least one line");
@@ -35,6 +43,10 @@ public final class CheckoutRequest {
         this.customer = customer;
         this.discountStrategy = discountStrategy;
         this.note = note;
+        if (tenderedAmount != null && tenderedAmount < 0) {
+            throw new IllegalArgumentException("Tendered amount must not be negative");
+        }
+        this.tenderedAmount = tenderedAmount;
     }
 
     public List<CheckoutLine> getLines() {
@@ -63,5 +75,9 @@ public final class CheckoutRequest {
 
     public String getNote() {
         return note;
+    }
+
+    public Double getTenderedAmount() {
+        return tenderedAmount;
     }
 }

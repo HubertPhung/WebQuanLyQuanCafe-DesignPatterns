@@ -10,14 +10,17 @@ import java.io.*;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.TimeZone;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 @DisplayName("Đà Lạt Cafe - Singleton Pattern (SystemConfigManager) Unit Tests")
 class SingletonTest {
@@ -148,6 +151,24 @@ class SingletonTest {
             // After closing (22:00)
             assertFalse(config.isWithinOperatingHours(LocalTime.of(22, 0, 1)));
             assertFalse(config.isWithinOperatingHours(LocalTime.of(23, 30)));
+        }
+
+        @Test
+        @DisplayName("isWithinOperatingHours(null) reads the café's clock, not the server's time zone")
+        void testCurrentTimeUsesTheCafeTimeZone() {
+            LocalTime cafeNow = LocalTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
+            assumeTrue(cafeNow.isAfter(LocalTime.of(1, 0)) && cafeNow.isBefore(LocalTime.of(23, 0)),
+                    "a one-hour window around now would wrap past midnight");
+            config.setOpeningTime(cafeNow.minusMinutes(30));
+            config.setClosingTime(cafeNow.plusMinutes(30));
+            TimeZone serverZone = TimeZone.getDefault();
+            // Bogotá is UTC-5 all year: twelve hours behind the café.
+            TimeZone.setDefault(TimeZone.getTimeZone("America/Bogota"));
+            try {
+                assertTrue(config.isWithinOperatingHours(null));
+            } finally {
+                TimeZone.setDefault(serverZone);
+            }
         }
 
         @Test

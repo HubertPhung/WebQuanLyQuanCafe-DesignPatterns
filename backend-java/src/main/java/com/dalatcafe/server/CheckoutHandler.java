@@ -1,6 +1,7 @@
 package com.dalatcafe.server;
 
 import com.dalatcafe.dao.ICustomerDao;
+import com.dalatcafe.dao.ITableDao;
 import com.dalatcafe.model.Customer;
 import com.dalatcafe.model.Order;
 import com.dalatcafe.model.OrderType;
@@ -10,7 +11,6 @@ import com.dalatcafe.patterns.facade.CheckoutRequest;
 import com.dalatcafe.patterns.facade.CheckoutResult;
 import com.dalatcafe.patterns.facade.Customization;
 import com.dalatcafe.patterns.facade.PosCheckoutFacade;
-import com.dalatcafe.patterns.observer.IOrderObserver;
 import com.dalatcafe.patterns.observer.LoyaltyPointObserver;
 import com.dalatcafe.patterns.singleton.SystemConfigManager;
 import com.dalatcafe.patterns.strategy.IDiscountStrategy;
@@ -28,6 +28,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * POST /api/checkout: maps the JSON request to a {@link CheckoutRequest} and delegates to
@@ -35,13 +37,18 @@ import java.util.function.BooleanSupplier;
  * when the primary database is down (no money movement on a degraded store).
  */
 public class CheckoutHandler extends ApiHandler {
+    private static final Logger LOGGER = Logger.getLogger(CheckoutHandler.class.getName());
+
     private final PosCheckoutFacade facade;
     private final ICustomerDao customerDao;
+    private final ITableDao tableDao;
     private final BooleanSupplier databaseHealthy;
 
-    public CheckoutHandler(PosCheckoutFacade facade, ICustomerDao customerDao, BooleanSupplier databaseHealthy) {
+    public CheckoutHandler(PosCheckoutFacade facade, ICustomerDao customerDao, ITableDao tableDao,
+                           BooleanSupplier databaseHealthy) {
         this.facade = Objects.requireNonNull(facade, "Facade must not be null");
         this.customerDao = Objects.requireNonNull(customerDao, "Customer DAO must not be null");
+        this.tableDao = Objects.requireNonNull(tableDao, "Table DAO must not be null");
         this.databaseHealthy = Objects.requireNonNull(databaseHealthy, "Health check must not be null");
     }
 
@@ -59,35 +66,55 @@ public class CheckoutHandler extends ApiHandler {
                     "The primary database is unavailable; payment was not taken. Please retry.");
         }
 
-        Customer known = findCustomer(str(body, "customerPhone"));
-        int requestedPoints = requestedPoints(body, known);
-        PointRedemptionDiscountStrategy redemption = requestedPoints > 0
-                ? new PointRedemptionDiscountStrategy(discount(str(body, "voucherCode"), known), requestedPoints) : null;
-        CheckoutRequest request = toRequest(body, known, redemption);
-        PaymentMethod method = request.getPaymentMethod();
-        Double tendered = num(body, "tenderedAmount");
-
+        Customer known;
+        CheckoutRequest request;
+        Double tendered;
         CheckoutResult result;
         int pointsRedeemed = 0;
         List<String> warnings = new ArrayList<>();
-        // The subject is shared, so attaching a per-customer observer must be exclusive.
+        // The member is read and charged under one lock, so two checkouts cannot both spend one
+        // points balance. Each points change is applied atomically by the DAO, so a concurrent
+        // /pay cannot overwrite it.
         synchronized (facade) {
-            IOrderObserver loyalty = known != null && known.getId() != null
-                    ? new LoyaltyPointObserver(customerDao, known.getId()) : null;
-            if (loyalty != null) {
-                facade.getEventSubject().attach(loyalty);
+            known = findCustomer(str(body, "customerPhone"));
+            int requestedPoints = requestedPoints(body, known);
+            PointRedemptionDiscountStrategy redemption = requestedPoints > 0
+                    ? new PointRedemptionDiscountStrategy(discount(str(body, "voucherCode"), known), requestedPoints) : null;
+            tendered = num(body, "tenderedAmount");
+            if (tendered != null && tendered < 0) {
+                throw ApiException.badRequest("tenderedAmount must not be negative");
+            }
+            // The discount is priced on this snapshot: the live member is debited below.
+            request = toRequest(body, known == null ? null : snapshot(known), redemption, tendered);
+
+            // Points are held before any money is taken, so a discount is never given for points
+            // that could not be deducted. What the strategy did not use is given back afterwards.
+            if (redemption != null && !customerDao.redeemPoints(known.getId(), requestedPoints)) {
+                throw new ApiException(503, "DATABASE_UNAVAILABLE",
+                        "Loyalty points could not be deducted; payment was not taken. Please retry.");
             }
             try {
                 result = facade.checkout(request);
-            } finally {
-                if (loyalty != null) {
-                    facade.getEventSubject().detach(loyalty);
+                if (result.isSuccess() && known == null && bool(body, "enrollMember", false)) {
+                    known = enrollMember(body, warnings);
                 }
-            }
-            if (result.isSuccess() && redemption != null && redemption.getPointsUsed() > 0) {
-                pointsRedeemed = redemption.getPointsUsed();
-                if (!customerDao.redeemPoints(known.getId(), pointsRedeemed)) {
-                    warnings.add("Loyalty points could not be deducted: " + pointsRedeemed);
+                if (result.isSuccess() && known != null && known.getId() != null) {
+                    // Called directly on this order, not attached to the shared subject: /pay and /sync
+                    // broadcast there under another lock and their orders must not credit this member.
+                    try {
+                        new LoyaltyPointObserver(customerDao, known.getId()).onOrderPaid(result.getOrder());
+                    } catch (RuntimeException e) {
+                        warnings.add("Loyalty points could not be added: " + e.getMessage());
+                    }
+                }
+                if (result.isSuccess() && redemption != null) {
+                    pointsRedeemed = redemption.getPointsUsed();
+                }
+            } finally {
+                int unused = redemption == null ? 0 : requestedPoints - pointsRedeemed;
+                if (unused > 0 && !customerDao.restorePoints(known.getId(), unused)) {
+                    LOGGER.severe("Could not give back " + unused + " loyalty points to customer " + known.getId());
+                    warnings.add("Unused loyalty points could not be given back: " + unused);
                 }
             }
         }
@@ -97,7 +124,7 @@ public class CheckoutHandler extends ApiHandler {
         }
         Order order = result.getOrder();
         warnings.addAll(0, result.getWarnings());
-        Map<String, Object> data = toResponse(order, tendered, method, result, known != null);
+        Map<String, Object> data = toResponse(order, tendered, request.getPaymentMethod(), result, known != null);
         data.put("warnings", warnings);
         data.put("pointsRedeemed", pointsRedeemed);
         data.put("pointsDiscountVnd", SystemConfigManager.getInstance().calculateDiscountFromPoints(pointsRedeemed));
@@ -141,6 +168,28 @@ public class CheckoutHandler extends ApiHandler {
         }
     }
 
+    /**
+     * A paid storefront order signs its buyer up on the first order, so it earns points like a
+     * member's. The new member starts at BRONZE (no discount), so the price already taken is right.
+     */
+    private Customer enrollMember(Map<String, Object> body, List<String> warnings) {
+        String phone = str(body, "customerPhone");
+        if (phone == null) {
+            return null;
+        }
+        String name = str(body, "customer");
+        Customer member = new Customer(null, name == null ? phone : name, phone, str(body, "customerEmail"));
+        try {
+            if (customerDao.save(member) && member.getId() != null) {
+                return member;
+            }
+        } catch (RuntimeException e) {
+            LOGGER.log(Level.WARNING, "Could not enrol member " + phone, e);
+        }
+        warnings.add("Membership could not be created; no loyalty points were added.");
+        return null;
+    }
+
     private Customer findCustomer(String phone) {
         if (phone == null) {
             return null;
@@ -148,7 +197,19 @@ public class CheckoutHandler extends ApiHandler {
         return customerDao.findByPhone(phone).orElse(null);
     }
 
-    private CheckoutRequest toRequest(Map<String, Object> body, Customer known, IDiscountStrategy redemption) {
+    /** The in-memory DAO hands out its live row; pricing must not see the points held from it. */
+    private static Customer snapshot(Customer live) {
+        Customer copy = new Customer(live.getId(), live.getName(), live.getPhone(), live.getEmail());
+        copy.setTotalOrders(live.getTotalOrders());
+        copy.setTotalSpent(live.getTotalSpent());
+        copy.setLoyaltyPoints(live.getLoyaltyPoints());
+        copy.setRank(live.getRank());
+        copy.setLastVisit(live.getLastVisit());
+        return copy;
+    }
+
+    private CheckoutRequest toRequest(Map<String, Object> body, Customer known, IDiscountStrategy redemption,
+                                      Double tendered) {
         List<Object> rawLines = list(body, "lines");
         if (rawLines.isEmpty()) {
             throw ApiException.badRequest("Field 'lines' must contain at least one item");
@@ -172,9 +233,13 @@ public class CheckoutHandler extends ApiHandler {
         if (tableId != null && tableId <= 0) {
             throw ApiException.badRequest("tableId must be greater than zero");
         }
+        // Checked before the facade charges: an unknown table would only fail after payment.
+        if (tableId != null && tableDao.findById(tableId).isEmpty()) {
+            throw ApiException.notFound("Table not found: " + tableId);
+        }
         return new CheckoutRequest(lines, tableId, orderType(str(body, "orderType")),
                 paymentMethod(requireStr(body, "paymentMethod")), customer,
-                redemption != null ? redemption : discount(str(body, "voucherCode"), known), str(body, "note"));
+                redemption != null ? redemption : discount(str(body, "voucherCode"), known), str(body, "note"), tendered);
     }
 
     private static Set<Customization> customizations(Map<String, Object> line) {

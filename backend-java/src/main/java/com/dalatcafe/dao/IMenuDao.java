@@ -15,6 +15,7 @@ public interface IMenuDao {
     List<MenuItem> findLowStockItems();
     boolean save(MenuItem item);
     boolean updateStock(int id, double quantityChange);
+    boolean deductStockIfAvailable(int id, double quantity);
     boolean toggleInStock(int id, boolean inStock);
     boolean deleteById(int id);
 }

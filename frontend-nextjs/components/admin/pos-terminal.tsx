@@ -100,6 +100,9 @@ export function PosTerminal({
   const tax = Math.round(afterDiscount * TAX_RATE)
   const total = afterDiscount + tax
   const change = Number(tendered || 0) - total
+  // The cash field is optional; once filled in, a paid cash sale must be covered.
+  const countsCash = payment === 'cash' && tendered !== ''
+  const cashShort = countsCash && change < 0
 
   function addLine(item: MenuItem) {
     const key = lineKey(item.id, [])
@@ -177,6 +180,7 @@ export function PosTerminal({
         paid,
         customerPhone: member?.phone,
         useLoyaltyPoints: paid && redeemablePoints > 0 ? redeemablePoints : undefined,
+        tenderedAmount: paid && countsCash ? Number(tendered) : undefined,
       })
       if (!result.ok) {
         toast.error(result.error)
@@ -456,6 +460,31 @@ export function PosTerminal({
           ))}
         </div>
 
+        {payment === 'cash' && (
+          <div className="space-y-1.5 text-xs">
+            <label htmlFor="pos-tendered" className="flex items-center justify-between gap-3 text-stone-500">
+              <span>Tiền khách đưa</span>
+              <input
+                id="pos-tendered"
+                type="number"
+                inputMode="numeric"
+                min={0}
+                step={1000}
+                value={tendered}
+                onChange={(e) => setTendered(e.target.value)}
+                placeholder="Không bắt buộc"
+                className="h-8 w-36 rounded-lg bg-stone-50 border border-stone-200 px-2 text-right font-mono tabular-nums text-stone-800 placeholder:text-stone-400 focus:outline-none focus:border-stone-300"
+              />
+            </label>
+            {countsCash && (
+              <div className={cn('flex justify-between', cashShort ? 'text-red-600' : 'text-emerald-700')}>
+                <span>{cashShort ? 'Còn thiếu' : 'Tiền thối'}</span>
+                <span className="font-mono tabular-nums">{Math.abs(change).toLocaleString('vi-VN')} đ</span>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Primary Action Buttons */}
         <div className="grid grid-cols-2 gap-2.5 pt-2">
           <Button
@@ -471,7 +500,7 @@ export function PosTerminal({
 
           <Button
             type="button"
-            disabled={!lines.length || pending}
+            disabled={!lines.length || pending || cashShort}
             onClick={() => submit(true)}
             className="h-11 rounded-lg bg-[#5A3E2B] hover:bg-[#684732] text-white font-extrabold text-xs gap-2 shadow-sm"
           >

@@ -17,7 +17,7 @@ import { DrinkMenu } from '@/components/storefront/DrinkMenu'
 import { Header } from '@/components/storefront/Header'
 import { CafeSpace } from '@/components/storefront/CafeSpace'
 import type { StorefrontAccount } from '@/components/storefront/AccountDropdown'
-import { useCartStore } from '@/lib/store/cart-store'
+import { redirectToSignIn, useCartStore } from '@/lib/store/cart-store'
 import { toast } from 'sonner'
 
 interface RoleSwitcherViewProps {
@@ -78,6 +78,10 @@ export function RoleSwitcherView({
   }
 
   const handleAddToCart = async (product: Product, options: Record<string, string>, variantId: string) => {
+    if (!account) {
+      redirectToSignIn()
+      return false
+    }
     const success = await useCartStore.getState().addToCart(product, variantId, options)
     if (success) {
       mutateCart()
@@ -97,7 +101,12 @@ export function RoleSwitcherView({
         <Hero
           onBrowseBeans={() => {
             const el = document.getElementById('menu')
-            el?.scrollIntoView({ behavior: 'smooth' })
+            if (el) {
+              const headerOffset = 84
+              const elementPosition = el.getBoundingClientRect().top
+              const offsetPosition = elementPosition + (window.scrollY || window.pageYOffset || 0) - headerOffset
+              window.scrollTo({ top: Math.max(0, offsetPosition), behavior: 'smooth' })
+            }
           }}
         />
 
@@ -134,7 +143,7 @@ export function RoleSwitcherView({
         {products
           .filter((p) => p.productType === 'Whole Bean')
           .map((p) => (
-            <section className="bean-feature section-shell" key={p.id}>
+            <section className="bean-feature section-shell scroll-mt-24" key={p.id}>
               <div>
                 <p className="eyebrow">TỪ XƯỞNG RANG ĐẾN TÁCH CÀ PHÊ CỦA BẠN</p>
                 <h2>
@@ -152,7 +161,7 @@ export function RoleSwitcherView({
           ))}
 
         {/* Coffee Story Section */}
-        <section className="story-section section-shell" id="story">
+        <section className="story-section section-shell scroll-mt-24 lg:min-h-[calc(100vh-106px)] flex items-center" id="story">
           <div className="story-image">
             <img src="/images/hero.png" alt="Tách cà phê ấm áp, được chế tác từ tâm" loading="lazy" />
             <span>HƠN CẢ MỘT TÁCH CÀ PHÊ.</span>
@@ -177,7 +186,7 @@ export function RoleSwitcherView({
         </section>
 
         {/* Educational Coffee Journal Section */}
-        <section id="journal" className="journal section-shell">
+        <section id="journal" className="journal section-shell scroll-mt-24 py-12 md:py-16">
           <p className="eyebrow">
             GÓC CÀ PHÊ · KHÔNG GIAN QUÁN <span className="sr-only">NOTES FROM THE COFFEE BAR</span>
           </p>

@@ -9,10 +9,11 @@ trigger: always_on
 - **NGHIÊM CẤM:** Tuyệt đối KHÔNG sử dụng Spring Boot, Spring Security, Spring Data JPA, Hibernate, Quarkus hay bất kỳ framework backend nào.
 - **Mẫu thiết kế (Design Patterns):** Mọi logic nghiệp vụ cốt lõi phải triển khai theo đúng 9 mẫu GoF đã đặc tả trong `docs/DESIGN_PATTERNS_SPEC.md`:
   - *Creational:* Singleton (`SystemConfigManager`), Factory Method (`PaymentProcessorFactory`), Builder (`OrderBuilder`).
-  - *Structural:* Decorator (`ToppingDecorator`), Adapter (`ReservationToOrderAdapter`), Facade (`PosCheckoutFacade`).
-  - *Behavioral:* Strategy (`DiscountStrategy`), Chain of Responsibility (`ReservationValidator`), Observer (`OrderEventSubject`).
+  - *Structural:* Decorator (`BeverageDecorator`), Adapter (`ReservationToOrderAdapter`), Facade (`PosCheckoutFacade`).
+  - *Behavioral:* Strategy (`IDiscountStrategy`), Chain of Responsibility (`ReservationValidatorHandler`), Observer (`OrderEventSubject`).
 - **Giao thức mạng:** Sử dụng `com.sun.net.httpserver.HttpServer` của Java SE để mở cổng 8080 tiếp nhận REST JSON.
 - **Truy xuất CSDL:** Sử dụng `java.sql.*` (JDBC chuẩn) kết nối PostgreSQL/Supabase, triển khai theo mô hình DAO pattern độc lập.
+- **Đọc cấu hình:** Code nào đọc từ 2 thông số của `SystemConfigManager` trở lên và cần chúng khớp nhau (ví dụ giờ mở và giờ đóng) phải đặt các lần đọc trong `synchronized (config)`. Test hiện có không bắt được lỗi nếu quên khoá này.
 - **Kiểm thử:** Sử dụng JUnit 5 thuần túy để viết Unit Test cho từng Design Pattern.
 
 ## 2. Ràng buộc Frontend Next.js

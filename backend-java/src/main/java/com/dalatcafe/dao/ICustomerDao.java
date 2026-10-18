@@ -17,6 +17,8 @@ public interface ICustomerDao {
     boolean save(Customer customer);
     boolean addOrderRecord(int id, double orderAmount, int earnedPoints);
     boolean redeemPoints(int id, int points);
+    /** Returns points taken by {@link #redeemPoints} that were not spent. */
+    boolean restorePoints(int id, int points);
     boolean deleteById(int id);
 }
 

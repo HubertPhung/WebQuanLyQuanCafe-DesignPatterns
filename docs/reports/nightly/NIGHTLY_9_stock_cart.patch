@@ -1,0 +1,282 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 847a1e9..d3a18af 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -48,7 +48,7 @@ jobs:
+       - name: Build Next.js Application
+         run: npm run build
+ 
+-      - name: Run Automated UI/UX & Admin Action Test Suite (40 Tests)
++      - name: Run Automated UI/UX & Admin Action Test Suite (41 Tests)
+         run: |
+           # Khởi động production server Next.js ở chế độ background
+           npx next start -p 3000 &
+diff --git a/README.md b/README.md
+index 1ce1b96..38cf680 100644
+--- a/README.md
++++ b/README.md
+@@ -129,7 +129,7 @@ Tài khoản nằm ở backend Java, nên **cần chạy Java** để đăng nh
+ ## 6. Kiểm thử
+ 
+ ```bash
+-cd frontend-nextjs && npm test     # 40 test UI/UX (tự khởi động next dev nếu chưa có server)
++cd frontend-nextjs && npm test     # 41 test UI/UX (tự khởi động next dev nếu chưa có server)
+ cd backend-java && mvn clean test  # 256 test JUnit 5 (kể cả JDBC trên PostgreSQL nhúng)
+ ```
+ Danh mục test, báo cáo E2E và các giới hạn đã biết: [docs/TESTING.md](docs/TESTING.md).
+diff --git a/docs/DESIGN_PATTERNS_SPEC.md b/docs/DESIGN_PATTERNS_SPEC.md
+index deb9756..04beb30 100644
+--- a/docs/DESIGN_PATTERNS_SPEC.md
++++ b/docs/DESIGN_PATTERNS_SPEC.md
+@@ -89,7 +89,7 @@ frontend-nextjs/
+ │   ├── db/                 index.ts (Drizzle), schema.ts, mock-store.ts
+ │   ├── store/cart-store.ts # Zustand
+ │   └── shopify.ts, utils.ts
+-└── scripts/test-ui-ux.mjs  # 40 test UI/UX
++└── scripts/test-ui-ux.mjs  # 41 test UI/UX
+ ```
+ 
+ ### 1.3.2. Backend Java (`backend-java`)
+@@ -1263,7 +1263,7 @@ public class LoyaltyPointObserver implements IOrderObserver {
+ | **Thư mục Backend Java** | Hoàn thành #01–#12: POJO, DAO (In-Memory/JDBC), 9 pattern, HttpServer cổng 8080 | Cấu trúc Maven Java SE OOP tại `src/main/java/com/dalatcafe/` (mục 1.4.2) |
+ | **Khung công nghệ Backend** | Không dùng Spring Boot / Security / Data JPA | Thiết kế hướng đối tượng thuần túy Java SE 17+ (Pure Java OOP) |
+ | **9 GoF Design Patterns** | Đã cài đặt đủ 9 pattern, mỗi pattern có lớp test JUnit 5 riêng (#13) | Sơ đồ lớp Mermaid và mã nguồn tại Mục 3 được vẽ lại theo code thực tế |
+-| **Kiểm thử tự động** | 256 test JUnit 5 (`mvn test`, gồm test JDBC trên PostgreSQL nhúng) và 40 test UI/UX (`npm test`) chạy trên GitHub Actions | Kết quả E2E ghi tại [TESTING.md](TESTING.md) (#15) |
++| **Kiểm thử tự động** | 256 test JUnit 5 (`mvn test`, gồm test JDBC trên PostgreSQL nhúng) và 41 test UI/UX (`npm test`) chạy trên GitHub Actions | Kết quả E2E ghi tại [TESTING.md](TESTING.md) (#15) |
+ 
+ ### 5.2. Lộ trình Thực hiện Backend Java Thuần (`backend-java`)
+ 1. **Khởi tạo cấu trúc gói Java tiêu chuẩn (Hoàn thành 🟢, #01):** Cấu trúc thư mục `src/main/java/com/dalatcafe/` theo chuẩn Maven.
+diff --git a/docs/TESTING.md b/docs/TESTING.md
+index 07c0ae2..acd3f1e 100644
+--- a/docs/TESTING.md
++++ b/docs/TESTING.md
+@@ -10,7 +10,7 @@ Tài liệu gom toàn bộ thông tin kiểm thử: cách chạy, danh mục tes
+ | Bộ kiểm thử | Lệnh | Số ca | Chạy trên CI |
+ | :--- | :--- | :---: | :---: |
+ | JUnit 5 Backend | `cd backend-java && mvn clean test` | 256 | ✅ Job *Backend CI* |
+-| UI/UX & Admin Actions | `cd frontend-nextjs && npm test` | 40 | ✅ Job *Frontend CI* |
++| UI/UX & Admin Actions | `cd frontend-nextjs && npm test` | 41 | ✅ Job *Frontend CI* |
+ | Kiểu TypeScript | `cd frontend-nextjs && npx tsc --noEmit` | — | ✅ |
+ | Build production | `cd frontend-nextjs && npm run build` | — | ✅ |
+ | Đầu-cuối trên PostgreSQL thật | `cd frontend-nextjs && npm run test:e2e` | 59 | ❌ Chạy tay |
+@@ -45,7 +45,7 @@ Tài liệu gom toàn bộ thông tin kiểm thử: cách chạy, danh mục tes
+ 
+ ---
+ 
+-## 3. Bộ test UI/UX & Admin Actions (40 ca)
++## 3. Bộ test UI/UX & Admin Actions (41 ca)
+ 
+ Các mã dưới đây khớp chính xác với `frontend-nextjs/scripts/test-ui-ux.mjs`.
+ 
+@@ -83,6 +83,7 @@ Các mã dưới đây khớp chính xác với `frontend-nextjs/scripts/test-ui
+ | | `TC-ACT-09` | Món mới trả về id để liên kết với món Java |
+ | | `TC-ACT-10` | Khi Java tắt, fallback đặt bàn cục bộ từ chối phiếu trùng khung 2 giờ, phiếu 23:30 và phiếu đã qua; phiếu đã huỷ không giữ chỗ |
+ | | `TC-ACT-11` | Khi Java tắt, đơn tiền mặt có nhập tiền khách đưa mà thiếu so với tổng bị từ chối, không ghi đơn và không trừ kho; đưa đủ thì nhận; thanh toán thẻ bỏ qua số tiền đưa |
++| | `TC-ACT-12` | Đơn Java chưa thu tiền (COD, hoá đơn mở) không được lấy quá số tồn: đặt đúng số còn lại thì nhận, thêm 1 thì báo còn bao nhiêu; món hết (tồn 0) hoặc không có trong menu thì báo hết món |
+ | Đăng nhập & phân quyền | `TC-AUTH-01` | Khách chưa đăng nhập bị chuyển tới `/login?next=…` |
+ | | `TC-AUTH-02` | Phiên `CUSTOMER` không vào được `/admin` |
+ | | `TC-AUTH-03` | `STAFF` mở được POS nhưng bị chặn ở cài đặt (chỉ ADMIN) |
+@@ -113,7 +114,7 @@ Các mã dưới đây khớp chính xác với `frontend-nextjs/scripts/test-ui
+ | Hạng mục | Kết quả |
+ | :--- | :--- |
+ | JUnit 5 (`mvn clean test`) | **168 / 168 PASS** (bộ test lúc chạy E2E; hiện là 256, xem mục 1) |
+-| UI/UX (`npm test`, Java đang chạy) | **25 / 25 PASS** (hiện là 40, xem mục 3) |
++| UI/UX (`npm test`, Java đang chạy) | **25 / 25 PASS** (hiện là 41, xem mục 3) |
+ | TypeScript, build production | Không lỗi |
+ | Cú pháp sơ đồ Mermaid (`mermaid.parse`, Mermaid 11) | Tất cả sơ đồ trong `docs/` hợp lệ |
+ | API proxy `lib/api-client.ts` với Java thật (menu, checkout, bàn, đặt bàn, backend tắt, `JAVA_BACKEND_URL=off`) | **9 / 9 PASS** |
+diff --git a/frontend-nextjs/app/admin/actions.ts b/frontend-nextjs/app/admin/actions.ts
+index e35b139..d72f3cc 100644
+--- a/frontend-nextjs/app/admin/actions.ts
++++ b/frontend-nextjs/app/admin/actions.ts
+@@ -52,6 +52,7 @@ import {
+ import type { Cart } from '@/lib/shopify'
+ import { parseMenuVariant } from '@/lib/storefront/menu-catalog'
+ import { saveOrderContact, type Fulfilment } from '@/lib/orders/online-contacts'
++import { stockShortage } from '@/lib/orders/stock'
+ import { dequeueSync, enqueueSync, listSyncQueue } from '@/lib/admin/local-links'
+ import { linkMenuItem, normalizeMenuName, resolveJavaMenuIds } from '@/lib/admin/menu-link'
+ import { hasReservationTimePassed } from '@/lib/reservation-rules'
+@@ -224,7 +225,7 @@ type NewOrderInput = {
+   tenderedAmount?: number
+ }
+ 
+-type LocalMenuItem = Pick<MenuItem, 'id' | 'name' | 'kind' | 'inStock' | 'variations' | 'sellPrice'>
++type LocalMenuItem = Pick<MenuItem, 'id' | 'name' | 'kind' | 'inStock' | 'stockQty' | 'variations' | 'sellPrice'>
+ 
+ type CheckoutOutcome =
+   | { kind: 'accepted'; receipt: CheckoutReceipt }
+@@ -305,7 +306,15 @@ function newLocalOrderCode() {
+   return `AC-${stamp}-${random}`
+ }
+ 
+-async function recordOrderLocally(input: LocalOrderInput, quantities: Map<number, number>): Promise<ActionResult> {
++class OutOfStockError extends Error {}
++
++// An order Java has not charged may not take more than is left; outOfStock is the error then.
++// One Java already charged is recorded regardless, since Java checked its own stock.
++async function recordOrderLocally(
++  input: LocalOrderInput,
++  quantities: Map<number, number>,
++  outOfStock?: string,
++): Promise<ActionResult> {
+   if (!isDbConfigured || !db) {
+     const res = createMockOrder(input)
+     return res.ok ? { ok: true, message: res.message } : { ok: false, error: res.error ?? 'Failed' }
+@@ -354,6 +363,16 @@ async function recordOrderLocally(input: LocalOrderInput, quantities: Map<number
+         status: 'pending',
+       })
+       for (const [id, qty] of quantities) {
++        if (outOfStock) {
++          // Conditional, so two orders racing for the last cups cannot both take them.
++          const taken = await tx
++            .update(adminMenuItems)
++            .set({ stockQty: sql`${adminMenuItems.stockQty} - ${qty}` })
++            .where(sql`${adminMenuItems.id} = ${id} and ${adminMenuItems.stockQty} >= ${qty}`)
++            .returning({ id: adminMenuItems.id })
++          if (taken.length === 0) throw new OutOfStockError(outOfStock)
++          continue
++        }
+         await tx
+           .update(adminMenuItems)
+           .set({ stockQty: sql`greatest(${adminMenuItems.stockQty} - ${qty}, 0)` })
+@@ -367,7 +386,9 @@ async function recordOrderLocally(input: LocalOrderInput, quantities: Map<number
+       }
+     })
+     return { ok: true, message: `Order sent to the bar for ${customer}.` }
+-  } catch {
++  } catch (error) {
++    // The transaction rolled back; the in-memory store must not take the order instead.
++    if (error instanceof OutOfStockError) return { ok: false, error: error.message }
+     const res = createMockOrder(input)
+     return res.ok ? { ok: true, message: res.message } : { ok: false, error: res.error ?? 'Failed' }
+   }
+@@ -420,11 +441,9 @@ export async function createOrder(input: NewOrderInput): Promise<ActionResult> {
+ 
+     // Check availability locally first so the backend never charges for an order we cannot record.
+     const localMenu = await loadLocalMenu([...quantities.keys()])
+-    const unavailable = lines.some((line) => {
+-      const item = localMenu.find((candidate) => candidate.id === line.menuItemId)
+-      return !item || item.kind !== 'menu' || !item.inStock
+-    })
+-    if (unavailable) throw new Error('One of the items is no longer available.')
++    const shortage = stockShortage(quantities, localMenu)
++    if (shortage?.kind === 'unavailable') throw new Error('One of the items is no longer available.')
++    if (shortage) throw new Error(`Only ${shortage.left} ${shortage.name} left in stock.`)
+ 
+     const member: MemberCheckout = customerPhone ? { customerPhone, useLoyaltyPoints: points || undefined } : {}
+     const outcome = await forwardCheckout(order, localMenu, member)
+@@ -443,6 +462,7 @@ export async function createOrder(input: NewOrderInput): Promise<ActionResult> {
+         totals: receipt ? { subtotal: receipt.subtotal, total: receipt.finalTotal } : undefined,
+       },
+       quantities,
++      receipt ? undefined : 'One of the items just ran out. Refresh the menu and try again.',
+     )
+     refresh()
+     if (!res.ok) return res
+@@ -548,11 +568,9 @@ export async function placeOnlineOrder(input: OnlineOrderInput): Promise<OnlineO
+     if ([...quantities.values()].some((qty) => qty > 50)) throw new Error('Mỗi món có tối đa 50 phần trong một đơn.')
+ 
+     const localMenu = await loadLocalMenu([...quantities.keys()])
+-    const unavailable = lines.some((line) => {
+-      const item = localMenu.find((candidate) => candidate.id === line.menuItemId)
+-      return !item || item.kind !== 'menu' || !item.inStock
+-    })
+-    if (unavailable) throw new Error('Một món trong giỏ vừa hết, hãy cập nhật giỏ hàng.')
++    const shortage = stockShortage(quantities, localMenu)
++    if (shortage?.kind === 'unavailable') throw new Error('Một món trong giỏ vừa hết, hãy cập nhật giỏ hàng.')
++    if (shortage) throw new Error(`Chỉ còn ${shortage.left} phần ${shortage.name}, hãy giảm số lượng trong giỏ.`)
+ 
+     const paid = input.payment !== 'cod'
+     const order: LocalOrderInput = { lines, customer: name, tableId: null, orderType: fulfilment, paymentMethod, paid }
+@@ -578,7 +596,11 @@ export async function placeOnlineOrder(input: OnlineOrderInput): Promise<OnlineO
+     }
+ 
+     const orderCode = receipt?.orderCode ?? newLocalOrderCode()
+-    const recorded = await recordOrderLocally({ ...order, orderCode, totals }, quantities)
++    const recorded = await recordOrderLocally(
++      { ...order, orderCode, totals },
++      quantities,
++      receipt ? undefined : 'Một món trong giỏ vừa hết, hãy cập nhật giỏ hàng.',
++    )
+     if (!recorded.ok) return recorded
+     await saveOrderContact({
+       orderCode,
+diff --git a/frontend-nextjs/app/cart/page.tsx b/frontend-nextjs/app/cart/page.tsx
+index 57231c4..e580202 100644
+--- a/frontend-nextjs/app/cart/page.tsx
++++ b/frontend-nextjs/app/cart/page.tsx
+@@ -25,9 +25,10 @@ export default function CartPage() {
+ 
+   const lineItems = cart?.lines?.nodes ?? []
+   const subtotal = Number(cart?.cost?.subtotalAmount?.amount ?? '0')
+-  const isDiscounted = cart?.discountCodes?.some((d) => d.applicable)
+-  const discountAmount = isDiscounted ? subtotal * 0.1 : 0
+-  const total = Math.max(0, subtotal - discountAmount)
++  const voucher = cart?.discountCodes?.find((d) => d.applicable)
++  // The cart API applies the voucher with its cap; recomputing it here let the two disagree.
++  const total = Number(cart?.cost?.totalAmount?.amount ?? subtotal)
++  const discountAmount = Math.max(0, subtotal - total)
+ 
+   const handleApplyPromo = async (e: React.FormEvent) => {
+     e.preventDefault()
+@@ -196,9 +197,9 @@ export default function CartPage() {
+                       {formatMoneyVND(subtotal)}
+                     </span>
+                   </div>
+-                  {isDiscounted && (
++                  {voucher && (
+                     <div className="flex justify-between text-emerald-700">
+-                      <span>Ưu đãi thành viên (-10%)</span>
++                      <span>Mã {voucher.code}</span>
+                       <span className="font-semibold tabular-nums">-{formatMoneyVND(discountAmount)}</span>
+                     </div>
+                   )}
+diff --git a/frontend-nextjs/lib/orders/stock.ts b/frontend-nextjs/lib/orders/stock.ts
+new file mode 100644
+index 0000000..4b5d2b3
+--- /dev/null
++++ b/frontend-nextjs/lib/orders/stock.ts
+@@ -0,0 +1,17 @@
++import type { MenuItem } from '@/lib/db/schema'
++
++export type StockedItem = Pick<MenuItem, 'id' | 'name' | 'kind' | 'inStock' | 'stockQty'>
++
++export type StockShortage = { kind: 'unavailable' } | { kind: 'short'; name: string; left: number }
++
++// The storefront hides an item once its stock reaches 0, and Java refuses to sell more than is
++// left (BR-11); an order recorded here follows the same rule instead of clamping stock at 0.
++export function stockShortage(quantities: Map<number, number>, menu: StockedItem[]): StockShortage | null {
++  const byId = new Map(menu.map((item) => [item.id, item]))
++  for (const [id, qty] of quantities) {
++    const item = byId.get(id)
++    if (!item || item.kind !== 'menu' || !item.inStock || item.stockQty <= 0) return { kind: 'unavailable' }
++    if (item.stockQty < qty) return { kind: 'short', name: item.name, left: Math.floor(item.stockQty) }
++  }
++  return null
++}
+diff --git a/frontend-nextjs/scripts/test-ui-ux.mjs b/frontend-nextjs/scripts/test-ui-ux.mjs
+index c7e2b71..034c5af 100644
+--- a/frontend-nextjs/scripts/test-ui-ux.mjs
++++ b/frontend-nextjs/scripts/test-ui-ux.mjs
+@@ -530,6 +530,20 @@ async function runAdminMutationTests() {
+       recordTest('TC-ACT-11', 'Offline Cash Sale Must Be Covered by the Cash Tendered', 'Admin Actions', 'FAIL', JSON.stringify({ short, shortRecorded, stockBefore, stockAfterShort, covered, card }))
+     }
+ 
++    // TC-ACT-12: An order Java has not charged (COD, open tab) may not take more than is left
++    const { stockShortage } = await import('../lib/orders/stock.ts')
++    const stocked = getMockMenuItems().find(m => m.kind === 'menu' && m.inStock && m.stockQty >= 2)
++    const left = Math.floor(stocked.stockQty)
++    const enough = stockShortage(new Map([[stocked.id, left]]), getMockMenuItems())
++    const tooMany = stockShortage(new Map([[stocked.id, left + 1]]), getMockMenuItems())
++    const soldOut = stockShortage(new Map([[stocked.id, 1]]), [{ ...stocked, stockQty: 0 }])
++    const unknown = stockShortage(new Map([[-1, 1]]), getMockMenuItems())
++    if (enough === null && tooMany?.kind === 'short' && tooMany.left === left && soldOut?.kind === 'unavailable' && unknown?.kind === 'unavailable') {
++      recordTest('TC-ACT-12', 'Orders Cannot Take More Than the Stock Left', 'Admin Actions', 'PASS', `${left + 1} × ${stocked.name} refused, ${left} accepted`)
++    } else {
++      recordTest('TC-ACT-12', 'Orders Cannot Take More Than the Stock Left', 'Admin Actions', 'FAIL', JSON.stringify({ enough, tooMany, soldOut, unknown }))
++    }
++
+   } catch (err) {
+     recordTest('TC-ACT-01', 'Admin Server Actions & Mock Store Operations', 'Admin Actions', 'FAIL', err.message)
+   }

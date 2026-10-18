@@ -65,7 +65,8 @@ async function ensureServerRunning() {
   }
 
   console.log(`⚠️ Server not detected at ${BASE_URL}. Starting Next.js dev server automatically...`)
-  const cmd = process.platform === 'win32' ? 'npx.cmd next dev -p 3000' : 'npx next dev -p 3000'
+  const port = new URL(BASE_URL).port || '3000'
+  const cmd = process.platform === 'win32' ? `npx.cmd next dev -p ${port}` : `npx next dev -p ${port}`
   spawnedProcess = spawn(cmd, {
     stdio: 'ignore',
     shell: true,
@@ -129,26 +130,27 @@ async function runStorefrontTests() {
     recordTest('TC-SF-02', 'Hero Section Content & CTAs', 'Storefront', 'FAIL', err.message)
   }
 
-  // TC-SF-03: Menu Catalog Display & Demo Products Fallback
+  // TC-SF-03: Menu Catalog Display from the café menu (Shopify not configured)
   try {
     const res = await fetchPage(`${BASE_URL}/`)
-    const hasProducts = res.body.includes('Vanilla Velvet Latte') && res.body.includes('Nitro Cold Brew')
+    const hasProducts = res.body.includes('Cà phê Latte Vani Mịn') && res.body.includes('Trà Đào Cam Sả')
     const noBlankError = !res.body.includes('Our menu is taking a little coffee break')
     if (hasProducts && noBlankError) {
-      recordTest('TC-SF-03', 'Catalog Display with Demo Products Fallback', 'Storefront', 'PASS', 'High-res coffee items rendered')
+      recordTest('TC-SF-03', 'Catalog Display from the Café Menu', 'Storefront', 'PASS', 'Menu items rendered')
     } else {
-      recordTest('TC-SF-03', 'Catalog Display with Demo Products Fallback', 'Storefront', 'FAIL', 'Products missing or error banner showing')
+      recordTest('TC-SF-03', 'Catalog Display from the Café Menu', 'Storefront', 'FAIL', 'Products missing or error banner showing')
     }
   } catch (err) {
-    recordTest('TC-SF-03', 'Catalog Display with Demo Products Fallback', 'Storefront', 'FAIL', err.message)
+    recordTest('TC-SF-03', 'Catalog Display from the Café Menu', 'Storefront', 'FAIL', err.message)
   }
 
   // TC-SF-04: Category Tabs & Filtering Elements
   try {
     const res = await fetchPage(`${BASE_URL}/`)
-    const hasCategories = ['All favorites', 'Espresso', 'Pour Over', 'Cold Brew', 'Pastries', 'Whole Bean'].every(c => res.body.includes(c))
+    // Tabs follow the menu's own categories.
+    const hasCategories = ['All favorites', 'Cà phê', 'Cà phê ủ lạnh'].every(c => res.body.includes(c))
     if (hasCategories) {
-      recordTest('TC-SF-04', 'Category Tabs & Toolbar Controls', 'Storefront', 'PASS', 'All 6 category filters rendered')
+      recordTest('TC-SF-04', 'Category Tabs & Toolbar Controls', 'Storefront', 'PASS', 'Menu category filters rendered')
     } else {
       recordTest('TC-SF-04', 'Category Tabs & Toolbar Controls', 'Storefront', 'FAIL', 'Some category filters missing')
     }
@@ -213,12 +215,12 @@ async function runCartAndWishlistTests() {
         'Content-Type': 'application/json',
         'Origin': BASE_URL,
       },
-      body: JSON.stringify({ id: 'gid://shopify/Product/1' })
+      body: JSON.stringify({ id: 'gid://dalatcafe/Product/1' })
     })
     const favCookie = postFav.headers.get('set-cookie')
     const favData = await postFav.json()
 
-    if (postFav.status === 200 && Array.isArray(favData) && favData.includes('gid://shopify/Product/1')) {
+    if (postFav.status === 200 && Array.isArray(favData) && favData.includes('gid://dalatcafe/Product/1')) {
       recordTest('TC-API-01', 'Toggle Wishlist / Favorites Item', 'Cart & Wishlist', 'PASS', 'Item added to favorites cookie')
     } else {
       recordTest('TC-API-01', 'Toggle Wishlist / Favorites Item', 'Cart & Wishlist', 'FAIL', `Status ${postFav.status}`)
@@ -227,27 +229,44 @@ async function runCartAndWishlistTests() {
     recordTest('TC-API-01', 'Toggle Wishlist / Favorites Item', 'Cart & Wishlist', 'FAIL', err.message)
   }
 
-  // TC-API-02: Cart Add Item
+  // TC-API-02: Cart Add Item (ordering needs a signed-in account; a guest is sent to sign in)
   try {
+    const addDrink = JSON.stringify({
+      action: 'add',
+      variantId: 'gid://dalatcafe/ProductVariant/2-L',
+      options: { Milk: 'Oat', Sugar: '50% (Vừa)', Ice: '50% (Ít đá)' }
+    })
+    const guestCart = await fetch(`${BASE_URL}/api/cart`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Origin': BASE_URL },
+      body: addDrink,
+    })
+    const guestBlocked = guestCart.status === 401 && (await guestCart.json()).loginRequired === true
+    const customer = await sessionCookie('CUSTOMER')
     const postCart = await fetch(`${BASE_URL}/api/cart`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Origin': BASE_URL,
+        'Cookie': customer,
       },
-      body: JSON.stringify({
-        action: 'add',
-        variantId: 'gid://shopify/ProductVariant/101',
-        options: { Milk: 'Oat', Sweetness: 'Regular', Ice: 'Regular' }
-      })
+      body: addDrink,
     })
 
     const setCookies = postCart.headers.get('set-cookie')
-    if (setCookies) cookieHeader = setCookies.split(';')[0]
+    cookieHeader = setCookies ? `${customer}; ${setCookies.split(';')[0]}` : customer
 
     const cartData = await postCart.json()
-    if (postCart.status === 200 && cartData.totalQuantity >= 1 && cartData.lines?.nodes?.length > 0) {
-      recordTest('TC-API-02', 'Add Drink with Customizations to Cart', 'Cart & Wishlist', 'PASS', `Total qty: ${cartData.totalQuantity}, Cost: $${cartData.cost.totalAmount.amount}`)
+    const addedLine = cartData.lines?.nodes?.[0]
+    // Size L is its own variant and the sugar choice is kept on the line.
+    if (
+      guestBlocked &&
+      postCart.status === 200 &&
+      cartData.totalQuantity >= 1 &&
+      addedLine?.merchandise?.title?.startsWith('Size L') &&
+      addedLine.attributes?.some((a) => a.key === 'Sugar')
+    ) {
+      recordTest('TC-API-02', 'Add Drink with Customizations to Cart', 'Cart & Wishlist', 'PASS', `Total qty: ${cartData.totalQuantity}, Cost: ${cartData.cost.totalAmount.amount} ${cartData.cost.totalAmount.currencyCode}`)
       
       const lineId = cartData.lines.nodes[0].id
 
@@ -303,7 +322,7 @@ async function runCartAndWishlistTests() {
       }
 
     } else {
-      recordTest('TC-API-02', 'Add Drink with Customizations to Cart', 'Cart & Wishlist', 'FAIL', `Cart error: ${JSON.stringify(cartData)}`)
+      recordTest('TC-API-02', 'Add Drink with Customizations to Cart', 'Cart & Wishlist', 'FAIL', `guest=${guestCart.status}, cart: ${JSON.stringify(cartData)}`)
     }
   } catch (err) {
     recordTest('TC-API-02', 'Add Drink with Customizations to Cart', 'Cart & Wishlist', 'FAIL', err.message)
@@ -358,10 +377,21 @@ async function runAdminMutationTests() {
       paymentMethod: 'card',
       paid: true,
     })
-    if (orderRes.ok) {
-      recordTest('TC-ACT-01', 'Place Order via POS (Table 5 Occupied, Stock Deducted)', 'Admin Actions', 'PASS', orderRes.message)
+    // An order never sells more than is in stock, even split over two lines of the same item.
+    const left = getMockMenuItems().find((m) => m.id === 1).stockQty
+    const oversell = createMockOrder({
+      lines: [{ menuItemId: 1, qty: left }, { menuItemId: 1, qty: 1 }],
+      customer: 'Automated Oversell',
+      tableId: null,
+      orderType: 'pickup',
+      paymentMethod: 'cash',
+      paid: false,
+    })
+    const stockKept = getMockMenuItems().find((m) => m.id === 1).stockQty === left
+    if (orderRes.ok && !oversell.ok && oversell.error?.startsWith(`Only ${left}`) && stockKept) {
+      recordTest('TC-ACT-01', 'Place Order via POS (Table 5 Occupied, Stock Deducted, No Overselling)', 'Admin Actions', 'PASS', `${orderRes.message} Oversell refused: ${oversell.error}`)
     } else {
-      recordTest('TC-ACT-01', 'Place Order via POS', 'Admin Actions', 'FAIL', orderRes.error)
+      recordTest('TC-ACT-01', 'Place Order via POS', 'Admin Actions', 'FAIL', `${orderRes.error ?? ''} oversell=${JSON.stringify(oversell)} stockKept=${stockKept}`)
     }
 
     // TC-ACT-02: Kitchen Status Progression
@@ -483,6 +513,44 @@ async function runAdminMutationTests() {
       recordTest('TC-ACT-09', 'New Menu Item Returns Its Id for the Java Link', 'Admin Actions', 'FAIL', linked.error ?? 'id missing')
     }
 
+    // TC-ACT-10: With Java offline, the local reservation fallback refuses what the Java chain refuses
+    const { createMockReservation, updateMockReservationStatus } = await import('../lib/db/mock-store.ts')
+    const bookedTable = getMockTables().find(t => t.seats >= 2)
+    // A month ahead so no seeded booking shares the slot; UTC 03:00 is 10:00 in Đà Lạt.
+    const at = (utcHour, utcMinute = 0) => {
+      const day = new Date(Date.now() + 30 * 86400000)
+      day.setUTCHours(utcHour, utcMinute, 0, 0)
+      return day
+    }
+    const booking = (dateTime) => ({ customer: 'Fallback Tester', contact: '0900000010', email: null, note: null, dateTime, guests: 2, tableId: bookedTable.id })
+    const accepted = createMockReservation(booking(at(3)))
+    const sameSlot = createMockReservation(booking(at(4)))
+    const lateNight = createMockReservation(booking(at(16, 30)))
+    const pastSlot = createMockReservation(booking(new Date(Date.now() - 60 * 60 * 1000)))
+    updateMockReservationStatus(accepted.code, 'Đã hủy')
+    const afterCancel = createMockReservation(booking(at(4)))
+    if (accepted.ok && !sameSlot.ok && !lateNight.ok && !pastSlot.ok && afterCancel.ok) {
+      recordTest('TC-ACT-10', 'Offline Reservation Fallback Applies the Java Chain Rules', 'Admin Actions', 'PASS', 'Overlapping, 23:30 and past bookings refused; a cancelled one frees the slot')
+    } else {
+      recordTest('TC-ACT-10', 'Offline Reservation Fallback Applies the Java Chain Rules', 'Admin Actions', 'FAIL', JSON.stringify({ accepted, sameSlot, lateNight, pastSlot, afterCancel }))
+    }
+
+    // TC-ACT-11: With Java offline, cash tendered below the total is refused as the Java Facade does
+    const cashOrder = (customer, paymentMethod, tenderedAmount) => createMockOrder({
+      lines: [{ menuItemId: 1, qty: 1 }], customer, tableId: null, orderType: 'pickup', paymentMethod, paid: true, tenderedAmount,
+    })
+    const stockBefore = getMockMenuItems().find(m => m.id === 1).stockQty
+    const short = cashOrder('Cash Short Tester', 'cash', 1000)
+    const stockAfterShort = getMockMenuItems().find(m => m.id === 1).stockQty
+    const shortRecorded = getMockActiveOrders().some(o => o.customer === 'Cash Short Tester')
+    const covered = cashOrder('Cash Covered Tester', 'cash', 10_000_000)
+    const card = cashOrder('Card Tender Tester', 'card', 1000)
+    if (!short.ok && !shortRecorded && stockAfterShort === stockBefore && covered.ok && card.ok) {
+      recordTest('TC-ACT-11', 'Offline Cash Sale Must Be Covered by the Cash Tendered', 'Admin Actions', 'PASS', short.error)
+    } else {
+      recordTest('TC-ACT-11', 'Offline Cash Sale Must Be Covered by the Cash Tendered', 'Admin Actions', 'FAIL', JSON.stringify({ short, shortRecorded, stockBefore, stockAfterShort, covered, card }))
+    }
+
   } catch (err) {
     recordTest('TC-ACT-01', 'Admin Server Actions & Mock Store Operations', 'Admin Actions', 'FAIL', err.message)
   }
@@ -549,6 +617,20 @@ async function runAuthTests() {
         const res = await fetchPage(`${BASE_URL}/admin/users`, manual(await sessionCookie('ADMIN')))
         const managerRes = await fetchPage(`${BASE_URL}/admin/users`, manual(await sessionCookie('MANAGER')))
         return [res.status === 200 && res.body.includes('Users') && managerRes.status === 307, `admin=${res.status}, manager=${managerRes.status}`]
+      },
+    },
+    {
+      id: 'TC-AUTH-08', name: 'Sign-in ?next= Cannot Leave the Site',
+      run: async () => {
+        const { safeNext } = await import('../lib/auth/roles.ts')
+        const offSite = ['//evil.com', '/\\evil.com', '/\t/evil.com', '/\n/evil.com', '/\\\t\\evil.com', 'https://evil.com', 'evil.com']
+          .filter((next) => safeNext(next) !== null)
+        const kept = safeNext('/admin/pos?tab=kitchen#ticket') === '/admin/pos?tab=kitchen#ticket'
+        // The form posts its hidden "next" field; it must come out empty for an off-site target.
+        const res = await fetchPage(`${BASE_URL}/login?next=${encodeURIComponent('/\t/evil.com')}`)
+        const field = res.body.match(/<input[^>]*name="next"[^>]*>/)?.[0] ?? ''
+        const ok = offSite.length === 0 && kept && res.status === 200 && field.includes('value=""')
+        return [ok, `kept=${kept}, leaked=${JSON.stringify(offSite)}, page=${res.status}, field=${field}`]
       },
     },
   ]

@@ -180,6 +180,23 @@ public class JdbcMenuDao implements IMenuDao {
         }
     }
 
+    /** One conditional UPDATE, so two checkouts cannot both take the last unit. */
+    @Override
+    public boolean deductStockIfAvailable(int id, double quantity) {
+        if (quantity <= 0) return false;
+        String sql = "UPDATE menu_items SET stock_qty = stock_qty - ? WHERE id = ? AND stock_qty >= ?";
+        try (Connection conn = JdbcDatabase.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setDouble(1, quantity);
+            ps.setInt(2, id);
+            ps.setDouble(3, quantity);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            LOGGER.log(Level.SEVERE, "Error deductStockIfAvailable via JDBC: " + e.getMessage(), e);
+            return false;
+        }
+    }
+
     @Override
     public boolean toggleInStock(int id, boolean inStock) {
         String sql = "UPDATE menu_items SET in_stock = ? WHERE id = ?";

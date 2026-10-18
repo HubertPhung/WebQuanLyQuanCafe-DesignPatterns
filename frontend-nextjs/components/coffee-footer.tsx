@@ -1,9 +1,7 @@
-import { ArrowUpRight, Clock, Mail, MapPin, Navigation, Phone } from 'lucide-react'
+import { ArrowUpRight, Clock, Compass, Mail, MapPin, Phone, Sparkles } from 'lucide-react'
 import { Logo } from '@/components/brand/logo'
 import { branchAddress, branches, CONTACT_EMAIL, HOTLINE, mapsUrl } from '@/lib/branches'
 
-// One type scale: Playfair titles, 14px body, 12px fine print. Only Tailwind classes: the
-// legacy unlayered .footer-top / .footer-bottom rules in globals.css would override them.
 const body = 'text-sm leading-relaxed text-stone-600'
 const link = 'font-medium text-[#3E2723] underline-offset-4 transition-colors hover:text-[#B45309] hover:underline'
 
@@ -16,35 +14,57 @@ const exploreLinks = [
 
 function BranchCard({ branch, index }: { branch: (typeof branches)[number]; index: number }) {
   return (
-    <article className="group flex flex-col rounded-2xl border border-stone-300/70 bg-[#F6F1E9] p-5 transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:border-[#B45309]/40 hover:shadow-[0_12px_30px_-16px_rgba(62,39,35,0.35)] motion-reduce:hover:translate-y-0">
-      <div className="flex items-start justify-between gap-3">
-        <span className="font-display text-3xl font-semibold leading-none text-[#B45309]/80" aria-hidden="true">
+    <article className="flex flex-col">
+      {/* Index & Working Hours */}
+      <div className="flex items-center gap-2.5 text-xs font-medium text-[#89684F]">
+        <span className="font-bold tabular-nums text-stone-900" aria-hidden="true">
           {String(index + 1).padStart(2, '0')}
         </span>
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800 ring-1 ring-emerald-200">
-          <Clock size={12} aria-hidden="true" />
-          {branch.hours}
+        <span className="h-px w-6 bg-[#89684F]/40" aria-hidden="true" />
+        <span className="inline-flex items-center gap-1.5 tabular-nums text-stone-600">
+          <Clock size={12} className="text-[#B45309]" aria-hidden="true" />
+          Mở cửa {branch.hours}
         </span>
       </div>
-      <h4 className="font-display mt-4 text-lg font-semibold text-stone-900">Chi nhánh {branch.street.replace(/^\d+\s*/, '')}</h4>
-      <address className={`${body} mt-2 flex gap-2 not-italic`}>
-        <MapPin size={16} className="mt-0.5 shrink-0 text-[#B45309]" aria-hidden="true" />
-        <span>
-          <span className="font-medium text-stone-800">{branch.street}</span>
+
+      {/* Street Name in Playfair Display font */}
+      <h4 className="font-display mt-2.5 text-xl font-bold tracking-tight text-stone-900">
+        {branch.street.replace(/^\d+\s*/, '')}
+      </h4>
+
+      {/* Address with MapPin */}
+      <div className="mt-2 flex items-start gap-2 text-sm text-stone-600">
+        <MapPin size={15} className="mt-0.5 shrink-0 text-[#B45309]" aria-hidden="true" />
+        <address className="not-italic leading-relaxed">
+          <span className="font-semibold text-stone-800">{branch.street}</span>
           <br />
-          {branch.ward}, {branch.city}
-        </span>
-      </address>
-      <p className="mt-2 text-xs text-stone-500">{branch.note}</p>
+          <span>{branch.ward}, {branch.city}</span>
+        </address>
+      </div>
+
+      {/* Ambiance Note */}
+      <p className="mt-2.5 flex items-center gap-1.5 text-xs font-medium text-[#7C5A3E]">
+        <Sparkles size={13} className="shrink-0 text-[#B45309]" aria-hidden="true" />
+        <span>{branch.note}</span>
+      </p>
+
+      {/* Directions Link */}
       <a
         href={mapsUrl(branch)}
         target="_blank"
         rel="noreferrer"
         aria-label={`Chỉ đường tới ${branchAddress(branch)}`}
-        className="mt-5 inline-flex h-10 w-fit items-center gap-2 rounded-full border border-[#3E2723]/20 bg-white px-4 text-sm font-semibold text-[#3E2723] transition-colors hover:border-[#3E2723] hover:bg-[#3E2723] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600"
+        className="group/directions mt-4 inline-flex w-fit items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#3E2723] transition-colors hover:text-[#B45309] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2 focus-visible:ring-offset-[#EDE6DB]"
       >
-        <Navigation size={14} aria-hidden="true" />
-        Chỉ đường
+        <Compass size={14} className="text-[#B45309] transition-transform duration-300 group-hover/directions:rotate-45" aria-hidden="true" />
+        <span className="underline decoration-[#3E2723]/30 decoration-1 underline-offset-4 transition-colors group-hover/directions:decoration-[#B45309]">
+          Chỉ đường
+        </span>
+        <ArrowUpRight
+          size={14}
+          className="transition-transform duration-200 group-hover/directions:-translate-y-0.5 group-hover/directions:translate-x-0.5 motion-reduce:transition-none"
+          aria-hidden="true"
+        />
       </a>
     </article>
   )
@@ -53,7 +73,7 @@ function BranchCard({ branch, index }: { branch: (typeof branches)[number]; inde
 export function CoffeeFooter({ storeDomain }: { storeDomain?: string }) {
   const year = new Date().getFullYear()
   return (
-    <footer id="locations" className="border-t border-stone-300/60 bg-[#EDE6DB] text-stone-800">
+    <footer id="locations" className="border-t border-stone-300/60 bg-[#EDE6DB] text-stone-800 scroll-mt-24">
       <div className="section-shell grid gap-12 py-14 lg:grid-cols-12">
         {/* Brand and contact */}
         <div className="space-y-5 lg:col-span-4">
@@ -121,14 +141,11 @@ export function CoffeeFooter({ storeDomain }: { storeDomain?: string }) {
 
         {/* Branches */}
         <div className="lg:col-span-8">
-          <div className="flex items-end justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#89684F]">Hệ thống chi nhánh</p>
-              <h3 className="font-display mt-2 text-2xl font-semibold text-stone-900">Ghé quán gần bạn nhất</h3>
-            </div>
-            <span className="hidden text-sm text-stone-500 sm:block">{branches.length} chi nhánh tại Đà Lạt</span>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#89684F]">Hệ thống chi nhánh</p>
+            <h3 className="font-display mt-2 text-2xl font-semibold text-stone-900">Ghé quán gần bạn nhất</h3>
           </div>
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          <div className="mt-6 grid gap-x-12 gap-y-10 border-t border-stone-300/70 pt-6 sm:grid-cols-2">
             {branches.map((branch, index) => (
               <BranchCard key={branch.id} branch={branch} index={index} />
             ))}

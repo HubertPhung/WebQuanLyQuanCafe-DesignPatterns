@@ -1,25 +1,198 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import {
   AlertTriangle,
   ArrowDownLeft,
   ArrowUpRight,
+  Bean,
+  Beef,
   Boxes,
+  Candy,
   CheckCircle2,
+  Citrus,
+  Cookie,
   Download,
+  Droplets,
   Edit,
+  Egg,
+  IceCream,
+  Leaf,
+  Milk,
   Package,
   PackagePlus,
   Plus,
   Search,
+  Soup,
+  Sparkles,
   Trash2,
+  Wheat,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
+import { adjustStock, createMenuItem } from '@/app/admin/actions'
+import type { MenuItem } from '@/lib/db/schema'
+
+export type IngredientIconKey =
+  | 'coffee'
+  | 'milk'
+  | 'syrup'
+  | 'cream'
+  | 'fruit'
+  | 'tea'
+  | 'cacao'
+  | 'butter'
+  | 'meat'
+  | 'flour'
+  | 'grain'
+  | 'sugar'
+  | 'egg'
+  | 'box'
+
+export interface IconMeta {
+  key: IngredientIconKey
+  label: string
+  icon: React.ComponentType<{ className?: string }>
+  badgeBg: string
+  textColor: string
+  borderColor: string
+}
+
+export const INGREDIENT_ICONS: Record<IngredientIconKey, IconMeta> = {
+  coffee: {
+    key: 'coffee',
+    label: 'Cà phê hạt',
+    icon: Bean,
+    badgeBg: 'bg-[#5A3E2B]/10',
+    textColor: 'text-[#5A3E2B]',
+    borderColor: 'border-[#5A3E2B]/20',
+  },
+  milk: {
+    key: 'milk',
+    label: 'Sữa tươi / Sữa đặc',
+    icon: Milk,
+    badgeBg: 'bg-sky-50',
+    textColor: 'text-sky-700',
+    borderColor: 'border-sky-200',
+  },
+  syrup: {
+    key: 'syrup',
+    label: 'Siro / Tinh chất',
+    icon: Droplets,
+    badgeBg: 'bg-amber-50',
+    textColor: 'text-amber-700',
+    borderColor: 'border-amber-200',
+  },
+  cream: {
+    key: 'cream',
+    label: 'Kem béo thực vật',
+    icon: IceCream,
+    badgeBg: 'bg-orange-50',
+    textColor: 'text-orange-700',
+    borderColor: 'border-orange-200',
+  },
+  fruit: {
+    key: 'fruit',
+    label: 'Cam / Hoa quả tươi',
+    icon: Citrus,
+    badgeBg: 'bg-amber-100/70',
+    textColor: 'text-amber-800',
+    borderColor: 'border-amber-300/60',
+  },
+  tea: {
+    key: 'tea',
+    label: 'Trà xanh / Matcha',
+    icon: Leaf,
+    badgeBg: 'bg-emerald-50',
+    textColor: 'text-emerald-700',
+    borderColor: 'border-emerald-200',
+  },
+  cacao: {
+    key: 'cacao',
+    label: 'Cacao / Sô cô la',
+    icon: Cookie,
+    badgeBg: 'bg-stone-100',
+    textColor: 'text-stone-800',
+    borderColor: 'border-stone-300',
+  },
+  butter: {
+    key: 'butter',
+    label: 'Bơ lạt / Sữa bơ',
+    icon: Sparkles,
+    badgeBg: 'bg-yellow-50',
+    textColor: 'text-yellow-700',
+    borderColor: 'border-yellow-200',
+  },
+  meat: {
+    key: 'meat',
+    label: 'Thịt / Xông khói',
+    icon: Beef,
+    badgeBg: 'bg-rose-50',
+    textColor: 'text-rose-700',
+    borderColor: 'border-rose-200',
+  },
+  flour: {
+    key: 'flour',
+    label: 'Bột mì làm bánh',
+    icon: Wheat,
+    badgeBg: 'bg-stone-100',
+    textColor: 'text-stone-700',
+    borderColor: 'border-stone-300',
+  },
+  grain: {
+    key: 'grain',
+    label: 'Gạo / Ngũ cốc',
+    icon: Soup,
+    badgeBg: 'bg-amber-50',
+    textColor: 'text-amber-800',
+    borderColor: 'border-amber-200',
+  },
+  sugar: {
+    key: 'sugar',
+    label: 'Đường / Gia vị',
+    icon: Candy,
+    badgeBg: 'bg-purple-50',
+    textColor: 'text-purple-700',
+    borderColor: 'border-purple-200',
+  },
+  egg: {
+    key: 'egg',
+    label: 'Trứng tươi',
+    icon: Egg,
+    badgeBg: 'bg-amber-50',
+    textColor: 'text-amber-700',
+    borderColor: 'border-amber-200',
+  },
+  box: {
+    key: 'box',
+    label: 'Khác / Hộp kho',
+    icon: Package,
+    badgeBg: 'bg-stone-100',
+    textColor: 'text-stone-600',
+    borderColor: 'border-stone-200',
+  },
+}
+
+export function getAutoIconKey(name: string): IngredientIconKey {
+  const n = name.toLowerCase()
+  if (n.includes('cà phê') || n.includes('arabica') || n.includes('robusta') || n.includes('coffee') || n.includes('hạt')) return 'coffee'
+  if (n.includes('sữa') || n.includes('milk')) return 'milk'
+  if (n.includes('siro') || n.includes('syrup') || n.includes('vani') || n.includes('caramel')) return 'syrup'
+  if (n.includes('kem') || n.includes('cream') || n.includes('rich')) return 'cream'
+  if (n.includes('cam') || n.includes('chanh') || n.includes('quả') || n.includes('trái') || n.includes('dâu') || n.includes('đào')) return 'fruit'
+  if (n.includes('trà') || n.includes('matcha') || n.includes('tea') || n.includes('lá')) return 'tea'
+  if (n.includes('cacao') || n.includes('socola') || n.includes('chocolate')) return 'cacao'
+  if (n.includes('bơ') || n.includes('butter')) return 'butter'
+  if (n.includes('thịt') || n.includes('xông khói') || n.includes('beef') || n.includes('bacon') || n.includes('pork') || n.includes('gà')) return 'meat'
+  if (n.includes('bột mì') || n.includes('bột hoa') || n.includes('flour')) return 'flour'
+  if (n.includes('gạo') || n.includes('cơm') || n.includes('rice') || n.includes('hạt sen') || n.includes('st25')) return 'grain'
+  if (n.includes('đường') || n.includes('sugar') || n.includes('muối') || n.includes('ngọt')) return 'sugar'
+  if (n.includes('trứng') || n.includes('egg')) return 'egg'
+  return 'box'
+}
 
 export interface IngredientItem {
   id: number
@@ -31,28 +204,30 @@ export interface IngredientItem {
   importDate: string
   expiryDate: string
   status: 'Còn hàng' | 'Sắp hết' | 'Hết hàng'
+  icon?: IngredientIconKey
 }
 
-const initialIngredients: IngredientItem[] = [
-  { id: 1, name: 'Hạt cà phê Arabica Guji Ethiopia', unit: 'kg', stockQty: 25.5, minThreshold: 5.0, costPrice: 280000, importDate: '10/10/2026', expiryDate: '10/04/2027', status: 'Còn hàng' },
-  { id: 2, name: 'Hạt cà phê Robusta Lâm Đồng', unit: 'kg', stockQty: 40.0, minThreshold: 10.0, costPrice: 120000, importDate: '08/10/2026', expiryDate: '08/04/2027', status: 'Còn hàng' },
-  { id: 3, name: 'Sữa tươi thanh trùng Dalat Milk', unit: 'lít', stockQty: 32.0, minThreshold: 8.0, costPrice: 38000, importDate: '12/10/2026', expiryDate: '22/10/2026', status: 'Còn hàng' },
-  { id: 4, name: 'Sữa đặc có đường Ông Thọ', unit: 'hộp', stockQty: 48.0, minThreshold: 12.0, costPrice: 26000, importDate: '05/10/2026', expiryDate: '05/10/2027', status: 'Còn hàng' },
-  { id: 5, name: 'Siro Vani Monin Pháp', unit: 'chai', stockQty: 6.0, minThreshold: 2.0, costPrice: 240000, importDate: '01/09/2026', expiryDate: '01/09/2028', status: 'Còn hàng' },
-  { id: 6, name: 'Siro Caramel Monin', unit: 'chai', stockQty: 5.0, minThreshold: 2.0, costPrice: 240000, importDate: '01/09/2026', expiryDate: '01/09/2028', status: 'Còn hàng' },
-  { id: 7, name: 'Kem béo thực vật Rich lùn', unit: 'hộp', stockQty: 18.0, minThreshold: 5.0, costPrice: 35000, importDate: '11/10/2026', expiryDate: '11/11/2026', status: 'Còn hàng' },
-  { id: 8, name: 'Cam tươi sành mọng nước', unit: 'kg', stockQty: 12.5, minThreshold: 4.0, costPrice: 25000, importDate: '12/10/2026', expiryDate: '17/10/2026', status: 'Còn hàng' },
-  { id: 9, name: 'Bột trà xanh Matcha Uji', unit: 'kg', stockQty: 3.5, minThreshold: 1.0, costPrice: 850000, importDate: '15/09/2026', expiryDate: '15/09/2027', status: 'Còn hàng' },
-  { id: 10, name: 'Bột cacao nguyên chất', unit: 'kg', stockQty: 8.0, minThreshold: 2.0, costPrice: 190000, importDate: '20/09/2026', expiryDate: '20/09/2027', status: 'Còn hàng' },
-  { id: 11, name: 'Bơ lạt Anchor New Zealand', unit: 'kg', stockQty: 5.0, minThreshold: 5.0, costPrice: 175000, importDate: '02/10/2026', expiryDate: '02/04/2027', status: 'Còn hàng' },
-  { id: 12, name: 'Thịt xông khói thái lát', unit: 'kg', stockQty: 7.2, minThreshold: 2.0, costPrice: 195000, importDate: '09/10/2026', expiryDate: '09/11/2026', status: 'Còn hàng' },
-  { id: 13, name: 'Bột mì hoa ngọc lan số 13', unit: 'kg', stockQty: 25.0, minThreshold: 10.0, costPrice: 22000, importDate: '01/10/2026', expiryDate: '01/10/2027', status: 'Còn hàng' },
-  { id: 14, name: 'Gạo thơm ST25 (làm cơm chiên)', unit: 'kg', stockQty: 30.0, minThreshold: 10.0, costPrice: 34000, importDate: '04/10/2026', expiryDate: '04/04/2027', status: 'Còn hàng' },
-  { id: 15, name: 'Đường mía tự nhiên Biên Hòa', unit: 'kg', stockQty: 45.0, minThreshold: 15.0, costPrice: 24000, importDate: '01/10/2026', expiryDate: '01/10/2028', status: 'Còn hàng' },
-]
+// Ingredients are admin_menu_items rows with kind 'ingredient', stocked in Java as well. The
+// database keeps no expiry date or icon, so the icon follows the name and the expiry shows "—".
+function toIngredient(item: MenuItem): IngredientItem {
+  const status = item.stockQty <= 0 || !item.inStock ? 'Hết hàng' : item.stockQty <= item.lowStockThreshold ? 'Sắp hết' : 'Còn hàng'
+  return {
+    id: item.id,
+    name: item.name,
+    unit: item.unit,
+    stockQty: item.stockQty,
+    minThreshold: item.lowStockThreshold,
+    costPrice: item.costPrice,
+    importDate: new Date(item.createdAt).toLocaleDateString('vi-VN'),
+    expiryDate: '—',
+    status,
+    icon: getAutoIconKey(item.name),
+  }
+}
 
-export function InventoryTable({ initialQuery = '' }: { items?: any[]; initialQuery?: string }) {
-  const [ingredients, setIngredients] = useState<IngredientItem[]>(initialIngredients)
+export function InventoryTable({ items, initialQuery = '' }: { items: MenuItem[]; initialQuery?: string }) {
+  const ingredients = useMemo(() => items.map(toIngredient), [items])
+  const [pending, startTransition] = useTransition()
   const [search, setSearch] = useState(initialQuery)
   const [statusFilter, setStatusFilter] = useState('all')
 
@@ -62,9 +237,9 @@ export function InventoryTable({ initialQuery = '' }: { items?: any[]; initialQu
   const [isAddOpen, setIsAddOpen] = useState(false)
 
   // Selected item for import/export
-  const [selectedIngredientId, setSelectedIngredientId] = useState<number>(initialIngredients[0].id)
+  const [selectedIngredientId, setSelectedIngredientId] = useState<number>(items[0]?.id ?? 0)
   const [actionQty, setActionQty] = useState('5')
-  const [actionCost, setActionCost] = useState('35000')
+  const [importIcon, setImportIcon] = useState<IngredientIconKey>('coffee')
 
   // New ingredient form
   const [newName, setNewName] = useState('')
@@ -72,6 +247,14 @@ export function InventoryTable({ initialQuery = '' }: { items?: any[]; initialQu
   const [newQty, setNewQty] = useState('10')
   const [newThreshold, setNewThreshold] = useState('2')
   const [newCost, setNewCost] = useState('50000')
+
+  // Sync importIcon when selectedIngredientId changes or modal opens
+  useEffect(() => {
+    const item = ingredients.find((i) => i.id === selectedIngredientId)
+    if (item) {
+      setImportIcon(item.icon || getAutoIconKey(item.name))
+    }
+  }, [selectedIngredientId, ingredients, isImportOpen])
 
   // Counters: Tổng (15), Còn hàng (15), Gần hết (0), Hết hàng (0)
   const totalCount = ingredients.length
@@ -85,66 +268,56 @@ export function InventoryTable({ initialQuery = '' }: { items?: any[]; initialQu
     return matchSearch && matchStatus
   })
 
+  const changeStock = (change: number, done: () => void) => {
+    const item = ingredients.find((i) => i.id === selectedIngredientId)
+    if (!item) return
+    startTransition(async () => {
+      const result = await adjustStock(item.id, change)
+      if (!result.ok) {
+        toast.error(result.error)
+        return
+      }
+      done()
+      toast.success(`${change > 0 ? 'Nhập' : 'Xuất'} kho ${Math.abs(change)} ${item.unit} ${item.name}`)
+    })
+  }
+
   const handleImport = (e: React.FormEvent) => {
     e.preventDefault()
-    const qty = Number(actionQty) || 0
-    setIngredients(
-      ingredients.map((item) => {
-        if (item.id === selectedIngredientId) {
-          const newTotal = item.stockQty + qty
-          return {
-            ...item,
-            stockQty: newTotal,
-            costPrice: Number(actionCost) || item.costPrice,
-            importDate: new Date().toLocaleDateString('vi-VN'),
-            status: newTotal > item.minThreshold ? 'Còn hàng' : newTotal > 0 ? 'Sắp hết' : 'Hết hàng',
-          }
-        }
-        return item
-      })
-    )
-    setIsImportOpen(false)
-    toast.success(`Nhập kho thành công +${qty} đơn vị nguyên liệu!`)
+    changeStock(Number(actionQty) || 0, () => setIsImportOpen(false))
   }
 
   const handleExport = (e: React.FormEvent) => {
     e.preventDefault()
-    const qty = Number(actionQty) || 0
-    setIngredients(
-      ingredients.map((item) => {
-        if (item.id === selectedIngredientId) {
-          const newTotal = Math.max(0, item.stockQty - qty)
-          return {
-            ...item,
-            stockQty: newTotal,
-            status: newTotal > item.minThreshold ? 'Còn hàng' : newTotal > 0 ? 'Sắp hết' : 'Hết hàng',
-          }
-        }
-        return item
-      })
-    )
-    setIsExportOpen(false)
-    toast.success(`Xuất kho thành công -${qty} đơn vị nguyên liệu!`)
+    changeStock(-(Number(actionQty) || 0), () => setIsExportOpen(false))
   }
 
   const handleAddIngredient = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newName.trim()) return
-    const newItem: IngredientItem = {
-      id: Date.now(),
-      name: newName.trim(),
-      unit: newUnit,
-      stockQty: Number(newQty) || 0,
-      minThreshold: Number(newThreshold) || 1,
-      costPrice: Number(newCost) || 0,
-      importDate: new Date().toLocaleDateString('vi-VN'),
-      expiryDate: '12/12/2027',
-      status: Number(newQty) > Number(newThreshold) ? 'Còn hàng' : 'Sắp hết',
-    }
-    setIngredients([newItem, ...ingredients])
-    setIsAddOpen(false)
-    setNewName('')
-    toast.success(`Đã thêm nguyên liệu "${newItem.name}" vào danh mục kho!`)
+    const name = newName.trim()
+    if (!name) return
+    startTransition(async () => {
+      const result = await createMenuItem({
+        name,
+        category: 'Nguyên liệu',
+        kind: 'ingredient',
+        stockQty: Number(newQty) || 0,
+        unit: newUnit,
+        lowStockThreshold: Number(newThreshold) || 0,
+        costPrice: Number(newCost) || 0,
+        sellPrice: 0,
+        recipe: '',
+        imageUrl: '',
+        variations: [],
+      })
+      if (!result.ok) {
+        toast.error(result.error)
+        return
+      }
+      setIsAddOpen(false)
+      setNewName('')
+      toast.success(`Đã thêm nguyên liệu "${name}" vào kho`)
+    })
   }
 
   return (
@@ -233,49 +406,70 @@ export function InventoryTable({ initialQuery = '' }: { items?: any[]; initialQu
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100">
-              {filtered.map((item) => (
-                <tr key={item.id} className="hover:bg-stone-50/60 transition-colors">
-                  <td className="py-3.5 px-3 font-bold text-stone-900 flex items-center gap-2">
-                    <Boxes className="size-4 text-[#5A3E2B] shrink-0" />
-                    <span>{item.name}</span>
-                  </td>
-                  <td className="py-3.5 px-3 text-stone-500 font-medium">
-                    <span className="rounded-md bg-stone-100 px-2 py-0.5 border border-stone-200 text-xs text-stone-800 font-medium">
-                      {item.unit}
-                    </span>
-                  </td>
-                  <td className="py-3.5 px-3 text-right font-black text-stone-900 tabular-nums text-sm">
-                    {item.stockQty.toLocaleString('vi-VN')} {item.unit}
-                  </td>
-                  <td className="py-3.5 px-3 text-right font-mono text-stone-800 tabular-nums font-medium">
-                    {item.costPrice.toLocaleString('vi-VN')} đ
-                  </td>
-                  <td className="py-3.5 px-3 text-stone-500 font-mono text-xs">
-                    {item.importDate}
-                  </td>
-                  <td className="py-3.5 px-3 text-stone-500 font-mono text-xs">
-                    {item.expiryDate}
-                  </td>
-                  <td className="py-3.5 px-3 text-center">
-                    <span
-                      className={cn(
-                        'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold border',
-                        item.status === 'Còn hàng' && 'bg-emerald-50/90 border-emerald-300 text-emerald-900',
-                        item.status === 'Sắp hết' && 'bg-amber-50/90 border-amber-300 text-amber-950',
-                        item.status === 'Hết hàng' && 'bg-rose-50/90 border-rose-300 text-rose-950'
-                      )}
-                    >
-                      {item.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
+              {filtered.map((item) => {
+                const iconKey = item.icon || getAutoIconKey(item.name)
+                const meta = INGREDIENT_ICONS[iconKey] || INGREDIENT_ICONS.box
+                const ItemIcon = meta.icon
+
+                return (
+                  <tr key={item.id} className="hover:bg-stone-50/60 transition-colors">
+                    <td className="py-3.5 px-3 font-bold text-stone-900 flex items-center gap-2.5">
+                      <span
+                        title={meta.label}
+                        className={cn(
+                          'flex size-7 items-center justify-center rounded-lg border shadow-2xs shrink-0 transition-transform duration-150 hover:scale-110',
+                          meta.badgeBg,
+                          meta.textColor,
+                          meta.borderColor
+                        )}
+                      >
+                        <ItemIcon className="size-4" />
+                      </span>
+                      <span className="truncate">{item.name}</span>
+                    </td>
+                    <td className="py-3.5 px-3 text-stone-500 font-medium">
+                      <span className="rounded-md bg-stone-100 px-2 py-0.5 border border-stone-200 text-xs text-stone-800 font-medium">
+                        {item.unit}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-3 text-right font-black text-stone-900 tabular-nums text-sm">
+                      {item.stockQty.toLocaleString('vi-VN')} {item.unit}
+                    </td>
+                    <td className="py-3.5 px-3 text-right font-mono text-stone-800 tabular-nums font-medium">
+                      {item.costPrice.toLocaleString('vi-VN')} đ
+                    </td>
+                    <td className="py-3.5 px-3 font-mono text-stone-600 text-xs">{item.importDate}</td>
+                    <td className="py-3.5 px-3 font-mono text-stone-600 text-xs">{item.expiryDate}</td>
+                    <td className="py-3.5 px-3 text-center">
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          'font-semibold text-xs py-0.5 px-2.5 rounded-full inline-flex items-center gap-1.5',
+                          item.status === 'Còn hàng' && 'border-emerald-300 bg-emerald-50 text-emerald-800',
+                          item.status === 'Sắp hết' && 'border-amber-300 bg-amber-50 text-amber-800',
+                          item.status === 'Hết hàng' && 'border-rose-300 bg-rose-50 text-rose-800'
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            'size-1.5 rounded-full',
+                            item.status === 'Còn hàng' && 'bg-emerald-600',
+                            item.status === 'Sắp hết' && 'bg-amber-600',
+                            item.status === 'Hết hàng' && 'bg-rose-600'
+                          )}
+                        />
+                        {item.status}
+                      </Badge>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* MODAL 1: NHẬP KHO */}
+      {/* MODAL 1: NHẬP KHO NGUYÊN LIỆU */}
       <Dialog open={isImportOpen} onOpenChange={setIsImportOpen}>
         <DialogContent className="max-w-md rounded-xl border-stone-200 bg-white text-stone-900 p-6 font-sans shadow-2xl">
           <DialogHeader>
@@ -284,54 +478,70 @@ export function InventoryTable({ initialQuery = '' }: { items?: any[]; initialQu
               <span>Phiếu nhập kho nguyên liệu</span>
             </DialogTitle>
             <DialogDescription className="text-xs text-stone-500">
-              Nhập thêm số lượng và cập nhật đơn giá nhập kho mới nhất.
+              Nhập thêm số lượng vào kho. Tồn kho được cập nhật ở cả backend Java và cơ sở dữ liệu.
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleImport} className="space-y-4 pt-2 text-xs">
             <div>
               <label className="block text-stone-700 font-semibold mb-1">Chọn nguyên liệu *</label>
-              <select
-                value={selectedIngredientId}
-                onChange={(e) => setSelectedIngredientId(Number(e.target.value))}
-                className="w-full h-10 rounded-lg border border-stone-200/80 bg-white px-3 text-sm text-stone-800 focus:outline-none focus:border-[#5A3E2B] truncate"
-              >
-                {ingredients.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name} (Hiện có: {item.stockQty} {item.unit})
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center gap-2">
+                {(() => {
+                  const meta = INGREDIENT_ICONS[importIcon] || INGREDIENT_ICONS.box
+                  const CurrentIcon = meta.icon
+                  return (
+                    <span
+                      className={cn(
+                        'flex size-10 items-center justify-center rounded-lg border shadow-2xs shrink-0',
+                        meta.badgeBg,
+                        meta.textColor,
+                        meta.borderColor
+                      )}
+                      title={meta.label}
+                    >
+                      <CurrentIcon className="size-5" />
+                    </span>
+                  )
+                })()}
+                <select
+                  value={selectedIngredientId}
+                  onChange={(e) => {
+                    const id = Number(e.target.value)
+                    setSelectedIngredientId(id)
+                    const target = ingredients.find((i) => i.id === id)
+                    if (target) {
+                      setImportIcon(target.icon || getAutoIconKey(target.name))
+                    }
+                  }}
+                  className="w-full h-10 rounded-lg border border-stone-200/80 bg-white px-3 text-sm text-stone-800 focus:outline-none focus:border-[#5A3E2B] truncate"
+                >
+                  {ingredients.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name} (Hiện có: {item.stockQty} {item.unit})
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-stone-700 font-semibold mb-1">Số lượng nhập thêm *</label>
-                <input
-                  required
-                  type="number"
-                  value={actionQty}
-                  onChange={(e) => setActionQty(e.target.value)}
-                  className="w-full h-10 rounded-lg border border-stone-200/80 bg-white px-3 text-sm text-stone-900 focus:outline-none focus:border-[#5A3E2B]"
-                />
-              </div>
-              <div>
-                <label className="block text-stone-700 font-semibold mb-1">Đơn giá nhập (VND) *</label>
-                <input
-                  required
-                  type="number"
-                  value={actionCost}
-                  onChange={(e) => setActionCost(e.target.value)}
-                  className="w-full h-10 rounded-lg border border-stone-200/80 bg-white px-3 text-sm text-stone-900 focus:outline-none focus:border-[#5A3E2B]"
-                />
-              </div>
+            <div>
+              <label className="block text-stone-700 font-semibold mb-1">Số lượng nhập thêm *</label>
+              <input
+                required
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={actionQty}
+                onChange={(e) => setActionQty(e.target.value)}
+                className="w-full h-10 rounded-lg border border-stone-200/80 bg-white px-3 text-sm text-stone-900 focus:outline-none focus:border-[#5A3E2B]"
+              />
             </div>
 
             <DialogFooter className="pt-2">
               <Button type="button" variant="ghost" onClick={() => setIsImportOpen(false)} className="h-10 rounded-lg text-stone-500 hover:text-stone-800">
                 Hủy
               </Button>
-              <Button type="submit" className="h-10 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-4">
+              <Button type="submit" disabled={pending} className="h-10 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-4">
                 Xác nhận nhập kho
               </Button>
             </DialogFooter>
@@ -383,7 +593,7 @@ export function InventoryTable({ initialQuery = '' }: { items?: any[]; initialQu
               <Button type="button" variant="ghost" onClick={() => setIsExportOpen(false)} className="h-10 rounded-lg text-stone-500 hover:text-stone-800">
                 Hủy
               </Button>
-              <Button type="submit" className="h-10 rounded-lg bg-rose-700 hover:bg-rose-800 text-white font-bold px-4">
+              <Button type="submit" disabled={pending} className="h-10 rounded-lg bg-rose-700 hover:bg-rose-800 text-white font-bold px-4">
                 Xác nhận xuất kho
               </Button>
             </DialogFooter>
@@ -407,13 +617,32 @@ export function InventoryTable({ initialQuery = '' }: { items?: any[]; initialQu
           <form onSubmit={handleAddIngredient} className="space-y-4 pt-2 text-xs">
             <div>
               <label className="block text-stone-700 font-semibold mb-1">Tên nguyên liệu *</label>
-              <input
-                required
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder="Tên nguyên liệu (VD: Bột ca cao)..."
-                className="w-full h-10 rounded-lg border border-stone-200/80 bg-white px-3.5 text-sm text-stone-900 focus:outline-none focus:border-[#5A3E2B] truncate"
-              />
+              <div className="flex items-center gap-2">
+                {(() => {
+                  const meta = INGREDIENT_ICONS[getAutoIconKey(newName)] || INGREDIENT_ICONS.box
+                  const CurrentIcon = meta.icon
+                  return (
+                    <span
+                      className={cn(
+                        'flex size-10 items-center justify-center rounded-lg border shadow-2xs shrink-0',
+                        meta.badgeBg,
+                        meta.textColor,
+                        meta.borderColor
+                      )}
+                      title={meta.label}
+                    >
+                      <CurrentIcon className="size-5" />
+                    </span>
+                  )
+                })()}
+                <input
+                  required
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="Tên nguyên liệu (VD: Bột ca cao, Sữa dừa)..."
+                  className="w-full h-10 rounded-lg border border-stone-200/80 bg-white px-3.5 text-sm text-stone-900 focus:outline-none focus:border-[#5A3E2B] truncate"
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -468,7 +697,7 @@ export function InventoryTable({ initialQuery = '' }: { items?: any[]; initialQu
               <Button type="button" variant="ghost" onClick={() => setIsAddOpen(false)} className="h-10 rounded-lg text-stone-500 hover:text-stone-800">
                 Hủy
               </Button>
-              <Button type="submit" className="h-10 rounded-lg bg-[#5A3E2B] hover:bg-[#684732] text-white font-bold px-4">
+              <Button type="submit" disabled={pending} className="h-10 rounded-lg bg-[#5A3E2B] hover:bg-[#684732] text-white font-bold px-4">
                 Tạo nguyên liệu
               </Button>
             </DialogFooter>
@@ -478,4 +707,5 @@ export function InventoryTable({ initialQuery = '' }: { items?: any[]; initialQu
     </div>
   )
 }
+
 export default InventoryTable

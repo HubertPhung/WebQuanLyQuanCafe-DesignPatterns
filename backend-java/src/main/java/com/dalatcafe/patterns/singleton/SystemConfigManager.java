@@ -3,12 +3,15 @@ package com.dalatcafe.patterns.singleton;
 import java.io.Serial;
 import java.io.Serializable;
 import java.time.LocalTime;
+import java.time.ZoneId;
 
 /**
  * Singleton Pattern (GoF Creational) managing global operational parameters
  * for Đà Lạt Cafe (store info, operating hours, loyalty ratios, table reservation timeouts).
  *
  * Implements Thread-safe Double-Checked Locking with volatile instance and reflection protection.
+ * Every setting is read and written under this object's monitor. A caller that needs several
+ * settings to belong to one update (such as opening and closing time) holds that monitor itself.
  */
 public final class SystemConfigManager implements Serializable {
     @Serial
@@ -24,6 +27,7 @@ public final class SystemConfigManager implements Serializable {
     public static final int DEFAULT_AUTO_CANCEL_MINUTES = 30;
     public static final LocalTime DEFAULT_OPENING_TIME = LocalTime.of(7, 0);
     public static final LocalTime DEFAULT_CLOSING_TIME = LocalTime.of(22, 0);
+    private static final ZoneId CAFE_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     private static volatile SystemConfigManager instance;
 
@@ -63,7 +67,7 @@ public final class SystemConfigManager implements Serializable {
     /**
      * Resets all parameters to factory defaults.
      */
-    public void resetToDefaults() {
+    public synchronized void resetToDefaults() {
         this.storeName = DEFAULT_STORE_NAME;
         this.storeAddress = DEFAULT_STORE_ADDRESS;
         this.storePhone = DEFAULT_STORE_PHONE;
@@ -78,10 +82,11 @@ public final class SystemConfigManager implements Serializable {
 
     /**
      * Checks if a given time falls within cafe operating hours (07:00 - 22:00 by default).
+     * A null time means now at the café, whatever time zone the server runs in.
      */
-    public boolean isWithinOperatingHours(LocalTime time) {
+    public synchronized boolean isWithinOperatingHours(LocalTime time) {
         if (time == null) {
-            time = LocalTime.now();
+            time = LocalTime.now(CAFE_ZONE);
         }
         return !time.isBefore(openingTime) && !time.isAfter(closingTime);
     }
@@ -89,7 +94,7 @@ public final class SystemConfigManager implements Serializable {
     /**
      * Calculates earned loyalty points based on total spend amount (10,000 VND = 1 point).
      */
-    public int calculateLoyaltyPoints(double orderAmount) {
+    public synchronized int calculateLoyaltyPoints(double orderAmount) {
         if (orderAmount <= 0 || loyaltyRateVndPerPoint <= 0) {
             return 0;
         }
@@ -99,7 +104,7 @@ public final class SystemConfigManager implements Serializable {
     /**
      * Calculates discount amount when redeeming loyalty points (1 point = 1,000 VND).
      */
-    public double calculateDiscountFromPoints(int points) {
+    public synchronized double calculateDiscountFromPoints(int points) {
         if (points <= 0) {
             return 0.0;
         }
@@ -113,83 +118,83 @@ public final class SystemConfigManager implements Serializable {
 
     // Getters and Setters
 
-    public String getStoreName() {
+    public synchronized String getStoreName() {
         return storeName;
     }
 
-    public void setStoreName(String storeName) {
+    public synchronized void setStoreName(String storeName) {
         this.storeName = storeName;
     }
 
-    public String getStoreAddress() {
+    public synchronized String getStoreAddress() {
         return storeAddress;
     }
 
-    public void setStoreAddress(String storeAddress) {
+    public synchronized void setStoreAddress(String storeAddress) {
         this.storeAddress = storeAddress;
     }
 
-    public String getStorePhone() {
+    public synchronized String getStorePhone() {
         return storePhone;
     }
 
-    public void setStorePhone(String storePhone) {
+    public synchronized void setStorePhone(String storePhone) {
         this.storePhone = storePhone;
     }
 
-    public double getVatRate() {
+    public synchronized double getVatRate() {
         return vatRate;
     }
 
-    public void setVatRate(double vatRate) {
+    public synchronized void setVatRate(double vatRate) {
         this.vatRate = vatRate;
     }
 
-    public int getLoyaltyRateVndPerPoint() {
+    public synchronized int getLoyaltyRateVndPerPoint() {
         return loyaltyRateVndPerPoint;
     }
 
-    public void setLoyaltyRateVndPerPoint(int loyaltyRateVndPerPoint) {
+    public synchronized void setLoyaltyRateVndPerPoint(int loyaltyRateVndPerPoint) {
         this.loyaltyRateVndPerPoint = Math.max(1, loyaltyRateVndPerPoint);
     }
 
-    public int getPointRedeemValueVnd() {
+    public synchronized int getPointRedeemValueVnd() {
         return pointRedeemValueVnd;
     }
 
-    public void setPointRedeemValueVnd(int pointRedeemValueVnd) {
+    public synchronized void setPointRedeemValueVnd(int pointRedeemValueVnd) {
         this.pointRedeemValueVnd = Math.max(0, pointRedeemValueVnd);
     }
 
-    public int getMaxReservationGuests() {
+    public synchronized int getMaxReservationGuests() {
         return maxReservationGuests;
     }
 
-    public void setMaxReservationGuests(int maxReservationGuests) {
+    public synchronized void setMaxReservationGuests(int maxReservationGuests) {
         this.maxReservationGuests = Math.max(1, maxReservationGuests);
     }
 
-    public int getAutoCancelMinutes() {
+    public synchronized int getAutoCancelMinutes() {
         return autoCancelMinutes;
     }
 
-    public void setAutoCancelMinutes(int autoCancelMinutes) {
+    public synchronized void setAutoCancelMinutes(int autoCancelMinutes) {
         this.autoCancelMinutes = Math.max(1, autoCancelMinutes);
     }
 
-    public LocalTime getOpeningTime() {
+    public synchronized LocalTime getOpeningTime() {
         return openingTime;
     }
 
-    public void setOpeningTime(LocalTime openingTime) {
+    public synchronized void setOpeningTime(LocalTime openingTime) {
         this.openingTime = openingTime != null ? openingTime : DEFAULT_OPENING_TIME;
     }
 
-    public LocalTime getClosingTime() {
+    public synchronized LocalTime getClosingTime() {
         return closingTime;
     }
 
-    public void setClosingTime(LocalTime closingTime) {
+    public synchronized void setClosingTime(LocalTime closingTime) {
         this.closingTime = closingTime != null ? closingTime : DEFAULT_CLOSING_TIME;
     }
 }

@@ -13,12 +13,15 @@ import com.dalatcafe.security.AuthSettings;
 import com.dalatcafe.security.LoginThrottle;
 import com.dalatcafe.security.PasswordHasher;
 import com.dalatcafe.security.TokenService;
+import com.dalatcafe.util.EnvFile;
 import com.sun.net.httpserver.HttpContext;
 import com.sun.net.httpserver.HttpServer;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.nio.file.Path;
 import java.time.Clock;
+import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.function.BooleanSupplier;
 import java.util.logging.Logger;
@@ -34,6 +37,7 @@ public class MainServer {
     private final TokenService tokens;
     private final IUserDao users;
     private final boolean allowRoleHeader;
+    private final String serviceKey;
 
     /**
      * Development and test server: random token keys, the X-User-Role header accepted, and a
@@ -48,8 +52,9 @@ public class MainServer {
         this.users = daos.getUserDao();
         this.tokens = new TokenService(auth.jwtSecret(), auth.tokenTtl(), Clock.systemUTC());
         this.allowRoleHeader = auth.allowRoleHeader();
+        this.serviceKey = auth.serviceKey();
         OrderEventSubject subject = new OrderEventSubject();
-        subject.attach(new TableStatusSyncObserver(daos.getTableDao()));
+        subject.attach(new TableStatusSyncObserver(daos.getTableDao(), daos.getOrderDao()));
         subject.attach(new KitchenNotificationObserver());
         PosCheckoutFacade facade = new PosCheckoutFacade(daos.getOrderDao(), daos.getMenuDao(), subject);
 
@@ -66,15 +71,17 @@ public class MainServer {
         register("/api/vouchers", new VoucherHandler());
         register("/api/config", new ConfigHandler());
         register("/api/tables", new TableHandler(daos.getTableDao()));
-        register("/api/reservations", new ReservationHandler(daos.getReservationDao(), daos.getTableDao(), daos.getOrderDao()));
-        register("/api/checkout", new CheckoutHandler(facade, daos.getCustomerDao(), databaseHealthy));
+        register("/api/reservations", new ReservationHandler(daos.getReservationDao(), daos.getTableDao(), daos.getOrderDao(),
+                daos.getMenuDao()));
+        register("/api/checkout", new CheckoutHandler(facade, daos.getCustomerDao(), daos.getTableDao(),
+                databaseHealthy));
         server.setExecutor(Executors.newFixedThreadPool(8));
     }
 
     private void register(String path, ApiHandler handler) {
         HttpContext context = server.createContext(path, handler);
         context.getFilters().add(new CorsHandler());
-        context.getFilters().add(new SimpleAuthFilter(tokens, users, allowRoleHeader));
+        context.getFilters().add(new SimpleAuthFilter(tokens, users, allowRoleHeader, serviceKey));
     }
 
     public void start() {
@@ -96,12 +103,20 @@ public class MainServer {
         if (args.length > 0) {
             port = Integer.parseInt(args[0]);
         }
+        // Settings from backend-java/.env fill in what the environment leaves out; the JDBC layer
+        // reads DATABASE_URL from a system property when the variable itself is not set.
+        Map<String, String> env = EnvFile.withFile(System.getenv(), Path.of(".env"));
+        env.forEach((key, value) -> {
+            if (System.getenv(key) == null && System.getProperty(key) == null) {
+                System.setProperty(key, value);
+            }
+        });
         DaoFactory daos = DaoFactory.getInstance();
         // Fail closed: with a configured JDBC store, a lost connection must not fall back to memory.
         BooleanSupplier healthy = () -> daos.getMode() != DaoMode.JDBC || JdbcDatabase.isAvailable();
-        AuthSettings auth = AuthSettings.fromEnvironment(System.getenv());
+        AuthSettings auth = AuthSettings.fromEnvironment(env);
         PasswordHasher hasher = new PasswordHasher();
-        AdminBootstrap.ensureAdmin(daos.getUserDao(), hasher, System.getenv());
+        AdminBootstrap.ensureAdmin(daos.getUserDao(), hasher, env);
         MainServer server = new MainServer(port, daos, healthy, auth, hasher);
         server.start();
         Runtime.getRuntime().addShutdownHook(new Thread(server::stop));

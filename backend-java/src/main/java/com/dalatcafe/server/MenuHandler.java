@@ -105,11 +105,16 @@ public class MenuHandler extends ApiHandler {
             change = stockQty - item.getStockQty();
         }
         if (change != null) {
-            if (item.getStockQty() + change < 0) {
+            // A relative write-off is checked again by the DAO, in case a sale took stock after the read above.
+            boolean writeOff = stockQty == null && change < 0;
+            if (item.getStockQty() + change < 0 || (writeOff && !menuDao.deductStockIfAvailable(id, -change))) {
+                double left = menuDao.findById(id).map(MenuItem::getStockQty).orElse(0.0);
                 throw new ApiException(409, "RESOURCE_CONFLICT",
-                        "Only " + item.getStockQty() + " " + item.getUnit() + " of " + item.getName() + " left");
+                        "Only " + left + " " + item.getUnit() + " of " + item.getName() + " left");
             }
-            menuDao.updateStock(id, change);
+            if (!writeOff) {
+                menuDao.updateStock(id, change);
+            }
         }
         if (hasSwitch) {
             menuDao.toggleInStock(id, bool(body, "inStock", item.isInStock()));

@@ -42,6 +42,15 @@ export function homeFor(role: Role) {
 
 /** Only same-site relative paths, so ?next= cannot send people to another site. */
 export function safeNext(next: string | null | undefined): string | null {
-  if (!next || !next.startsWith('/') || next.startsWith('//') || next.startsWith('/\\')) return null
-  return next
+  if (!next || !next.startsWith('/')) return null
+  // Resolve it the way a browser will: tabs and newlines are dropped and "\" counts as "/",
+  // so "/\t/evil.com" and "/\\evil.com" both mean "//evil.com".
+  const base = 'http://same.site'
+  let url: URL
+  try {
+    url = new URL(next, base)
+  } catch {
+    return null
+  }
+  return url.origin === base ? `${url.pathname}${url.search}${url.hash}` : null
 }

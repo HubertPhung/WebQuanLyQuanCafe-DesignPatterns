@@ -29,11 +29,16 @@ public final class PointRedemptionDiscountStrategy implements IDiscountStrategy 
         Objects.requireNonNull(customer, "Redeeming points needs a known customer");
         double baseDiscount = base.calculateDiscount(subtotal, customer);
         SystemConfigManager config = SystemConfigManager.getInstance();
-        int pointValue = config.getPointRedeemValueVnd();
-        double room = Math.max(0, subtotal - baseDiscount);
-        int affordable = pointValue <= 0 ? 0 : (int) Math.floor(room / pointValue);
-        pointsUsed = Math.min(requestedPoints, Math.min(affordable, customer.getLoyaltyPoints()));
-        return DiscountAmounts.clamp(subtotal, baseDiscount + config.calculateDiscountFromPoints(pointsUsed));
+        double pointsDiscount;
+        // Size the redemption and price it with the same point value.
+        synchronized (config) {
+            int pointValue = config.getPointRedeemValueVnd();
+            double room = Math.max(0, subtotal - baseDiscount);
+            int affordable = pointValue <= 0 ? 0 : (int) Math.floor(room / pointValue);
+            pointsUsed = Math.min(requestedPoints, Math.min(affordable, customer.getLoyaltyPoints()));
+            pointsDiscount = config.calculateDiscountFromPoints(pointsUsed);
+        }
+        return DiscountAmounts.clamp(subtotal, baseDiscount + pointsDiscount);
     }
 
     /** Points actually applied by the last {@link #calculateDiscount} call. */

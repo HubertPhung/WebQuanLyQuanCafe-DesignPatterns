@@ -8,6 +8,7 @@ import type { Product, Money } from '@/lib/shopify'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
+import { DRINK_TAG } from '@/lib/storefront/product-tags'
 
 interface DrinkMenuProps {
   products: Product[]
@@ -17,14 +18,11 @@ interface DrinkMenuProps {
   onAddToCart?: (product: Product, options: Record<string, string>, variantId: string) => Promise<boolean>
 }
 
-const CATEGORIES = [
-  { id: 'All favorites', labelVi: 'Tất cả', labelEn: 'All favorites' },
-  { id: 'Espresso', labelVi: 'Cà phê pha máy', labelEn: 'Espresso' },
-  { id: 'Cold Brew', labelVi: 'Cà phê ủ lạnh', labelEn: 'Cold Brew' },
-  { id: 'Pour Over', labelVi: 'Cà phê phin', labelEn: 'Pour Over' },
-  { id: 'Pastries', labelVi: 'Bánh ngọt', labelEn: 'Pastries' },
-  { id: 'Whole Bean', labelVi: 'Cà phê hạt rang', labelEn: 'Whole Bean' },
-]
+const ALL = 'All favorites'
+
+// Drinks get sugar, ice and milk choices; the menu catalog tags them, Shopify products use types.
+const isDrink = (product: Product) =>
+  product.tags.includes(DRINK_TAG) || ['Espresso', 'Pour Over', 'Cold Brew'].includes(product.productType)
 
 const formatMoney = (m: Money) => {
   const num = Number(m.amount)
@@ -39,9 +37,8 @@ export function DrinkMenu({
   onToggleFavorite,
   onAddToCart,
 }: DrinkMenuProps) {
-  const [activeCategory, setActiveCategory] = useState<string>('All favorites')
+  const [activeCategory, setActiveCategory] = useState<string>(ALL)
   const [searchQuery, setSearchQuery] = useState<string>('')
-  const [roastFilter, setRoastFilter] = useState<string>('All roasts')
   const [maxPrice, setMaxPrice] = useState<string>('All prices')
   const [isFilterOpen, setIsFilterOpen] = useState<boolean>(false)
   const [showFavoritesOnly, setShowFavoritesOnly] = useState<boolean>(false)
@@ -55,16 +52,18 @@ export function DrinkMenu({
   const [milkChoice, setMilkChoice] = useState<string>('Sữa tươi nguyên kem (Whole)')
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false)
 
+  // Tabs are the categories the menu actually has, in the order they first appear.
+  const categories = [ALL, ...new Set(products.map((p) => p.productType))]
+
   const filteredProducts = products.filter((p) => {
-    const matchesCat = activeCategory === 'All favorites' || p.productType === activeCategory
+    const matchesCat = activeCategory === ALL || p.productType === activeCategory
     const query = searchQuery.toLowerCase().trim()
     const matchesQuery = !query || `${p.title} ${p.description}`.toLowerCase().includes(query)
-    const matchesRoast = roastFilter === 'All roasts' || p.tags.includes(roastFilter)
     const rawPrice = Number(p.variants.nodes[0]?.price.amount)
     const priceInVnd = rawPrice < 500 ? rawPrice * 10000 : rawPrice
     const matchesPrice = maxPrice === 'All prices' || priceInVnd <= Number(maxPrice)
     const matchesFav = !showFavoritesOnly || favorites.includes(p.id)
-    return matchesCat && matchesQuery && matchesRoast && matchesPrice && matchesFav
+    return matchesCat && matchesQuery && matchesPrice && matchesFav
   })
 
   const openCustomizeModal = (product: Product) => {
@@ -80,8 +79,7 @@ export function DrinkMenu({
   const handleConfirmAdd = async () => {
     if (!selectedProduct) return
     setIsSubmitting(true)
-    const isDrink = ['Espresso', 'Pour Over', 'Cold Brew'].includes(selectedProduct.productType)
-    const options: Record<string, string> = isDrink
+    const options: Record<string, string> = isDrink(selectedProduct)
       ? {
           Size: selectedSize,
           Sugar: sugarLevel,
@@ -144,7 +142,7 @@ export function DrinkMenu({
   }
 
   return (
-    <section className="menu-section section-shell py-12 md:py-16" id="menu">
+    <section className="menu-section section-shell py-10 md:py-14 scroll-mt-24" id="menu">
       {/* Section Header */}
       <div className="section-heading mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
@@ -164,14 +162,14 @@ export function DrinkMenu({
       {/* Categories Toolbar */}
       <div className="menu-toolbar mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-stone-200/80 pb-4">
         <div className="category-tabs flex flex-wrap items-center gap-2" role="group" aria-label="Coffee categories">
-          {CATEGORIES.map((cat, idx) => {
-            const isActive = activeCategory === cat.id
+          {categories.map((cat, idx) => {
+            const isActive = activeCategory === cat
             return (
               <button
-                key={cat.id}
+                key={cat}
                 type="button"
                 aria-pressed={isActive}
-                onClick={() => setActiveCategory(cat.id)}
+                onClick={() => setActiveCategory(cat)}
                 className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs md:text-sm transition-all duration-200 border ${
                   isActive
                     ? 'bg-[#3E2723] text-white border-[#3E2723] shadow-xs font-semibold'
@@ -179,8 +177,8 @@ export function DrinkMenu({
                 }`}
               >
                 {idx === 0 && <Sparkles className="size-3.5 text-amber-400" />}
-                <span>{cat.labelVi}</span>
-                <span className="sr-only">({cat.labelEn})</span>
+                <span>{cat === ALL ? 'Tất cả' : cat}</span>
+                {cat === ALL && <span className="sr-only">({ALL})</span>}
               </button>
             )
           })}
@@ -242,26 +240,8 @@ export function DrinkMenu({
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="filters mb-8 grid grid-cols-1 sm:grid-cols-3 gap-4 rounded-2xl border border-[#e5ddd2] bg-[#f9f6f0] p-4 text-xs overflow-hidden"
+            className="filters mb-8 grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-2xl border border-[#e5ddd2] bg-[#f9f6f0] p-4 text-xs overflow-hidden"
           >
-            <div>
-              <label htmlFor="roast-select" className="mb-1.5 block font-semibold text-[#6f4e37]">
-                Mức độ rang
-              </label>
-              <select
-                id="roast-select"
-                value={roastFilter}
-                onChange={(e) => setRoastFilter(e.target.value)}
-                className="w-full rounded-xl border border-[#e5ddd2] bg-[#ffffff] p-2.5 text-xs text-[#35281f] focus:outline-none focus:ring-1 focus:ring-[#6f4e37]"
-              >
-                {['All roasts', 'Light', 'Medium', 'Dark'].map((r) => (
-                  <option key={r} value={r}>
-                    {r === 'All roasts' ? 'Tất cả mức rang' : `Rang ${r}`}
-                  </option>
-                ))}
-              </select>
-            </div>
-
             <div>
               <label htmlFor="price-select" className="mb-1.5 block font-semibold text-[#6f4e37]">
                 Mức giá tối đa
@@ -285,7 +265,6 @@ export function DrinkMenu({
                 size="sm"
                 className="w-full rounded-xl border-[#d5c7b5] text-[#6f4e37] hover:bg-[#ede6dc]"
                 onClick={() => {
-                  setRoastFilter('All roasts')
                   setMaxPrice('All prices')
                   setSearchQuery('')
                 }}
@@ -309,14 +288,7 @@ export function DrinkMenu({
         {filteredProducts.map((p) => {
           const firstVariant = p.variants.nodes[0]
           const isFav = favorites.includes(p.id)
-          const tagLabel =
-            p.productType === 'Espresso'
-              ? 'MÓN ĐẶC SẢN'
-              : p.productType === 'Whole Bean'
-              ? 'HẠT NGUYÊN BẢN'
-              : p.productType === 'Pastries'
-              ? 'BÁNH TƯƠI MỖI NGÀY'
-              : 'Ủ LẠNH ĐẬM VỊ'
+          const tagLabel = isDrink(p) ? 'PHA MỖI NGÀY' : 'BÁNH TƯƠI MỖI NGÀY'
 
           return (
             <motion.article
@@ -429,9 +401,8 @@ export function DrinkMenu({
             variant="outline"
             className="mt-4 rounded-xl border-[#6f4e37] text-[#6f4e37] hover:bg-[#6f4e37] hover:text-white"
             onClick={() => {
-              setActiveCategory('All favorites')
+              setActiveCategory(ALL)
               setSearchQuery('')
-              setRoastFilter('All roasts')
               setMaxPrice('All prices')
               setShowFavoritesOnly(false)
             }}
@@ -494,7 +465,7 @@ export function DrinkMenu({
               </div>
 
               {/* Coffee Customizations (Sugar, Ice, Milk) */}
-              {['Espresso', 'Pour Over', 'Cold Brew'].includes(selectedProduct.productType) && (
+              {isDrink(selectedProduct) && (
                 <>
                   {/* Sugar Level */}
                   <div>
@@ -553,8 +524,8 @@ export function DrinkMenu({
                       className="w-full rounded-xl border border-stone-200/80 bg-white p-2.5 text-xs text-stone-900 focus:outline-none focus:ring-1 focus:ring-[#3E2723]"
                     >
                       <option value="Sữa tươi nguyên kem (Whole)">Sữa tươi nguyên kem</option>
-                      <option value="Sữa yến mạch hữu cơ (Oat)">Sữa yến mạch hữu cơ (+10.000 đ)</option>
-                      <option value="Sữa hạnh nhân thơm nhẹ (Almond)">Sữa hạnh nhân thơm nhẹ (+10.000 đ)</option>
+                      <option value="Sữa yến mạch hữu cơ (Oat)">Sữa yến mạch hữu cơ</option>
+                      <option value="Sữa hạnh nhân thơm nhẹ (Almond)">Sữa hạnh nhân thơm nhẹ</option>
                       <option value="Không dùng sữa (None)">Không dùng sữa (Cà phê đen)</option>
                     </select>
                   </div>

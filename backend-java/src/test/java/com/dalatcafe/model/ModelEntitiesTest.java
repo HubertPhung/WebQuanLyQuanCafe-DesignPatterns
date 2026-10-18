@@ -330,16 +330,19 @@ class ModelEntitiesTest {
         }
 
         @Test
-        @DisplayName("Order equality by id or orderCode")
+        @DisplayName("Order equality follows the unique orderCode and agrees with hashCode")
         void testOrderEquality() {
             Order o1 = new Order(1, "ORD-001", "Khách A", 1, OrderType.DINE_IN);
-            Order o2 = new Order(1, "ORD-002", "Khách B", 2, OrderType.PICKUP);
-            Order o3 = new Order(2, "ORD-001", "Khách C", 3, OrderType.DELIVERY);
-            Order o4 = new Order(3, "ORD-999", "Khách D", 4, OrderType.DINE_IN);
+            Order sameCode = new Order(2, "ORD-001", "Khách C", 3, OrderType.DELIVERY);
+            Order sameId = new Order(1, "ORD-002", "Khách B", 2, OrderType.PICKUP);
+            Order unsaved = new Order();
+            Order otherUnsaved = new Order();
 
-            assertEquals(o1, o2, "Equal by ID");
-            assertEquals(o1, o3, "Equal by OrderCode");
-            assertNotEquals(o1, o4);
+            assertEquals(o1, sameCode, "Equal by OrderCode");
+            assertEquals(o1.hashCode(), sameCode.hashCode(), "equal orders share a hash");
+            assertNotEquals(o1, sameId, "an id alone does not merge two order codes");
+            assertNotEquals(unsaved, otherUnsaved, "two orders without a code are different orders");
+            assertEquals(unsaved, unsaved);
             assertTrue(o1.toString().contains("ORD-001"));
         }
     }
@@ -376,16 +379,16 @@ class ModelEntitiesTest {
         }
 
         @Test
-        @DisplayName("Reservation equality based on ID or code")
+        @DisplayName("Reservation equality follows the unique code and agrees with hashCode")
         void testReservationEquality() {
             Reservation r1 = new Reservation(1, "RES-001", "A", "01", Instant.now(), 2);
-            Reservation r2 = new Reservation(1, "RES-002", "B", "02", Instant.now(), 2);
-            Reservation r3 = new Reservation(2, "RES-001", "C", "03", Instant.now(), 2);
-            Reservation r4 = new Reservation(3, "RES-999", "D", "04", Instant.now(), 2);
+            Reservation sameCode = new Reservation(2, "RES-001", "C", "03", Instant.now(), 2);
+            Reservation sameId = new Reservation(1, "RES-002", "B", "02", Instant.now(), 2);
 
-            assertEquals(r1, r2);
-            assertEquals(r1, r3);
-            assertNotEquals(r1, r4);
+            assertEquals(r1, sameCode);
+            assertEquals(r1.hashCode(), sameCode.hashCode());
+            assertNotEquals(r1, sameId);
+            assertNotEquals(new Reservation(), new Reservation());
             assertTrue(r1.toString().contains("RES-001"));
         }
     }
@@ -448,16 +451,16 @@ class ModelEntitiesTest {
         }
 
         @Test
-        @DisplayName("Customer equality by id or phone")
+        @DisplayName("Customer equality follows the unique phone and agrees with hashCode")
         void testCustomerEquality() {
             Customer c1 = new Customer(1, "User A", "0900000001", "a@test.com");
-            Customer c2 = new Customer(1, "User B", "0900000002", "b@test.com");
-            Customer c3 = new Customer(2, "User C", "0900000001", "c@test.com");
-            Customer c4 = new Customer(3, "User D", "0900000003", "d@test.com");
+            Customer samePhone = new Customer(2, "User C", "0900000001", "c@test.com");
+            Customer sameId = new Customer(1, "User B", "0900000002", "b@test.com");
 
-            assertEquals(c1, c2, "Equal by ID");
-            assertEquals(c1, c3, "Equal by Phone");
-            assertNotEquals(c1, c4);
+            assertEquals(c1, samePhone, "Equal by Phone");
+            assertEquals(c1.hashCode(), samePhone.hashCode());
+            assertNotEquals(c1, sameId);
+            assertNotEquals(new Customer(), new Customer());
             assertTrue(c1.toString().contains("User A"));
         }
     }

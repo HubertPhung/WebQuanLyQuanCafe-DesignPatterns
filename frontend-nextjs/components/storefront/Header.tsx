@@ -57,12 +57,13 @@ export function Header({
   // Scroll spy to highlight active section
   useEffect(() => {
     const handleScroll = () => {
-      if (window.scrollY < 200) {
+      const currentScroll = window.scrollY || window.pageYOffset || 0
+      if (currentScroll < 120) {
         setActiveNav('#')
         return
       }
-      const scrollBottom = window.innerHeight + window.scrollY
-      if (scrollBottom >= document.documentElement.scrollHeight - 100) {
+      const scrollBottom = window.innerHeight + currentScroll
+      if (scrollBottom >= document.documentElement.scrollHeight - 120) {
         setActiveNav('#locations')
         return
       }
@@ -72,7 +73,7 @@ export function Header({
         { id: 'story', href: '#story' },
         { id: 'menu', href: '#menu' },
       ]
-      const scrollPos = window.scrollY + 200
+      const scrollPos = currentScroll + 120
       for (const sec of sections) {
         const el = document.getElementById(sec.id)
         if (el && el.offsetTop <= scrollPos) {
@@ -88,7 +89,7 @@ export function Header({
   const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     setActiveNav(href)
     setIsMobileNavOpen(false)
-    if (href === '#') {
+    if (href === '#' || href === '#hero') {
       e.preventDefault()
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } else if (href.startsWith('#')) {
@@ -96,7 +97,13 @@ export function Header({
       const targetId = href.slice(1)
       const targetEl = document.getElementById(targetId)
       if (targetEl) {
-        targetEl.scrollIntoView({ behavior: 'smooth' })
+        const headerOffset = 84
+        const elementPosition = targetEl.getBoundingClientRect().top
+        const offsetPosition = elementPosition + (window.scrollY || window.pageYOffset || 0) - headerOffset
+        window.scrollTo({
+          top: Math.max(0, offsetPosition),
+          behavior: 'smooth',
+        })
       }
     }
   }
@@ -106,7 +113,12 @@ export function Header({
       onFavoritesClick()
     } else {
       const menuEl = document.getElementById('menu')
-      if (menuEl) menuEl.scrollIntoView({ behavior: 'smooth' })
+      if (menuEl) {
+        const headerOffset = 84
+        const elementPosition = menuEl.getBoundingClientRect().top
+        const offsetPosition = elementPosition + (window.scrollY || window.pageYOffset || 0) - headerOffset
+        window.scrollTo({ top: Math.max(0, offsetPosition), behavior: 'smooth' })
+      }
     }
   }
 

@@ -61,6 +61,38 @@ class BuilderTest {
     }
 
     @Test
+    void keepsTheMenuItemBehindEachDecoratedDrink() {
+        Order order = new OrderBuilder()
+                .addItem(7, new LargeSizeDecorator(new BaseCoffee(menuItem())), 2)
+                .addItem(new BaseCoffee(menuItem()), 1)
+                .build();
+
+        assertEquals(7, order.getItems().get(0).getMenuItemId());
+        assertEquals(2, order.getItems().get(0).getQty());
+        assertNull(order.getItems().get(1).getMenuItemId(), "the original step still works without an id");
+    }
+
+    @Test
+    void drawsAnotherCodeWhileTheStoreAlreadyHoldsIt() {
+        java.util.List<String> drawn = new java.util.ArrayList<>();
+        Order order = new OrderBuilder()
+                .addItem(new BaseCoffee(menuItem()), 1)
+                .avoidingCodes(code -> {
+                    drawn.add(code);
+                    return drawn.size() < 3;
+                })
+                .build();
+
+        assertEquals(3, drawn.size());
+        assertEquals(drawn.get(2), order.getOrderCode());
+        assertTrue(order.getOrderCode().matches("AC-[A-F0-9]{4}-[A-F0-9]{3}"));
+
+        OrderBuilder full = new OrderBuilder().addItem(new BaseCoffee(menuItem()), 1).avoidingCodes(code -> true);
+        assertThrows(IllegalStateException.class, full::build);
+        assertThrows(NullPointerException.class, () -> new OrderBuilder().avoidingCodes(null));
+    }
+
+    @Test
     void rejectsOrderWithoutItems() {
         OrderBuilder builder = new OrderBuilder().forCustomer("Walk-in");
 

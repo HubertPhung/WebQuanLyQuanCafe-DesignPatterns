@@ -1,5 +1,5 @@
 import 'server-only'
-import { asc, desc, gte, ne } from 'drizzle-orm'
+import { asc, desc, gte, inArray, ne } from 'drizzle-orm'
 import { db, isDbConfigured } from '@/lib/db'
 import { adminMenuItems, adminOrders, adminTables, type Order, type MenuItem, type FloorTable } from '@/lib/db/schema'
 import { assertAdminAccess } from './access'
@@ -9,10 +9,12 @@ import {
   getMockActiveOrders,
   getMockOrdersSince,
   getMockReservations,
+  getMockOrdersByCode,
   type ReservationStatusLabel,
 } from '@/lib/db/mock-store'
 import { fetchAnalytics, fetchCustomers, fetchReservations } from '@/lib/api-client'
 import { listSyncQueue } from './local-links'
+import { listOrderContacts, type OrderContact } from '@/lib/orders/online-contacts'
 
 const DAY = 24 * 60 * 60 * 1000
 
@@ -306,4 +308,33 @@ export async function getReservations(): Promise<{ reservations: ReservationView
     preOrders: r.preOrders ?? [],
   }))
   return { reservations: [...fromJava, ...local], javaOnline: true }
+}
+
+export type OnlineOrderView = Order & { contact: OrderContact }
+
+// Storefront orders, newest first: the order rows the POS and kitchen share, joined with the
+// contact and delivery details placeOnlineOrder stored for them.
+export async function getOnlineOrders(): Promise<OnlineOrderView[]> {
+  await assertAdminAccess()
+  return joinContactOrders(await listOrderContacts())
+}
+
+// The order rows behind the given contacts, in the contacts' order. The caller has already
+// scoped the contacts (all of them for staff, one account's own for /account).
+export async function joinContactOrders(contacts: OrderContact[]): Promise<OnlineOrderView[]> {
+  if (contacts.length === 0) return []
+  const codes = contacts.map((contact) => contact.orderCode)
+  let orders: Order[] = getMockOrdersByCode(codes)
+  if (isDbConfigured && db) {
+    try {
+      orders = await db.select().from(adminOrders).where(inArray(adminOrders.orderCode, codes))
+    } catch (error) {
+      console.warn('Database query failed, using fallback mock store:', error)
+    }
+  }
+  const byCode = new Map(orders.map((order) => [order.orderCode, order]))
+  return contacts.flatMap((contact) => {
+    const order = byCode.get(contact.orderCode)
+    return order ? [{ ...order, contact }] : []
+  })
 }

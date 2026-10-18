@@ -1,18 +1,20 @@
 import { OnlineOrders } from '@/components/admin/online-orders'
-import { PageHeading } from '@/components/admin/shared'
+import { AutoRefresh, PageHeading } from '@/components/admin/shared'
+import { getOnlineOrders } from '@/lib/admin/queries'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Quản lý Đơn hàng Online · Coffee Shop Admin' }
 
-export default function AdminOnlineOrdersPage() {
+export default async function AdminOnlineOrdersPage() {
+  const orders = await getOnlineOrders()
   return (
     <div className="space-y-6">
+      <AutoRefresh />
       <PageHeading
         title="Quản lý Đơn hàng Online"
-        description="Tiếp nhận, xử lý pha chế, bàn giao shipper và quản lý quy trình giao hàng tận nơi."
+        description="Đơn khách đặt trên trang web: pha chế, giao hàng hoặc chờ khách lấy, và thu tiền khi nhận."
       />
-      <OnlineOrders />
+      <OnlineOrders orders={orders} />
     </div>
   )
 }
-
