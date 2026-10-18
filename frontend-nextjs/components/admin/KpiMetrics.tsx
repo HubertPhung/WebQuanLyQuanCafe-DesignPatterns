@@ -105,7 +105,7 @@ export function KpiMetrics({ data = {} }: KpiMetricsProps) {
     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 md:gap-8">
       {cards.map((card, idx) => (
         <motion.div
-          key={card.labelEn}
+          key={card.labelVi}
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, delay: idx * 0.07 }}
@@ -117,9 +117,6 @@ export function KpiMetrics({ data = {} }: KpiMetricsProps) {
                 <p className="text-base font-semibold text-stone-800 leading-snug">
                   {card.labelVi}
                 </p>
-                <span className="sr-only">
-                  {card.labelEn}
-                </span>
               </div>
 
               <div className="flex size-12 items-center justify-center rounded-lg bg-[#f5efe6] text-[#3E2723] border border-[#e7ddd0] shrink-0 shadow-2xs">

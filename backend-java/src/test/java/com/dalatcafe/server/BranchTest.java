@@ -172,6 +172,8 @@ class BranchTest {
         assertTrue(rows(call("GET", "/api/reservations?branch=" + Branches.PHAN_DINH_PHUNG, "STAFF", null)).stream()
                 .noneMatch(r -> code.equals(r.get("id"))));
 
+        DaoFactory.getInstance().getReservationDao().findByReservationCode(code).orElseThrow()
+                .setDateTime(java.time.Instant.now());
         HttpResponse<String> transferred = call("POST", "/api/reservations/" + code + "/transfer-pos", "STAFF", null);
         assertEquals(200, transferred.statusCode(), transferred.body());
         assertEquals(SECOND, object(transferred).get("branch"));

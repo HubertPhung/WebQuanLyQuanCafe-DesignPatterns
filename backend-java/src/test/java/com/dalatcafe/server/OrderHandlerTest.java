@@ -130,6 +130,43 @@ class OrderHandlerTest {
     }
 
     @Test
+    void cancellationReleasesAllGroupedTablesExceptThoseUsedByAnotherTicket() throws Exception {
+        var groupedTables = tables.findAll().stream().limit(2).toList();
+        var ids = groupedTables.stream().map(com.dalatcafe.model.Table::getId).toList();
+        for (int id : ids) tables.updateStatus(id, TableStatus.OCCUPIED, 2);
+        Order grouped = orders.findByOrderCode(CODE).orElseThrow();
+        grouped.setTableIds(ids);
+        orders.save(grouped);
+        Order other = new Order(null, "KDS-OTHER", "Other guest", ids.get(0), OrderType.DINE_IN);
+        orders.save(other);
+        events.attach(new TableStatusSyncObserver(tables, orders));
+
+        HttpResponse<String> cancelled = send("PATCH", "/api/orders/" + CODE + "/status", "{\"status\":\"cancelled\"}")
+                .get(10, TimeUnit.SECONDS);
+        assertEquals(200, cancelled.statusCode(), cancelled.body());
+        assertEquals(TableStatus.OCCUPIED, tables.findById(ids.get(0)).orElseThrow().getStatus());
+        assertEquals(TableStatus.CLEANING, tables.findById(ids.get(1)).orElseThrow().getStatus());
+        assertEquals(0, tables.findById(ids.get(1)).orElseThrow().getGuestCount());
+        assertEquals(PaymentStatus.UNPAID, orders.findByOrderCode(CODE).orElseThrow().getPaymentStatus());
+        assertEquals(409, send("POST", "/api/orders/" + CODE + "/pay", "{\"paymentMethod\":\"cash\"}").get(10, TimeUnit.SECONDS).statusCode());
+        assertEquals(409, send("PATCH", "/api/orders/" + CODE + "/status", "{\"status\":\"brewing\"}").get(10, TimeUnit.SECONDS).statusCode());
+        assertEquals(200, send("PATCH", "/api/orders/" + CODE + "/status", "{\"status\":\"cancelled\"}").get(10, TimeUnit.SECONDS).statusCode());
+    }
+
+    @Test
+    void importingCancelledPaidTicketPreservesRefundAndDoesNotOpenKitchenTicket() throws Exception {
+        var broadcasts = new java.util.concurrent.atomic.AtomicInteger();
+        events.attach(IOrderObserver.whenPaid(order -> broadcasts.incrementAndGet()));
+        var response = send("POST", "/api/orders/sync", "{\"orders\":[" + offlineOrder("KDS-CANCELLED", "\"cancelled\"") + "]}")
+                .get(10, TimeUnit.SECONDS);
+        assertEquals(200, response.statusCode(), response.body());
+        Order stored = orders.findByOrderCode("KDS-CANCELLED").orElseThrow();
+        assertEquals(OrderStatus.CANCELLED, stored.getStatus());
+        assertEquals(PaymentStatus.REFUNDED, stored.getPaymentStatus());
+        assertEquals(0, broadcasts.get());
+    }
+
+    @Test
     void completingWhileThePaidEventRunsStillLeavesTheTableForCleaning() throws Exception {
         int tableId = tables.findAll().get(0).getId();
         tables.updateStatus(tableId, TableStatus.AVAILABLE, 0);
@@ -213,9 +250,16 @@ class OrderHandlerTest {
             return true;
         }
 
+        @Override
+        public java.util.List<Order> findByTableId(int tableId) {
+            return rows.values().stream().filter(order -> order.getTableIds().contains(tableId))
+                    .map(SnapshotOrderDao::copy).toList();
+        }
+
         private static Order copy(Order source) {
             Order copy = new Order(source.getId(), source.getOrderCode(), source.getCustomer(),
                     source.getTableId(), source.getOrderType());
+            copy.setTableIds(source.getTableIds());
             copy.setItems(new ArrayList<>(source.getItems()));
             copy.setPaymentMethod(source.getPaymentMethod());
             copy.setPaymentStatus(source.getPaymentStatus());

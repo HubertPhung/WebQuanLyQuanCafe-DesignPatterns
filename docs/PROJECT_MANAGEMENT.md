@@ -85,7 +85,7 @@ Cột *Frontend* là `frontend-nextjs/`, cột *Java* là `backend-java/`. Cột
 | `FEAT-INV-01` | Danh sách thực đơn | — | 🟢 `menu-management.tsx` (trang Kho riêng đã gỡ) | 🟢 `IMenuDao` | ⚪ |
 | `FEAT-INV-02` | Theo dõi số lượng tồn kho, cảnh báo sắp hết hàng | — | ⛔ Đã gỡ (món chỉ bật / tắt bán; cột `stock_qty`, `low_stock_threshold` đã xoá) | ⛔ Đã gỡ | — |
 | `FEAT-INV-03` | Bật/tắt bán món | — | 🟢 `setItemInStock` | 🟢 `PATCH /api/menu/{id}/stock` | 🟢 ghép theo tên món |
-| `FEAT-INV-04` | Thêm món mới | — | 🟢 `add-item-dialog.tsx` | 🟢 `POST /api/menu` (MANAGER) | 🟢 |
+| `FEAT-INV-04` | Thêm, sửa, xoá món (MANAGER+) | — | 🟢 `add-item-dialog.tsx`, `menu-management.tsx` | 🟢 `POST /api/menu`, `PUT` / `DELETE /api/menu/{id}` (MANAGER) | 🟢 |
 | `FEAT-CRM-01` | Xếp hạng khách hàng | — | 🟢 `admin/customers` (điểm, hạng) | 🟢 `GET /api/customers` | 🟢 tổng hợp đơn cục bộ khi Java tắt |
 | `FEAT-ANA-01` | Doanh thu 7 ngày | — | 🟢 `RevenueChart.tsx` | 🟢 `GET /api/analytics/overview?days=7` | 🟢 kho cục bộ khi Java tắt |
 | `FEAT-ANA-02` | Cơ cấu thanh toán & món bán chạy | — | 🟢 `dashboard-charts.tsx` | 🟢 `paymentMix`, `topItems` | 🟢 |

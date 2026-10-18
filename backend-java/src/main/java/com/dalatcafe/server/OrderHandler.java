@@ -185,9 +185,10 @@ public class OrderHandler extends ApiHandler {
         }
 
         List<String> warnings = new ArrayList<>();
-        if (target == OrderStatus.COMPLETED) {
+        if (target == OrderStatus.COMPLETED || target == OrderStatus.CANCELLED) {
             try {
-                eventSubject.notifyOrderCompleted(order);
+                if (target == OrderStatus.CANCELLED) eventSubject.notifyOrderCancelled(order);
+                else eventSubject.notifyOrderCompleted(order);
             } catch (RuntimeException e) {
                 LOGGER.log(Level.WARNING, "Order completed observer failed: " + e.getMessage(), e);
                 warnings.add("Order event observer failed: " + e.getMessage());
@@ -402,6 +403,9 @@ public class OrderHandler extends ApiHandler {
         if (order.getStatus() == OrderStatus.COMPLETED && order.getPaymentStatus() != PaymentStatus.PAID) {
             throw ApiException.badRequest("Order " + code + " is completed but not paid");
         }
+        if (target == OrderStatus.CANCELLED && order.getPaymentStatus() == PaymentStatus.PAID) {
+            order.setPaymentStatus(PaymentStatus.REFUNDED);
+        }
         return order;
     }
 
@@ -420,11 +424,12 @@ public class OrderHandler extends ApiHandler {
     /** An imported order that is paid and still open seats its table and reaches the KDS. */
     private void notifyImported(Order order, List<String> warnings) {
         boolean open = order.getStatus() != OrderStatus.COMPLETED && order.getStatus() != OrderStatus.CANCELLED;
-        if (order.getPaymentStatus() != PaymentStatus.PAID || !open) {
+        if (!open) {
             return;
         }
         try {
-            eventSubject.notifyOrderPaid(order);
+            if (order.getPaymentStatus() == PaymentStatus.PAID) eventSubject.notifyOrderPaid(order);
+            else eventSubject.notifyOrderOpened(order);
         } catch (RuntimeException e) {
             LOGGER.log(Level.WARNING, "Imported order observer failed: " + e.getMessage(), e);
             warnings.add("Order event observer failed: " + e.getMessage());

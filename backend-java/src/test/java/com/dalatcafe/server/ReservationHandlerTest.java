@@ -7,6 +7,8 @@ import com.dalatcafe.dao.InMemoryMenuDao;
 import com.dalatcafe.dao.InMemoryTableDao;
 import com.dalatcafe.model.Order;
 import com.dalatcafe.model.Reservation;
+import com.dalatcafe.model.ReservationStatus;
+import com.dalatcafe.model.TableStatus;
 import com.dalatcafe.util.Json;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
@@ -87,8 +89,21 @@ class ReservationHandlerTest {
     }
 
     @Test
+    void simultaneousGroupedBookingsCannotShareEvenASecondaryTable() throws Exception {
+        reservations.pauseNextScan();
+        var first = book(List.of(3, 4), SLOT);
+        assertTrue(reservations.scanPaused.await(5, TimeUnit.SECONDS));
+        var second = book(List.of(4, 5), SLOT.plusSeconds(30 * 60)).get(10, TimeUnit.SECONDS);
+        var firstResponse = first.get(10, TimeUnit.SECONDS);
+        assertEquals(List.of(201, 400), List.of(firstResponse.statusCode(), second.statusCode()).stream().sorted().toList());
+        assertEquals(1, reservations.findAll().stream().filter(booking -> booking.getTableIds().contains(4)
+                && !booking.getDateTime().isBefore(SLOT)).count());
+    }
+
+    @Test
     void aBookingIsTransferredToPosOnlyOnceUnderConcurrentRequests() throws Exception {
         String code = data(book().get(10, TimeUnit.SECONDS)).get("id").toString();
+        reservations.findByReservationCode(code).orElseThrow().setDateTime(Instant.now());
         // The first transfer has checked that no order exists but not saved it yet.
         orders.pauseNextLookup();
         CompletableFuture<HttpResponse<String>> first = send("POST", "/api/reservations/" + code + "/transfer-pos", null);
@@ -101,9 +116,38 @@ class ReservationHandlerTest {
         assertEquals(1, orders.findAll().stream().filter(o -> code.equals(o.getOrderCode())).count());
     }
 
+    @Test
+    void futureBookingCannotOpenAnOrderOrOccupyItsTable() throws Exception {
+        String code = data(book().get(10, TimeUnit.SECONDS)).get("id").toString();
+        HttpResponse<String> response = send("POST", "/api/reservations/" + code + "/transfer-pos", null)
+                .get(10, TimeUnit.SECONDS);
+        assertEquals(409, response.statusCode(), response.body());
+        assertTrue(response.body().contains("RESERVATION_NOT_DUE"), response.body());
+        assertTrue(orders.findByOrderCode(code).isEmpty());
+        assertEquals(ReservationStatus.PENDING, reservations.findByReservationCode(code).orElseThrow().getStatus());
+        assertEquals(TableStatus.AVAILABLE, new InMemoryTableDao().findById(TABLE_ID).orElseThrow().getStatus());
+    }
+
+    @Test
+    void cancellingAConfirmedOnlineBookingReleasesTheTableAndAllowsRebooking() throws Exception {
+        String code = data(book().get(10, TimeUnit.SECONDS)).get("id").toString();
+        String path = "/api/reservations/" + code + "/status";
+        assertEquals(200, send("PATCH", path, "{\"status\":\"confirmed\"}").get(10, TimeUnit.SECONDS).statusCode());
+        new InMemoryTableDao().updateStatus(TABLE_ID, TableStatus.RESERVED, 2);
+        assertEquals(200, send("PATCH", path, "{\"status\":\"cancelled\"}").get(10, TimeUnit.SECONDS).statusCode());
+        assertEquals(ReservationStatus.CANCELLED, reservations.findByReservationCode(code).orElseThrow().getStatus());
+        assertEquals(TableStatus.AVAILABLE, new InMemoryTableDao().findById(TABLE_ID).orElseThrow().getStatus());
+        assertTrue(orders.findByOrderCode(code).isEmpty());
+        assertEquals(201, book().get(10, TimeUnit.SECONDS).statusCode());
+    }
+
     private CompletableFuture<HttpResponse<String>> book() {
+        return book(List.of(TABLE_ID), SLOT);
+    }
+
+    private CompletableFuture<HttpResponse<String>> book(List<Integer> tableIds, Instant slot) {
         return send("POST", "/api/reservations", "{\"customer\":\"An\",\"contact\":\"0912345678\",\"dateTime\":\""
-                + SLOT + "\",\"tableId\":" + TABLE_ID + ",\"guests\":2}");
+                + slot + "\",\"tableId\":" + tableIds.get(0) + ",\"tableIds\":" + tableIds + ",\"guests\":2}");
     }
 
     private CompletableFuture<HttpResponse<String>> send(String method, String path, String body) {

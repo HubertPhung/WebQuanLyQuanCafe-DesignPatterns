@@ -29,6 +29,7 @@ public class JdbcOrderDao implements IOrderDao {
             }
         } catch (SQLException e) {
             LOGGER.log(Level.SEVERE, "Error findAll orders via JDBC: " + e.getMessage(), e);
+            throw new IllegalStateException("Không đọc được danh sách đơn hàng.", e);
         }
         return list;
     }

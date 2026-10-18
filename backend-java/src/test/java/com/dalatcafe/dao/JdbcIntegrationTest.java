@@ -84,6 +84,17 @@ class JdbcIntegrationTest {
     }
 
     @Test
+    void unreadableReservationScheduleMustNotBeReportedAsAnEmptySchedule() {
+        JdbcDatabase.setCustomConnection("jdbc:postgresql://127.0.0.1:1/postgres?connectTimeout=1", "postgres", "postgres");
+        try {
+            assertThrows(IllegalStateException.class, reservations::findAll);
+            assertThrows(IllegalStateException.class, orders::findAll);
+        } finally {
+            JdbcDatabase.setCustomConnection(postgres.getJdbcUrl("postgres", "postgres"), "postgres", "postgres");
+        }
+    }
+
+    @Test
     void branchIsStoredOnTablesOrdersAndBookings() {
         Table table = new Table(tables.nextId(), "Ban chi nhanh", 4, "San vuon");
         table.setBranch(Branches.BUI_THI_XUAN);
@@ -268,6 +279,32 @@ class JdbcIntegrationTest {
         assertEquals(2, loaded.getPreOrders().get(0).getQty());
         assertTrue(reservations.updateStatus(loaded.getId(), ReservationStatus.CONFIRMED));
         assertEquals(ReservationStatus.CONFIRMED, reservations.findById(loaded.getId()).orElseThrow().getStatus());
+    }
+
+    @Test
+    void reservationHistoryPersistsAccountOwnershipAndKeepsLegacyEmailScope() {
+        JdbcUserDao users = new JdbcUserDao();
+        UserAccount owner = new UserAccount(null, "booking-owner@example.com", "Owner", UserRole.CUSTOMER);
+        UserAccount other = new UserAccount(null, "booking-other@example.com", "Other", UserRole.CUSTOMER);
+        assertTrue(users.save(owner));
+        assertTrue(users.save(other));
+        Reservation owned = new Reservation(null, null, "Guest", "0901234567", Instant.now().plusSeconds(3600), 2);
+        owned.setUserId(owner.getId());
+        owned.setEmail(other.getEmail());
+        owned.setStatus(ReservationStatus.CANCELLED);
+        assertTrue(reservations.save(owned));
+        assertEquals(owner.getId(), reservations.findById(owned.getId()).orElseThrow().getUserId());
+        owned.setNote("Updated booking");
+        assertTrue(reservations.save(owned));
+        assertEquals(owner.getId(), reservations.findByReservationCode(owned.getReservationCode()).orElseThrow().getUserId());
+
+        Reservation legacy = new Reservation(null, null, "Legacy", "0901234567", Instant.now().plusSeconds(7200), 2);
+        legacy.setEmail(" BOOKING-OWNER@EXAMPLE.COM ");
+        legacy.setStatus(ReservationStatus.SEATED);
+        assertTrue(reservations.save(legacy));
+        assertEquals(List.of(legacy.getReservationCode(), owned.getReservationCode()),
+                reservations.findForAccount(owner.getId(), owner.getEmail()).stream().map(Reservation::getReservationCode).toList());
+        assertTrue(reservations.findForAccount(other.getId(), other.getEmail()).isEmpty());
     }
 
     @Test

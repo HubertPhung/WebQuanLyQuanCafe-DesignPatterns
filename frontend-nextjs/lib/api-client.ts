@@ -86,7 +86,11 @@ async function request<T>(path: string, init: CallOptions): Promise<JavaResult<T
   return { ok: false, unreachable: false, status: response.status, code, error }
 }
 
-export type JavaMenuItem = { id: number; name: string; kind: string; sellPrice: number; inStock: boolean }
+export type JavaMenuItem = {
+  id: number; name: string; category: string; kind: string; unit: string
+  sellPrice: number; costPrice: number; inStock: boolean
+  recipe: string | null; imageUrl: string | null; variations: { name: string; price: number }[]
+}
 
 export function fetchMenu(): Promise<JavaResult<JavaMenuItem[]>> {
   return request<JavaMenuItem[]>('/api/menu', { method: 'GET' })
@@ -99,7 +103,13 @@ export type JavaTable = {
 // ?branch= limits a list to one branch; without it Java answers for the whole shop.
 const branchQuery = (branch?: BranchId) => (branch ? `branch=${encodeURIComponent(branch)}` : '')
 export function fetchTables(branch?: BranchId) { return request<JavaTable[]>(`/api/tables${branch ? `?${branchQuery(branch)}` : ''}`, { method: 'GET' }) }
-export function fetchReservationTables() { return request<Pick<JavaTable, 'id' | 'name' | 'seats' | 'zone' | 'branch'>[]>('/api/tables/catalog', { method: 'GET', auth: false }) }
+export type ReservationTableOption = Pick<JavaTable, 'id' | 'name' | 'seats' | 'zone' | 'branch'> & { available?: boolean }
+export function fetchReservationTables(dateTime?: string, branch?: BranchId) {
+  const query = new URLSearchParams()
+  if (dateTime) query.set('dateTime', dateTime)
+  if (branch) query.set('branch', branch)
+  return request<ReservationTableOption[]>(`/api/tables/catalog${query.size ? `?${query}` : ''}`, { method: 'GET', auth: false })
+}
 // A new table joins `branch`; an edited one keeps the branch it has.
 export function saveJavaTable(input: { name: string; seats: number; zone: string; imageUrl: string | null; branch?: BranchId }, id?: number) {
   return request<JavaTable>(id === undefined ? '/api/tables' : `/api/tables/${id}/details`, { method: id === undefined ? 'POST' : 'PUT', body: input })
@@ -206,7 +216,17 @@ export function fetchReservations(branch?: BranchId): Promise<JavaResult<JavaRes
   return request<JavaReservation[]>(`/api/reservations${branch ? `?${branchQuery(branch)}` : ''}`, { method: 'GET' })
 }
 
+/** Customer history is scoped by the authenticated Java account, never by a client-supplied id. */
+export function fetchMyReservations(token: string): Promise<JavaResult<JavaReservation[]>> {
+  return request<JavaReservation[]>('/api/reservations/mine', { method: 'GET', auth: token })
+}
+
 // PATCH /api/reservations/{code}/status: confirm or cancel (seating goes through transfer-pos).
+// PUT /api/reservations/{code} (STAFF+): edits a pending or confirmed booking; the chain runs again.
+export function updateJavaReservation(code: string, payload: ReservationPayload): Promise<JavaResult<JavaReservation>> {
+  return request<JavaReservation>(`/api/reservations/${encodeURIComponent(code)}`, { method: 'PUT', body: payload })
+}
+
 export function updateJavaReservationStatus(code: string, status: 'pending' | 'confirmed' | 'cancelled'): Promise<JavaResult<JavaReservation>> {
   return request<JavaReservation>(`/api/reservations/${encodeURIComponent(code)}/status`, { method: 'PATCH', body: { status } })
 }
@@ -286,6 +306,16 @@ export type NewJavaMenuItem = {
 // POST /api/menu (MANAGER+)
 export function createJavaMenuItem(payload: NewJavaMenuItem): Promise<JavaResult<JavaMenuItem>> {
   return request<JavaMenuItem>('/api/menu', { method: 'POST', body: payload })
+}
+
+// PUT /api/menu/{id} (MANAGER+): replaces the editable fields; 409 when the name is taken.
+export function updateJavaMenuItem(id: number, payload: NewJavaMenuItem): Promise<JavaResult<JavaMenuItem>> {
+  return request<JavaMenuItem>(`/api/menu/${id}`, { method: 'PUT', body: payload })
+}
+
+// DELETE /api/menu/{id} (MANAGER+). Past orders keep the name and price they were sold at.
+export function deleteJavaMenuItem(id: number): Promise<JavaResult<null>> {
+  return request<null>(`/api/menu/${id}`, { method: 'DELETE' })
 }
 
 export type SyncOrderPayload = {

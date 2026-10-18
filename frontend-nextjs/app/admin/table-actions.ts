@@ -5,7 +5,7 @@ import { assertAdminAccess } from '@/lib/admin/access'
 import { saveJavaTable, deleteJavaTable, getJavaBackendUrl } from '@/lib/api-client'
 import { saveMockTable, deleteMockTable } from '@/lib/db/mock-store'
 import { isDbConfigured } from '@/lib/db'
-import { saveDatabaseTable, deleteDatabaseTable } from '@/lib/admin/table-repository'
+import { saveDatabaseTable, deleteDatabaseTable, mirrorDatabaseTable, mirrorDeletedTable } from '@/lib/admin/table-repository'
 import { getAdminBranch } from '@/lib/admin/branch'
 import type { FloorTable } from '@/lib/db/schema'
 
@@ -27,7 +27,10 @@ export async function saveTableDetails(input: TableDetails, id?: number): Promis
     let table: FloorTable
     if (getJavaBackendUrl()) {
       const result = await saveJavaTable(located, id)
-      if (result.ok) table = { ...result.data, occupiedSince: result.data.occupiedSince ? new Date(result.data.occupiedSince) : null, updatedAt: new Date() }
+      if (result.ok) {
+        table = { ...result.data, occupiedSince: result.data.occupiedSince ? new Date(result.data.occupiedSince) : null, updatedAt: new Date() }
+        if (isDbConfigured) await mirrorDatabaseTable(table)
+      }
       else if (!result.unreachable) throw new Error(result.error)
       else table = isDbConfigured ? await saveDatabaseTable(located, id) : saveMockTable(located, id)
     } else {
@@ -44,7 +47,9 @@ export async function deleteTable(id: number): Promise<Result<null>> {
     if (!Number.isInteger(id) || id <= 0) throw new Error('Mã bàn không hợp lệ.')
     if (getJavaBackendUrl()) {
       const result = await deleteJavaTable(id)
-      if (!result.ok) {
+      if (result.ok) {
+        if (isDbConfigured) await mirrorDeletedTable(id)
+      } else {
         if (!result.unreachable) throw new Error(result.error)
         if (isDbConfigured) await deleteDatabaseTable(id)
         else deleteMockTable(id)

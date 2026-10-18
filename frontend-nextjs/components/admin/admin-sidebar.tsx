@@ -13,6 +13,7 @@ import {
   UtensilsCrossed,
   ChevronsUpDown,
   ShieldCheck,
+  ReceiptText,
 } from 'lucide-react'
 import {
   Sidebar,
@@ -33,18 +34,19 @@ import { LogoMark } from '@/components/brand/logo'
 import { atLeast, requiredRoleForPath, type Role } from '@/lib/auth/roles'
 
 export const overviewNav = [
-  { href: '/admin', labelVi: 'Dashboard', subVi: 'Tổng quan & phân tích', icon: LayoutDashboard },
+  { href: '/admin', labelVi: 'Tổng quan', subVi: 'Tổng quan & phân tích', icon: LayoutDashboard },
 ]
 
 export const storeNav = [
-  { href: '/admin/menu', labelVi: 'Menu', subVi: 'Món & danh mục', icon: UtensilsCrossed },
+  { href: '/admin/menu', labelVi: 'Thực đơn', subVi: 'Món & danh mục', icon: UtensilsCrossed },
   { href: '/admin/tables', labelVi: 'Bàn ăn', subVi: 'Quản lý bàn & khu vực', icon: Armchair },
   { href: '/admin/reservations', labelVi: 'Đặt bàn', subVi: 'Quản lý đặt chỗ', icon: CalendarCheck, badgeKey: 'reservations' as const },
 ]
 
 export const businessNav = [
-  { href: '/admin/orders', labelVi: 'Đơn hàng online', subVi: 'Quản lý đặt online', icon: Globe },
+  { href: '/admin/orders', labelVi: 'Đơn hàng trực tuyến', subVi: 'Quản lý đặt trực tuyến', icon: Globe },
   { href: '/admin/pos', labelVi: 'Bán hàng tại chỗ', subVi: 'Hệ thống POS thu ngân', icon: MonitorCheck, badgeKey: 'orders' as const },
+  { href: '/admin/order-history', labelVi: 'Lịch sử đơn hàng', subVi: 'Giao dịch trực tuyến & tại quầy', icon: ReceiptText },
 ]
 
 export const staffNav = [
@@ -124,7 +126,7 @@ export function AdminSidebar({ badges = { orders: 0 }, role = 'STAFF' }: { badge
           <SidebarMenuItem>
             <SidebarMenuButton
               size="lg"
-              tooltip="Coffee Shop Admin Console"
+              tooltip="Quản trị cửa hàng"
               className="h-14 rounded-lg px-2.5 gap-2.5 hover:bg-stone-100"
               render={<Link href="/admin" />}
             >
@@ -133,7 +135,7 @@ export function AdminSidebar({ badges = { orders: 0 }, role = 'STAFF' }: { badge
                 <span className="text-sm font-extrabold tracking-tight text-stone-900 truncate">
                   Đà Lạt <span className="text-[#B45309]">Cafe</span>
                 </span>
-                <span className="text-[10px] text-[#5A3E2B] font-bold tracking-wide uppercase">Admin Console</span>
+                <span className="text-[10px] text-[#5A3E2B] font-bold tracking-wide uppercase">Quản trị cửa hàng</span>
               </div>
             </SidebarMenuButton>
           </SidebarMenuItem>

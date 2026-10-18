@@ -13,9 +13,12 @@ import type { Order, OrderStatus, OrderType } from '@/lib/db/schema'
 import { cn } from '@/lib/utils'
 import { AnimatePresence, motion } from 'framer-motion'
 import { OrderFulfillmentBar } from './fulfillment-progress'
+import { formatOrderTables } from '@/lib/admin/order-display'
+import type { FloorTable } from '@/lib/db/schema'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 
 const columns: {
-  status: Exclude<OrderStatus, 'completed'>
+  status: Exclude<OrderStatus, 'completed' | 'cancelled'>
   title: string
   sublabel: string
   next: OrderStatus
@@ -26,7 +29,7 @@ const columns: {
   {
     status: 'pending',
     title: 'Chờ pha chế',
-    sublabel: 'Pending',
+    sublabel: 'Chờ pha chế',
     next: 'brewing',
     action: 'Bắt đầu pha',
     headerBg: 'bg-amber-500/10 border-amber-500/20 text-amber-700',
@@ -35,7 +38,7 @@ const columns: {
   {
     status: 'brewing',
     title: 'Đang thực hiện',
-    sublabel: 'Brewing',
+    sublabel: 'Đang pha',
     next: 'ready',
     action: 'Báo hoàn thành',
     headerBg: 'bg-blue-500/10 border-blue-500/20 text-blue-700',
@@ -44,7 +47,7 @@ const columns: {
   {
     status: 'ready',
     title: 'Sẵn sàng phục vụ',
-    sublabel: 'Ready',
+    sublabel: 'Sẵn sàng',
     next: 'completed',
     action: 'Giao món',
     headerBg: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-700',
@@ -52,8 +55,9 @@ const columns: {
   },
 ]
 
-function TicketCard({ order, now, next, action }: { order: Order; now: number; next: OrderStatus; action: string }) {
+function TicketCard({ order, tables, now, next, action }: { order: Order; tables: FloorTable[]; now: number; next: OrderStatus; action: string }) {
   const [pending, startTransition] = useTransition()
+  const [cancelOpen, setCancelOpen] = useState(false)
   const [checkedItems, setCheckedItems] = useState<Record<number, boolean>>({})
   const minutes = (now - new Date(order.createdAt).getTime()) / 60000
   const late = minutes > 10
@@ -91,10 +95,10 @@ function TicketCard({ order, now, next, action }: { order: Order; now: number; n
             <div>
               <CardTitle className="text-base font-bold tracking-tight text-stone-900">{order.orderCode}</CardTitle>
               <CardDescription className="text-xs">
-                <span className="font-semibold text-stone-800">{order.customer || 'Khách vãng lai'}</span>
+                <span className="font-semibold text-stone-800">{!order.customer || order.customer === 'Walk-in' ? 'Khách vãng lai' : order.customer}</span>
                 {' · '}
                 <span className="font-medium text-stone-600">
-                  {order.tableId ? `Bàn ${order.tableId}` : order.orderType === 'dine-in' ? 'Tại quán' : order.orderType === 'pickup' ? 'Mang về' : 'Giao hàng'}
+                  {formatOrderTables(order, tables)}
                 </span>
               </CardDescription>
             </div>
@@ -156,7 +160,7 @@ function TicketCard({ order, now, next, action }: { order: Order; now: number; n
             })}
           </ul>
         </CardContent>
-        <CardFooter className="flex items-center justify-between gap-2 pt-2 border-t border-stone-100 text-xs">
+        <CardFooter className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-stone-100 text-xs">
           <div className="flex items-center gap-2">
             {order.paymentStatus === 'paid' ? (
               <Badge variant="outline" className="border-emerald-300/80 bg-emerald-50/90 text-emerald-900 font-bold text-[10px]">
@@ -174,21 +178,45 @@ function TicketCard({ order, now, next, action }: { order: Order; now: number; n
               </Button>
             )}
           </div>
+          <Button variant="outline" size="sm" className="text-rose-700" disabled={pending} onClick={() => setCancelOpen(true)}>
+            Hủy đơn
+          </Button>
           <Button
             size="sm"
             className="h-7 text-xs px-3 font-bold ml-auto bg-[#5A3E2B] hover:bg-[#684732] text-white"
-            disabled={pending}
+            disabled={pending || (next === 'completed' && order.paymentStatus !== 'paid')}
+            title={next === 'completed' && order.paymentStatus !== 'paid' ? 'Thu tiền trước khi giao món' : undefined}
             onClick={() => run(() => updateOrderStatus(order.id, next))}
           >
             {action}
           </Button>
         </CardFooter>
       </Card>
+      <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Hủy đơn {order.orderCode}?</DialogTitle>
+            <DialogDescription>
+              Đơn sẽ được đưa ra khỏi hàng đợi pha chế và giữ trong lịch sử.
+              {order.paymentStatus === 'paid' && ' Đơn đã thu tiền sẽ được ghi nhận trạng thái hoàn tiền; vui lòng đối soát khoản hoàn với khách.'}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" disabled={pending} onClick={() => setCancelOpen(false)}>Giữ đơn</Button>
+            <Button variant="destructive" disabled={pending} onClick={() => run(async () => {
+              const result = await updateOrderStatus(order.id, 'cancelled')
+              if (result.ok) { setCancelOpen(false); toast.success('Đã hủy đơn') }
+              return result
+            })}>Xác nhận hủy</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </motion.div>
   )
 }
 
-export function KdsBoard({ orders }: { orders: Order[] }) {
+export function KdsBoard({ orders: allOrders, tables = [] }: { orders: Order[]; tables?: FloorTable[] }) {
+  const orders = allOrders.filter(order => order.status !== 'completed' && order.status !== 'cancelled')
   const [filterType, setFilterType] = useState<string>('all')
   const [now, setNow] = useState(() => Date.now())
 
@@ -201,7 +229,7 @@ export function KdsBoard({ orders }: { orders: Order[] }) {
     ? orders
     : orders.filter((o) => o.orderType === filterType)
 
-  const activeCount = orders.filter((o) => o.status !== 'completed').length
+  const activeCount = orders.length
 
   return (
     <div className="flex flex-col gap-6">
@@ -236,7 +264,7 @@ export function KdsBoard({ orders }: { orders: Order[] }) {
         <div className="flex items-center gap-3 text-xs text-stone-500">
           <span className="flex items-center gap-1.5 font-semibold text-stone-700">
             <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-            Điều phối quầy pha chế <span className="sr-only">Live Kitchen Display Kitchen display</span>
+            Điều phối quầy pha chế
           </span>
           <span className="font-bold text-stone-900 tabular-nums bg-stone-100/90 px-2.5 py-1 rounded-md">
             {activeCount} đơn đang xử lý
@@ -280,6 +308,7 @@ export function KdsBoard({ orders }: { orders: Order[] }) {
                       <TicketCard
                         key={order.id}
                         order={order}
+                        tables={tables}
                         now={now}
                         next={column.next}
                         action={column.action}

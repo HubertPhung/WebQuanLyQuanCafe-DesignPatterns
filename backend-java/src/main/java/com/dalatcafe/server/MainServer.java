@@ -8,6 +8,7 @@ import com.dalatcafe.patterns.facade.PosCheckoutFacade;
 import com.dalatcafe.patterns.observer.KitchenNotificationObserver;
 import com.dalatcafe.patterns.observer.OrderEventSubject;
 import com.dalatcafe.patterns.observer.TableStatusSyncObserver;
+import com.dalatcafe.patterns.observer.ReservationOrderSyncObserver;
 import com.dalatcafe.security.AdminBootstrap;
 import com.dalatcafe.security.AuthSettings;
 import com.dalatcafe.security.LoginThrottle;
@@ -61,6 +62,7 @@ public class MainServer {
         this.serviceKey = auth.serviceKey();
         OrderEventSubject subject = new OrderEventSubject();
         subject.attach(new TableStatusSyncObserver(daos.getTableDao(), daos.getOrderDao()));
+        subject.attach(new ReservationOrderSyncObserver(daos.getReservationDao()));
         subject.attach(new KitchenNotificationObserver());
         PosCheckoutFacade facade = new PosCheckoutFacade(daos.getOrderDao(), daos.getMenuDao(), subject);
 
@@ -80,7 +82,7 @@ public class MainServer {
         reservations = new ReservationHandler(daos.getReservationDao(), daos.getTableDao(), daos.getOrderDao(), daos.getMenuDao());
         register("/api/reservations", reservations);
         register("/api/checkout", new CheckoutHandler(facade, daos.getCustomerDao(), daos.getTableDao(),
-                databaseHealthy));
+                daos.getOrderDao(), daos.getReservationDao(), databaseHealthy));
         server.setExecutor(Executors.newFixedThreadPool(8));
     }
 

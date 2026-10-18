@@ -1,0 +1,136 @@
+.list {
+  container-type: inline-size;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #e7e5e4;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 4%);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 20px;
+  border-bottom: 1px solid #f0eeeb;
+}
+
+.search {
+  position: relative;
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.search > svg {
+  position: absolute;
+  top: 13px;
+  left: 13px;
+  width: 16px;
+  height: 16px;
+  color: #78716c;
+  pointer-events: none;
+}
+
+.search input {
+  width: 100%;
+  height: 42px;
+  padding: 0 12px 0 38px;
+  border: 1px solid #e7e5e4;
+  border-radius: 10px;
+  background: #fafaf9;
+  font-size: 14px;
+}
+
+.search input::placeholder { color: #78716c; }
+.search input:focus-visible,
+.filter select:focus-visible,
+.statusSelect:focus-visible {
+  outline: 2px solid #5a3e2b;
+  outline-offset: 3px;
+}
+
+.toolbarActions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.filter { position: relative; }
+.filter > svg { position: absolute; top: 14px; left: 12px; width: 14px; height: 14px; color: #78716c; pointer-events: none; }
+.filter select { height: 42px; max-width: 100%; padding: 0 28px 0 34px; border: 1px solid #e7e5e4; border-radius: 10px; background: #fff; font-size: 13px; cursor: pointer; }
+.results { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 14px 20px; color: #78716c; font-size: 12px; }
+.results strong { color: #292524; font-weight: 600; }
+.results button { color: #5a3e2b; font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.notice { margin: 16px 20px 0; padding: 10px 12px; border: 1px solid #fde68a; border-radius: 10px; background: #fffbeb; color: #78350f; font-size: 13px; }
+
+.table { width: 100%; table-layout: fixed; text-align: left; font-size: 14px; }
+.table th { padding: 13px 20px; border-block: 1px solid #e7e5e4; background: #fafaf9; color: #78716c; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+.table th:nth-child(1) { width: 28%; }
+.table th:nth-child(2) { width: 15%; }
+.table th:nth-child(3) { width: 17%; }
+.table th:nth-child(4) { width: 18%; }
+.table th:nth-child(5) { width: 22%; text-align: right; }
+.table td { padding: 20px; vertical-align: top; }
+.table tbody tr + tr { border-top: 1px solid #f0eeeb; }
+.table tbody tr:hover { background: #fdfcfb; }
+
+.customer { display: flex; min-width: 0; flex-direction: column; align-items: flex-start; gap: 5px; }
+.code { color: #78716c; font-family: var(--font-mono, ui-monospace), monospace; font-size: 11px; overflow-wrap: anywhere; }
+.customerName { max-width: 100%; color: #1c1917; font-size: 15px; font-weight: 650; line-height: 1.5; overflow-wrap: anywhere; }
+.phone { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; color: #57534e; font-size: 13px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.phone:hover { color: #5a3e2b; text-decoration: underline; }
+.phone svg, .preOrders svg, .guests svg, .schedule svg { width: 14px; height: 14px; flex-shrink: 0; }
+.email { max-width: 100%; color: #78716c; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.preOrders { display: flex; align-items: center; gap: 5px; margin-top: 3px; color: #92400e; font-size: 12px; }
+.schedule { display: flex; flex-direction: column; gap: 7px; font-variant-numeric: tabular-nums; }
+.schedule strong { display: flex; align-items: center; gap: 6px; color: #292524; font-size: 16px; font-weight: 600; }
+.schedule > span { color: #78716c; font-size: 12px; }
+.tableAssignment { display: flex; flex-direction: column; gap: 10px; }
+.tableTags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.tableTag { display: inline-flex; flex-shrink: 0; align-items: center; padding: 4px 9px; border: 1px solid #e7e5e4; border-radius: 7px; background: #f7f5f0; color: #5a3e2b; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.guests { display: flex; align-items: center; gap: 6px; color: #78716c; font-size: 12px; }
+.statusSelect { width: 100%; max-width: 160px; height: 36px; padding: 0 8px; border: 1px solid; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.statusSelect:disabled { opacity: 1; cursor: default; }
+.statusPending { border-color: #fcd34d; background: #fffbeb; color: #92400e; }
+.statusConfirmed { border-color: #bfdbfe; background: #eff6ff; color: #1e40af; }
+.statusCompleted { border-color: #a7f3d0; background: #ecfdf5; color: #065f46; }
+.statusCancelled { border-color: #fecdd3; background: #fff1f2; color: #9f1239; }
+.statusHint { display: block; margin-top: 9px; color: #78716c; font-size: 11px; line-height: 1.6; }
+.actions { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.primaryActions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.cards { display: none; }
+.empty { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 56px 24px; text-align: center; }
+.empty > svg { width: 40px; height: 40px; padding: 9px; border-radius: 12px; background: #f7f5f0; color: #78716c; }
+.empty h3 { font-size: 15px; font-weight: 600; color: #292524; }
+.empty p { max-width: 320px; color: #78716c; font-size: 13px; line-height: 1.6; }
+.detailSummary { display: flex; flex-direction: column; gap: 14px; padding: 16px; border: 1px solid #e7e5e4; border-radius: 12px; background: #f9f7f4; }
+.detailSummary > div { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 12px; }
+.detailSummary > div > :last-child { min-width: 0; overflow-wrap: anywhere; }
+
+@container (max-width: 1000px) {
+  .table { display: none; }
+  .cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding: 0 20px 20px; }
+  .reservationCard { min-width: 0; padding: 18px; border: 1px solid #e7e5e4; border-radius: 12px; }
+  .cardHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .cardHeader .statusSelect { flex-shrink: 0; width: 142px; }
+  .cardDetails { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 20px; padding: 16px 0; border-block: 1px solid #f0eeeb; }
+  .cardDetails h3 { margin-bottom: 10px; color: #78716c; font-size: 11px; font-weight: 500; }
+  .cardFooter { margin-top: 12px; }
+  .cardFooter .actions { flex-direction: row; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
+}
+
+@container (max-width: 700px) {
+  .toolbar { padding: 16px; }
+  .search { flex-basis: 100%; }
+  .toolbarActions { width: 100%; }
+  .filter { flex: 1; }
+  .filter select { width: 100%; }
+  .results { padding: 12px 16px; }
+  .cards { grid-template-columns: minmax(0, 1fr); padding: 0 16px 16px; gap: 12px; }
+}
+
+@container (max-width: 400px) {
+  .toolbarActions { display: grid; grid-template-columns: 1fr 1fr; }
+  .filter { grid-column: 1 / -1; }
+  .toolbarActions > button { width: 100%; padding-inline: 10px; font-size: 12px; }
+  .reservationCard { padding: 14px; }
+  .cardHeader { flex-direction: column; }
+  .cardHeader .statusSelect { max-width: 100%; width: auto; min-width: 142px; }
+}

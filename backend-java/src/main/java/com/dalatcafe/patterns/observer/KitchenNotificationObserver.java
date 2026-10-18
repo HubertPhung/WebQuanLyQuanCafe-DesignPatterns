@@ -27,4 +27,10 @@ public class KitchenNotificationObserver implements IOrderObserver {
         Objects.requireNonNull(order, "Order must not be null");
         notificationSink.accept("Order " + order.getOrderCode() + " completed; remove it from KDS");
     }
+
+    @Override
+    public void onOrderCancelled(Order order) {
+        Objects.requireNonNull(order, "Order must not be null");
+        notificationSink.accept("Order " + order.getOrderCode() + " cancelled; remove it from KDS");
+    }
 }

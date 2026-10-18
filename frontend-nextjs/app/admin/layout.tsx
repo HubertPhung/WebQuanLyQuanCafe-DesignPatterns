@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from 'next'
 import { AdminHeader } from '@/components/admin/admin-header'
 import { AdminSidebar } from '@/components/admin/admin-sidebar'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
-import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { requirePageRole } from '@/lib/auth/session'
 import { getHeaderData } from '@/lib/admin/queries'
@@ -44,7 +43,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <main className="flex flex-1 flex-col gap-6 md:gap-8 p-4 md:p-6 lg:p-8 w-full max-w-[1560px] mx-auto">{children}</main>
           </SidebarInset>
         </SidebarProvider>
-        <Toaster position="bottom-right" richColors />
       </TooltipProvider>
   )
 }

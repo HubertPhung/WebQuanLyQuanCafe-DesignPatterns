@@ -10,12 +10,20 @@ import java.util.function.Consumer;
  * (KDS). Both default to no-ops so each observer reacts only to the events it cares about.
  */
 public interface IOrderObserver {
+    /** An unpaid order was opened; its table is already in use. */
+    default void onOrderOpened(Order order) {
+    }
+
     /** The order was paid and saved; it now waits for the barista. */
     default void onOrderPaid(Order order) {
     }
 
     /** The kitchen finished the order and it left the KDS board. */
     default void onOrderCompleted(Order order) {
+    }
+
+    /** The order was cancelled and must leave the kitchen queue. */
+    default void onOrderCancelled(Order order) {
     }
 
     /** Observer that only reacts to {@link #onOrderPaid(Order)}. */

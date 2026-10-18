@@ -65,6 +65,7 @@ public class SimpleAuthFilter extends Filter {
 
     @Override
     public void doFilter(HttpExchange exchange, Chain chain) throws IOException {
+        exchange = new RequestScopedExchange(exchange);
         String method = exchange.getRequestMethod().toUpperCase(Locale.ROOT);
         String path = exchange.getRequestURI().getPath();
         // HttpServer picks a context by plain prefix, so "/api/usersX" reaches the "/api/users"
@@ -77,9 +78,7 @@ public class SimpleAuthFilter extends Filter {
 
         Identity identity = identify(exchange, isServiceRoute(method, path)
                 || isServiceLookup(method, path, exchange.getRequestURI().getRawQuery()));
-        if (identity.user() != null) {
-            exchange.setAttribute(USER_ATTRIBUTE, identity.user());
-        }
+        exchange.setAttribute(USER_ATTRIBUTE, identity.user());
         exchange.setAttribute(STOREFRONT_SERVICE_ATTRIBUTE, identity.user() != null
                 && identity.user().getId() == null && "storefront@service.local".equals(identity.user().getEmail()));
         if (access == Access.PUBLIC) {
@@ -176,6 +175,7 @@ public class SimpleAuthFilter extends Filter {
         if (method.equals("OPTIONS")) {
             return Access.PUBLIC;
         }
+        if (p.equals("/api/reservations/mine")) return Access.SIGNED_IN;
         if (p.equals("/api/tables/catalog") && method.equals("GET")
                 || p.equals("/api/menu") && method.equals("GET")
                 || p.equals("/api/reservations") && method.equals("POST")
@@ -194,7 +194,10 @@ public class SimpleAuthFilter extends Filter {
         if (p.equals("/api/config") && !method.equals("GET")) {
             return Access.ADMIN;
         }
-        if (p.equals("/api/menu") && method.equals("POST") || p.startsWith("/api/analytics")) {
+        // Creating, editing and removing menu items; switching one on or off stays with STAFF.
+        if (p.equals("/api/menu") && method.equals("POST")
+                || p.matches("/api/menu/[0-9]+") && (method.equals("PUT") || method.equals("PATCH") || method.equals("DELETE"))
+                || p.startsWith("/api/analytics")) {
             return Access.MANAGER;
         }
         if (p.equals("/api/tables") && method.equals("POST")

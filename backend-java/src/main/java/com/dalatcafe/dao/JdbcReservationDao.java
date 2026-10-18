@@ -21,7 +21,7 @@ public class JdbcReservationDao implements IReservationDao {
     @Override
     public List<Reservation> findAll() {
         List<Reservation> list = new ArrayList<>();
-        String sql = "SELECT id, reservation_code, customer, contact, email, date_time, table_name, table_id, guests, status, note, created_at, pre_orders, table_ids, branch FROM reservations ORDER BY date_time ASC";
+        String sql = "SELECT id, reservation_code, customer, contact, email, date_time, table_name, table_id, guests, status, note, created_at, pre_orders, table_ids, branch, user_id FROM reservations ORDER BY date_time ASC";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
@@ -30,13 +30,14 @@ public class JdbcReservationDao implements IReservationDao {
             }
         } catch (SQLException e) {
             LOGGER.log(Level.SEVERE, "Error findAll reservations via JDBC: " + e.getMessage(), e);
+            throw new IllegalStateException("Không đọc được lịch đặt bàn; chưa thể xác nhận bàn trống.", e);
         }
         return list;
     }
 
     @Override
     public Optional<Reservation> findById(int id) {
-        String sql = "SELECT id, reservation_code, customer, contact, email, date_time, table_name, table_id, guests, status, note, created_at, pre_orders, table_ids, branch FROM reservations WHERE id = ?";
+        String sql = "SELECT id, reservation_code, customer, contact, email, date_time, table_name, table_id, guests, status, note, created_at, pre_orders, table_ids, branch, user_id FROM reservations WHERE id = ?";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, id);
@@ -54,7 +55,7 @@ public class JdbcReservationDao implements IReservationDao {
     @Override
     public Optional<Reservation> findByReservationCode(String code) {
         if (code == null) return Optional.empty();
-        String sql = "SELECT id, reservation_code, customer, contact, email, date_time, table_name, table_id, guests, status, note, created_at, pre_orders, table_ids, branch FROM reservations WHERE LOWER(reservation_code) = LOWER(?)";
+        String sql = "SELECT id, reservation_code, customer, contact, email, date_time, table_name, table_id, guests, status, note, created_at, pre_orders, table_ids, branch, user_id FROM reservations WHERE LOWER(reservation_code) = LOWER(?)";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, code);
@@ -73,7 +74,7 @@ public class JdbcReservationDao implements IReservationDao {
     public List<Reservation> findByStatus(ReservationStatus status) {
         List<Reservation> list = new ArrayList<>();
         if (status == null) return list;
-        String sql = "SELECT id, reservation_code, customer, contact, email, date_time, table_name, table_id, guests, status, note, created_at, pre_orders, table_ids, branch FROM reservations WHERE UPPER(status) = ? ORDER BY date_time ASC";
+        String sql = "SELECT id, reservation_code, customer, contact, email, date_time, table_name, table_id, guests, status, note, created_at, pre_orders, table_ids, branch, user_id FROM reservations WHERE UPPER(status) = ? ORDER BY date_time ASC";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, status.name());
@@ -89,12 +90,31 @@ public class JdbcReservationDao implements IReservationDao {
     }
 
     @Override
+    public List<Reservation> findForAccount(int userId, String email) {
+        String sql = "SELECT * FROM reservations WHERE user_id = ? OR (user_id IS NULL AND ? <> '' "
+                + "AND LOWER(BTRIM(email)) = ?) ORDER BY date_time DESC LIMIT 50";
+        String normalizedEmail = email == null ? "" : email.trim().toLowerCase(java.util.Locale.ROOT);
+        try (Connection conn = JdbcDatabase.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, userId);
+            ps.setString(2, normalizedEmail);
+            ps.setString(3, normalizedEmail);
+            try (ResultSet rs = ps.executeQuery()) {
+                List<Reservation> result = new ArrayList<>();
+                while (rs.next()) result.add(mapResultSetToReservation(rs));
+                return result;
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("Could not load reservation history", e);
+        }
+    }
+
+    @Override
     public boolean save(Reservation res) {
         if (res == null) return false;
         if (res.getId() != null && res.getId() > 0) {
             String sql = """
-                INSERT INTO reservations (id, reservation_code, customer, contact, email, date_time, table_name, table_id, guests, status, note, created_at, pre_orders, table_ids, branch)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB), CAST(? AS JSONB), ?)
+                INSERT INTO reservations (id, reservation_code, customer, contact, email, date_time, table_name, table_id, guests, status, note, created_at, pre_orders, table_ids, branch, user_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB), CAST(? AS JSONB), ?, ?)
                 ON CONFLICT (id) DO UPDATE SET
                     reservation_code = EXCLUDED.reservation_code,
                     customer = EXCLUDED.customer,
@@ -106,7 +126,7 @@ public class JdbcReservationDao implements IReservationDao {
                     guests = EXCLUDED.guests,
                     status = EXCLUDED.status,
                     note = EXCLUDED.note,
-                    pre_orders = EXCLUDED.pre_orders, table_ids = EXCLUDED.table_ids, branch = EXCLUDED.branch
+                    pre_orders = EXCLUDED.pre_orders, table_ids = EXCLUDED.table_ids, branch = EXCLUDED.branch, user_id = EXCLUDED.user_id
             """;
             try (Connection conn = JdbcDatabase.getConnection();
                  PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -118,8 +138,8 @@ public class JdbcReservationDao implements IReservationDao {
             }
         } else {
             String sql = """
-                INSERT INTO reservations (reservation_code, customer, contact, email, date_time, table_name, table_id, guests, status, note, created_at, pre_orders, table_ids, branch)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB), CAST(? AS JSONB), ?)
+                INSERT INTO reservations (reservation_code, customer, contact, email, date_time, table_name, table_id, guests, status, note, created_at, pre_orders, table_ids, branch, user_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB), CAST(? AS JSONB), ?, ?)
             """;
             try (Connection conn = JdbcDatabase.getConnection();
                  PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
@@ -144,6 +164,7 @@ public class JdbcReservationDao implements IReservationDao {
                 ps.setString(12, JsonColumns.fromItems(res.getPreOrders()));
                 ps.setString(13, JsonColumns.fromIds(res.getTableIds()));
                 ps.setString(14, res.getBranch());
+                ps.setObject(15, res.getUserId(), Types.INTEGER);
 
                 int rows = ps.executeUpdate();
                 if (rows > 0) {
@@ -191,6 +212,7 @@ public class JdbcReservationDao implements IReservationDao {
         ps.setString(13, JsonColumns.fromItems(res.getPreOrders()));
         ps.setString(14, JsonColumns.fromIds(res.getTableIds()));
         ps.setString(15, res.getBranch());
+        ps.setObject(16, res.getUserId(), Types.INTEGER);
     }
 
     @Override
@@ -229,6 +251,7 @@ public class JdbcReservationDao implements IReservationDao {
         res.setCustomer(rs.getString("customer"));
         res.setContact(rs.getString("contact"));
         res.setEmail(rs.getString("email"));
+        res.setUserId((Integer) rs.getObject("user_id"));
 
         Timestamp dt = rs.getTimestamp("date_time");
         if (dt != null) {

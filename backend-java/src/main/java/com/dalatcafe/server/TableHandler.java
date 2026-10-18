@@ -5,9 +5,16 @@ import com.dalatcafe.dao.IOrderDao;
 import com.dalatcafe.dao.IReservationDao;
 import com.dalatcafe.model.Table;
 import com.dalatcafe.model.TableStatus;
+import com.dalatcafe.model.ReservationStatus;
+import com.dalatcafe.patterns.chain.TableAvailabilityValidator;
+import com.dalatcafe.patterns.singleton.SystemConfigManager;
 import com.sun.net.httpserver.HttpExchange;
 
 import java.io.IOException;
+import java.time.Instant;
+import java.time.DateTimeException;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -38,12 +45,15 @@ public class TableHandler extends ApiHandler {
         String method = exchange.getRequestMethod().toUpperCase(Locale.ROOT);
         List<String> parts = segments(exchange);
         if (parts.size() == 3 && parts.get(2).equals("catalog") && method.equals("GET")) {
+            String requestedTime = queryParam(exchange, "dateTime");
+            Set<Integer> bookedTables = requestedTime == null ? Set.of() : bookedTablesAt(requestedTime);
             List<Object> data = new ArrayList<>();
             for (Table table : tablesOf(branchFilter(exchange))) {
                 Map<String, Object> item = new LinkedHashMap<>();
                 item.put("id", table.getId()); item.put("name", table.getName());
                 item.put("seats", table.getSeats()); item.put("zone", table.getZone());
                 item.put("branch", table.getBranch());
+                if (requestedTime != null) item.put("available", !bookedTables.contains(table.getId()));
                 data.add(item);
             }
             sendOk(exchange, 200, data, null);
@@ -80,8 +90,15 @@ public class TableHandler extends ApiHandler {
 
         if (parts.size() == 2 && method.equals("GET")) {
             List<Object> data = new ArrayList<>();
+            var orders = orderDao == null ? List.<com.dalatcafe.model.Order>of() : orderDao.findAll();
+            var reservations = reservationDao == null ? List.<com.dalatcafe.model.Reservation>of() : reservationDao.findAll();
+            Instant now = Instant.now();
             for (Table table : tablesOf(branchFilter(exchange))) {
-                data.add(toJson(table));
+                Map<String, Object> item = toJson(table);
+                TableStatus status = TableUsage.status(table, orders, reservations, now);
+                item.put("status", status == null ? null : status.name().toLowerCase(Locale.ROOT));
+                if (status == TableStatus.OCCUPIED) item.put("guestCount", Math.max(1, table.getGuestCount()));
+                data.add(item);
             }
             sendOk(exchange, 200, data, null);
             return;
@@ -99,6 +116,30 @@ public class TableHandler extends ApiHandler {
 
     private List<Table> tablesOf(String branch) {
         return tableDao.findAll().stream().filter(t -> branch == null || branch.equals(t.getBranch())).toList();
+    }
+
+    private Set<Integer> bookedTablesAt(String requestedTime) {
+        Instant slot;
+        try {
+            slot = Instant.parse(requestedTime);
+            slot.plus(TableAvailabilityValidator.DEFAULT_DURATION);
+        } catch (DateTimeException | ArithmeticException e) {
+            throw ApiException.badRequest("Thời gian đặt bàn không hợp lệ.");
+        }
+        if (reservationDao == null) throw new ApiException(503, "DATABASE_UNAVAILABLE", "Chưa kiểm tra được lịch đặt bàn.");
+        Set<Integer> booked = new HashSet<>();
+        Instant now = Instant.now();
+        int grace = SystemConfigManager.getInstance().getAutoCancelMinutes();
+        for (var reservation : reservationDao.findAll()) {
+            if (reservation.getStatus() == ReservationStatus.CANCELLED) continue;
+            if (reservation.getId() != null && reservation.isNoShowAt(now, grace)) continue;
+            // Incomplete persisted schedules must never advertise their tables as available.
+            if (reservation.getDateTime() == null || reservation.getStatus() == null
+                    || TableAvailabilityValidator.slotsOverlap(slot, reservation.getDateTime(), TableAvailabilityValidator.DEFAULT_DURATION)) {
+                booked.addAll(reservation.getTableIds());
+            }
+        }
+        return booked;
     }
 
     private void saveDetails(HttpExchange exchange, Integer id) throws IOException {

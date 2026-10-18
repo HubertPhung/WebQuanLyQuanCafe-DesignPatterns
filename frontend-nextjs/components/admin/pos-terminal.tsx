@@ -33,6 +33,7 @@ type Line = {
   key: string
   menuItemId: number
   name: string
+  imageUrl?: string | null
   variation?: string
   basePrice: number
   customizations: PosCustomization[]
@@ -78,13 +79,22 @@ export function PosTerminal({
   const categories = ['Tất cả', ...new Set(sellable.map((item) => item.category))]
   const [category, setCategory] = useState('Tất cả')
   const [lines, setLines] = useState<Line[]>([
-    { key: lineKey(1, []), menuItemId: 1, name: 'Cà phê Muối Đặc Biệt', basePrice: 45000, customizations: [], qty: 1, note: 'Ít đá, béo nhiều' },
+    {
+      key: lineKey(1, []),
+      menuItemId: 1,
+      name: 'Cà phê Muối Đặc Biệt',
+      imageUrl: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=800&q=80',
+      basePrice: 45000,
+      customizations: [],
+      qty: 1,
+      note: 'Ít đá, béo nhiều',
+    },
   ])
   const [customerPhone, setCustomerPhone] = useState('')
   const [memberState, setMemberState] = useState<MemberState>({ kind: 'idle' })
   const [usePoints, setUsePoints] = useState(false)
   const [orderType, setOrderType] = useState<OrderType>('dine-in')
-  const [tableId, setTableId] = useState<string>('4')
+  const [tableId, setTableId] = useState<string>('')
   const [payment, setPayment] = useState<PaymentMethod>('cash')
   const [tendered, setTendered] = useState('')
   const [pending, startTransition] = useTransition()
@@ -105,13 +115,15 @@ export function PosTerminal({
   // The cash field is optional; once filled in, a paid cash sale must be covered.
   const countsCash = payment === 'cash' && tendered !== ''
   const cashShort = countsCash && change < 0
+  const selectedTable = tables.find(table => String(table.id) === tableId)
+  const tableUnavailable = Boolean(tableId) && (!selectedTable || selectedTable.status !== 'available')
 
   function addLine(item: MenuItem) {
     const key = lineKey(item.id, [])
     setLines((current) => {
       const existing = current.find((line) => line.key === key)
       if (existing) return current.map((line) => (line.key === key ? { ...line, qty: line.qty + 1 } : line))
-      return [...current, { key, menuItemId: item.id, name: item.name, basePrice: item.sellPrice, customizations: [], qty: 1 }]
+      return [...current, { key, menuItemId: item.id, name: item.name, imageUrl: item.imageUrl, basePrice: item.sellPrice, customizations: [], qty: 1 }]
     })
   }
 
@@ -172,6 +184,7 @@ export function PosTerminal({
   }
 
   function submit(paid: boolean) {
+    if (tableUnavailable) { toast.error('Bàn này không còn trống. Vui lòng chọn bàn khác.'); return }
     startTransition(async () => {
       const result = await createOrder({
         lines: lines.map((l) => ({ menuItemId: l.menuItemId, qty: l.qty, variation: l.variation, customizations: l.customizations })),
@@ -201,15 +214,6 @@ export function PosTerminal({
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 font-sans text-stone-900">
-      {/* Test runner keyword invariants */}
-      <div className="sr-only">
-        <span>Point of sale</span>
-        <span>Kitchen display</span>
-        <span>Open tab</span>
-        <span>Cash</span>
-        <span>Card</span>
-      </div>
-
       {/* CỘT TRÁI: DANH MỤC & MÓN (7 cols) */}
       <div className="xl:col-span-7 space-y-4">
         {/* Category Pills */}
@@ -231,28 +235,47 @@ export function PosTerminal({
           ))}
         </div>
 
-        {/* Big Touch Item Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        {/* Big Touch Item Cards with Images */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5">
           {visible.map((item) => (
             <button
               key={item.id}
               type="button"
               onClick={() => addLine(item)}
-              className="flex flex-col justify-between p-4 rounded-xl border border-stone-200/90 bg-white hover:border-[#5A3E2B]/60 hover:bg-stone-50/50 transition-all text-left min-h-[120px] group cursor-pointer shadow-[0_2px_8px_rgba(0,0,0,0.04)] active:scale-98"
+              className="group flex flex-col overflow-hidden rounded-2xl border border-stone-200/90 bg-white hover:border-[#5A3E2B]/70 hover:shadow-md transition-all text-left cursor-pointer active:scale-98 shadow-2xs"
             >
-              <div>
-                <span className="font-bold text-sm text-stone-900 group-hover:text-[#5A3E2B] leading-snug line-clamp-2">
+              {/* Product Thumbnail */}
+              <div className="relative h-28 sm:h-32 w-full overflow-hidden bg-stone-100 shrink-0">
+                {item.imageUrl ? (
+                  <img
+                    src={item.imageUrl}
+                    alt={item.name}
+                    loading="lazy"
+                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-stone-100 to-amber-50/60 text-stone-400">
+                    <Coffee className="size-8 opacity-40 text-[#5A3E2B]" />
+                  </div>
+                )}
+                <span className="absolute top-2 left-2 rounded-md bg-white/90 backdrop-blur-xs px-2 py-0.5 text-[10px] font-bold text-stone-700 shadow-2xs">
+                  {item.category}
+                </span>
+              </div>
+
+              {/* Product Details */}
+              <div className="p-3 flex flex-1 flex-col justify-between gap-2">
+                <span className="font-bold text-xs sm:text-sm text-stone-900 group-hover:text-[#5A3E2B] leading-snug line-clamp-2">
                   {item.name}
                 </span>
-                <span className="text-[11px] text-stone-500 block mt-0.5">{item.category}</span>
-              </div>
-              <div className="mt-3 flex items-center justify-between">
-                <strong className="text-base font-extrabold text-[#5A3E2B] tabular-nums">
-                  {item.sellPrice.toLocaleString('vi-VN')} đ
-                </strong>
-                <span className="size-7 rounded-md bg-stone-100 group-hover:bg-[#5A3E2B] group-hover:text-white text-stone-700 flex items-center justify-center transition-colors">
-                  <Plus className="size-4" />
-                </span>
+                <div className="flex items-center justify-between pt-1 border-t border-stone-100">
+                  <strong className="text-xs sm:text-sm font-extrabold text-[#5A3E2B] tabular-nums">
+                    {item.sellPrice.toLocaleString('vi-VN')} đ
+                  </strong>
+                  <span className="size-6 sm:size-7 rounded-lg bg-amber-50 text-[#5A3E2B] group-hover:bg-[#5A3E2B] group-hover:text-white flex items-center justify-center transition-colors shadow-2xs">
+                    <Plus className="size-3.5 sm:size-4 stroke-[2.5]" />
+                  </span>
+                </div>
               </div>
             </button>
           ))}
@@ -278,17 +301,19 @@ export function PosTerminal({
           <div>
             <label className="block text-stone-600 font-semibold mb-1">Bàn phục vụ</label>
             <select
+              aria-label="Bàn phục vụ"
               value={tableId}
               onChange={(e) => setTableId(e.target.value)}
               className="w-full h-10 rounded-lg border border-stone-200 bg-white px-3 text-stone-800 focus:outline-none focus:border-[#5A3E2B] cursor-pointer truncate"
             >
               <option value="">Mang về (Không bàn)</option>
               {tables.map((t) => (
-                <option key={t.id} value={String(t.id)}>
+                <option key={t.id} value={String(t.id)} disabled={t.status !== 'available'}>
                   {t.name.replace('Table', 'Bàn')} ({t.seats} chỗ - {tableStatusLabels[t.status]})
                 </option>
               ))}
             </select>
+            {tableUnavailable && <p className="mt-1 text-rose-700" role="alert">Bàn này không còn trống. Vui lòng chọn bàn khác.</p>}
           </div>
 
           <div>
@@ -351,12 +376,21 @@ export function PosTerminal({
           ) : (
             lines.map((line) => (
               <div key={line.key} className="py-3 space-y-1.5">
-                <div className="flex items-start justify-between text-xs">
-                  <div className="flex-1 min-w-0 pr-2">
-                    <strong className="text-stone-900 font-bold block truncate">{line.name}</strong>
-                    <span className="text-[#5A3E2B] font-mono tabular-nums font-bold">
-                      {(unitPrice(line) * line.qty).toLocaleString('vi-VN')} đ
-                    </span>
+                <div className="flex items-center justify-between text-xs gap-2">
+                  <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                    {line.imageUrl ? (
+                      <img src={line.imageUrl} alt="" className="size-9 rounded-lg object-cover shrink-0 border border-stone-200" />
+                    ) : (
+                      <div className="size-9 rounded-lg bg-amber-50 flex items-center justify-center shrink-0 border border-stone-200 text-[#5A3E2B]">
+                        <Coffee className="size-4 opacity-50" />
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <strong className="text-stone-900 font-bold block truncate">{line.name}</strong>
+                      <span className="text-[#5A3E2B] font-mono tabular-nums font-bold">
+                        {(unitPrice(line) * line.qty).toLocaleString('vi-VN')} đ
+                      </span>
+                    </div>
                   </div>
                   {/* Quantity controls */}
                   <div className="flex items-center gap-1.5 bg-stone-100 border border-stone-200 rounded-lg p-0.5">
@@ -492,7 +526,7 @@ export function PosTerminal({
         <div className="grid grid-cols-2 gap-2.5 pt-2">
           <Button
             type="button"
-            disabled={!lines.length || pending}
+            disabled={!lines.length || pending || tableUnavailable}
             onClick={() => submit(false)}
             variant="outline"
             className="h-11 rounded-lg border-stone-200 bg-white hover:bg-stone-50 text-stone-800 font-bold text-xs gap-2 shadow-xs"
@@ -503,7 +537,7 @@ export function PosTerminal({
 
           <Button
             type="button"
-            disabled={!lines.length || pending || cashShort}
+            disabled={!lines.length || pending || cashShort || tableUnavailable}
             onClick={() => submit(true)}
             className="h-11 rounded-lg bg-[#5A3E2B] hover:bg-[#684732] text-white font-extrabold text-xs gap-2 shadow-sm"
           >

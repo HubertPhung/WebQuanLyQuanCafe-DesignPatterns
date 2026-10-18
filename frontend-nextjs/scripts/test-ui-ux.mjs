@@ -340,10 +340,10 @@ async function runAdminUITests() {
   console.log('\n--- 3. TESTING ADMIN OPERATIONS UI/UX ---')
 
   const adminRoutes = [
-    { id: 'TC-ADM-01', path: '/admin', title: 'Admin Overview Dashboard', keywords: ['Good morning', 'Total revenue today', 'Active tables', 'Live order stream'] },
-    { id: 'TC-ADM-02', path: '/admin/pos', title: 'Point of Sale (POS) Terminal', keywords: ['Point of sale', 'Kitchen display', 'Open tab', 'Cash', 'Card'] },
-    { id: 'TC-ADM-03', path: '/admin/pos?tab=kitchen', title: 'Kitchen Display System (KDS)', keywords: ['Kitchen display', 'Pending', 'Brewing', 'Ready'] },
-    { id: 'TC-ADM-04', path: '/admin/tables', title: 'Floor Plan Table Management', keywords: ['Floor plan', 'Main Floor', 'Patio', 'Coffee Bar', 'Table 1'] },
+    { id: 'TC-ADM-01', path: '/admin', title: 'Admin Overview Dashboard', keywords: ['Tổng quan', 'Hàng đợi pha chế', 'Sơ đồ bàn'] },
+    { id: 'TC-ADM-02', path: '/admin/pos', title: 'Point of Sale (POS) Terminal', keywords: ['Quầy bán hàng', 'Màn hình pha chế', 'Tiền mặt', 'Thẻ'] },
+    { id: 'TC-ADM-03', path: '/admin/pos?tab=kitchen', title: 'Kitchen Display System (KDS)', keywords: ['Màn hình pha chế', 'Chờ pha chế', 'Đang thực hiện', 'Sẵn sàng phục vụ'] },
+    { id: 'TC-ADM-04', path: '/admin/tables', title: 'Floor Plan Table Management', keywords: ['Floor plan', 'Main Floor', 'Patio', 'Coffee Bar', 'Bàn 1'] },
     { id: 'TC-ADM-06', path: '/admin/customers', title: 'Customer CRM & Loyalty Spend', keywords: ['Customers', 'Orders', 'Total spent', 'Last visit'] },
     { id: 'TC-ADM-07', path: '/admin/analytics', title: 'Operations Analytics & Mix Charts', keywords: ['Analytics', 'Revenue', 'Drinks', 'Payment'] },
     { id: 'TC-ADM-08', path: '/admin/settings', title: 'Branch Operations Settings', keywords: ['Branch configuration', 'Sales tax', 'Accepted payments'] },
@@ -598,6 +598,46 @@ async function runAdminMutationTests() {
       recordTest('TC-ACT-12', 'Orders and Bookings Belong to One Branch', 'Admin Actions', 'PASS', `${mixed.error} / ${wrongBranch.error}`)
     } else {
       recordTest('TC-ACT-12', 'Orders and Bookings Belong to One Branch', 'Admin Actions', 'FAIL', JSON.stringify({ tables: secondTables.length, dineIn: branchOf('Branch Dine-in'), pickup: branchOf('Branch Pickup'), mixed, wrongBranch, joined, joinedBranch }))
+    }
+
+    // TC-ACT-13: A menu item can be edited and removed; a name another item uses is refused
+    const { updateMockMenuItem, deleteMockMenuItem, updateMockReservation } = await import('../lib/db/mock-store.ts')
+    const editable = createMockMenuItem({
+      name: 'Edit Me Latte', category: 'Specialty', kind: 'menu', unit: 'ly',
+      costPrice: 10000, sellPrice: 40000, recipe: '', imageUrl: '', variations: [],
+    })
+    const renamed = updateMockMenuItem(editable.id, {
+      name: 'Edited Latte', category: 'Cà phê', kind: 'menu', unit: 'ly',
+      costPrice: 12000, sellPrice: 125000, recipe: 'Espresso, sữa', imageUrl: '', variations: [{ name: 'Ít đá', price: 0 }],
+    })
+    const edited = getMockMenuItems().find(m => m.id === editable.id)
+    const takenName = getMockMenuItems().find(m => m.id !== editable.id).name
+    const clash = updateMockMenuItem(editable.id, { ...edited, name: takenName.toUpperCase(), recipe: '', imageUrl: '' })
+    const removed = deleteMockMenuItem(editable.id)
+    const gone = !getMockMenuItems().some(m => m.id === editable.id)
+    if (renamed.ok && edited?.name === 'Edited Latte' && edited.sellPrice === 125000 && edited.variations.length === 1
+      && !clash.ok && removed.ok && gone && !deleteMockMenuItem(editable.id).ok) {
+      recordTest('TC-ACT-13', 'Edit and Delete a Menu Item', 'Admin Actions', 'PASS', `Duplicate name refused: ${clash.error}`)
+    } else {
+      recordTest('TC-ACT-13', 'Edit and Delete a Menu Item', 'Admin Actions', 'FAIL', JSON.stringify({ renamed, edited, clash, removed, gone }))
+    }
+
+    // TC-ACT-14: A booking can be edited (time, guests, tables) without clashing with itself;
+    // a move onto a booked table or a cancelled booking is refused and changes nothing
+    const freeTables = getMockTables().filter(t => t.branch === 'phan-dinh-phung' && t.seats >= 4)
+    const base = { customer: 'Edit Booking', contact: '0900000030', email: null, note: null, guests: 2 }
+    const own = createMockReservation({ ...base, dateTime: at(4), tableId: freeTables[0].id })
+    const other = createMockReservation({ ...base, customer: 'Other Booking', dateTime: at(4), tableId: freeTables[1].id })
+    const moved = updateMockReservation(own.code, { ...base, customer: 'Edited Booking', dateTime: at(4, 30), guests: 4, tableId: freeTables[0].id })
+    const ontoOther = updateMockReservation(own.code, { ...base, dateTime: at(4), tableId: freeTables[1].id })
+    const afterRefusal = getMockReservations().find(r => r.code === own.code)
+    updateMockReservationStatus(other.code, 'Đã hủy')
+    const cancelledEdit = updateMockReservation(other.code, { ...base, dateTime: at(5), tableId: freeTables[1].id })
+    if (own.ok && other.ok && moved.ok && !ontoOther.ok && afterRefusal?.customer === 'Edited Booking'
+      && afterRefusal.guests === 4 && afterRefusal.tableId === freeTables[0].id && !cancelledEdit.ok) {
+      recordTest('TC-ACT-14', 'Edit a Reservation Through the Same Chain Rules', 'Admin Actions', 'PASS', ontoOther.error)
+    } else {
+      recordTest('TC-ACT-14', 'Edit a Reservation Through the Same Chain Rules', 'Admin Actions', 'FAIL', JSON.stringify({ own, other, moved, ontoOther, afterRefusal, cancelledEdit }))
     }
 
   } catch (err) {

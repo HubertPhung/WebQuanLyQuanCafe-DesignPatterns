@@ -320,6 +320,7 @@ public class JdbcDatabase {
             ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS variations JSONB NOT NULL DEFAULT '[]'::jsonb;
             ALTER TABLE orders ADD COLUMN IF NOT EXISTS items JSONB NOT NULL DEFAULT '[]'::jsonb;
             ALTER TABLE reservations ADD COLUMN IF NOT EXISTS pre_orders JSONB NOT NULL DEFAULT '[]'::jsonb;
+            ALTER TABLE reservations ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id);
             -- Branch of each table, order and booking; rows from before branches belong to the first one.
             ALTER TABLE tables ADD COLUMN IF NOT EXISTS branch VARCHAR(40) NOT NULL DEFAULT 'phan-dinh-phung';
             ALTER TABLE orders ADD COLUMN IF NOT EXISTS branch VARCHAR(40) NOT NULL DEFAULT 'phan-dinh-phung';
@@ -341,6 +342,8 @@ public class JdbcDatabase {
             CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
             CREATE INDEX IF NOT EXISTS idx_reservations_table_id ON reservations(table_id);
             CREATE INDEX IF NOT EXISTS idx_reservations_date_time ON reservations(date_time);
+            CREATE INDEX IF NOT EXISTS idx_reservations_user_date ON reservations(user_id, date_time DESC);
+            CREATE INDEX IF NOT EXISTS idx_reservations_guest_email ON reservations(LOWER(BTRIM(email)), date_time DESC) WHERE user_id IS NULL;
             CREATE INDEX IF NOT EXISTS idx_tables_branch ON tables(branch);
             CREATE INDEX IF NOT EXISTS idx_orders_branch ON orders(branch);
             CREATE INDEX IF NOT EXISTS idx_reservations_branch ON reservations(branch);

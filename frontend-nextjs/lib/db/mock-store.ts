@@ -1,5 +1,6 @@
 import type { FloorTable, MenuItem, Order, OrderStatus, TableStatus, Variation, OrderItem, PaymentMethod, OrderType } from './schema'
 import { shippingFee } from '../storefront/delivery'
+import { orderTransitionError } from '../orders/lifecycle'
 import { DEFAULT_BRANCH_ID, type BranchId } from '../branches'
 import { customizationSurcharge, describeCustomizations, type PosCustomization } from '../admin/customizations'
 import {
@@ -7,6 +8,7 @@ import {
   DEFAULT_MAX_RESERVATION_GUESTS,
   DEFAULT_OPENING_TIME,
   hasReservationTimePassed,
+  hasReservationStarted,
   isWithinDefaultOperatingHours,
   reservationSlotsOverlap,
 } from '../reservation-rules'
@@ -24,29 +26,40 @@ function startOfDay(offsetDays = 0) {
 function createInitialTables(): FloorTable[] {
   const now = new Date()
   const firstBranch: Omit<FloorTable, 'branch'>[] = [
-    { id: 1, name: 'Table 1', seats: 2, zone: 'Main Floor', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: now },
-    { id: 2, name: 'Table 2', seats: 4, zone: 'Main Floor', status: 'occupied', guestCount: 3, occupiedSince: new Date(Date.now() - 25 * 60000), updatedAt: now },
-    { id: 3, name: 'Table 3', seats: 4, zone: 'Main Floor', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: now },
-    { id: 4, name: 'Table 4', seats: 2, zone: 'Main Floor', status: 'reserved', guestCount: 2, occupiedSince: null, updatedAt: now },
-    { id: 5, name: 'Table 5', seats: 6, zone: 'Main Floor', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: now },
-    { id: 6, name: 'Table 6', seats: 4, zone: 'Main Floor', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: now },
-    { id: 7, name: 'Table 7', seats: 4, zone: 'Patio', status: 'occupied', guestCount: 4, occupiedSince: new Date(Date.now() - 40 * 60000), updatedAt: now },
-    { id: 8, name: 'Table 8', seats: 2, zone: 'Patio', status: 'cleaning', guestCount: 0, occupiedSince: null, updatedAt: now },
-    { id: 9, name: 'Table 9', seats: 4, zone: 'Patio', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: now },
-    { id: 10, name: 'Table 10', seats: 2, zone: 'Patio', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: now },
-    { id: 11, name: 'Table 11', seats: 2, zone: 'Patio', status: 'reserved', guestCount: 2, occupiedSince: null, updatedAt: now },
-    { id: 12, name: 'Table 12', seats: 1, zone: 'Coffee Bar', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: now },
-    { id: 13, name: 'Table 13', seats: 1, zone: 'Coffee Bar', status: 'occupied', guestCount: 1, occupiedSince: new Date(Date.now() - 10 * 60000), updatedAt: now },
-    { id: 14, name: 'Table 14', seats: 1, zone: 'Coffee Bar', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: now },
-    { id: 15, name: 'Table 15', seats: 1, zone: 'Coffee Bar', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: now },
+    { id: 1, name: 'Table 1', seats: 2, zone: 'Main Floor', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: now, imageUrl: 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=800&q=80' },
+    { id: 2, name: 'Table 2', seats: 4, zone: 'Main Floor', status: 'occupied', guestCount: 3, occupiedSince: new Date(Date.now() - 25 * 60000), updatedAt: now, imageUrl: 'https://images.unsplash.com/photo-1521017432531-fbd92d768814?auto=format&fit=crop&w=800&q=80' },
+    { id: 3, name: 'Table 3', seats: 4, zone: 'Main Floor', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: now, imageUrl: 'https://images.unsplash.com/photo-1442512595331-e89e73853f31?auto=format&fit=crop&w=800&q=80' },
+    { id: 4, name: 'Table 4', seats: 2, zone: 'Main Floor', status: 'reserved', guestCount: 2, occupiedSince: null, updatedAt: now, imageUrl: 'https://images.unsplash.com/photo-1559925393-8be0ec4767c8?auto=format&fit=crop&w=800&q=80' },
+    { id: 5, name: 'Table 5', seats: 6, zone: 'Main Floor', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: now, imageUrl: 'https://images.unsplash.com/photo-1600093463592-8e36ae95ef56?auto=format&fit=crop&w=800&q=80' },
+    { id: 6, name: 'Table 6', seats: 4, zone: 'Main Floor', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: now, imageUrl: 'https://images.unsplash.com/photo-1511920170033-f8396924c348?auto=format&fit=crop&w=800&q=80' },
+    { id: 7, name: 'Table 7', seats: 4, zone: 'Patio', status: 'occupied', guestCount: 4, occupiedSince: new Date(Date.now() - 40 * 60000), updatedAt: now, imageUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=800&q=80' },
+    { id: 8, name: 'Table 8', seats: 2, zone: 'Patio', status: 'cleaning', guestCount: 0, occupiedSince: null, updatedAt: now, imageUrl: 'https://images.unsplash.com/photo-1525610553991-2bede1a236e2?auto=format&fit=crop&w=800&q=80' },
+    { id: 9, name: 'Table 9', seats: 4, zone: 'Patio', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: now, imageUrl: 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=800&q=80' },
+    { id: 10, name: 'Table 10', seats: 2, zone: 'Patio', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: now, imageUrl: 'https://images.unsplash.com/photo-1508766917616-d22f3f1eea14?auto=format&fit=crop&w=800&q=80' },
+    { id: 11, name: 'Table 11', seats: 2, zone: 'Patio', status: 'reserved', guestCount: 2, occupiedSince: null, updatedAt: now, imageUrl: 'https://images.unsplash.com/photo-1447933601403-0c6688de566e?auto=format&fit=crop&w=800&q=80' },
+    { id: 12, name: 'Table 12', seats: 1, zone: 'Coffee Bar', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: now, imageUrl: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=800&q=80' },
+    { id: 13, name: 'Table 13', seats: 1, zone: 'Coffee Bar', status: 'occupied', guestCount: 1, occupiedSince: new Date(Date.now() - 10 * 60000), updatedAt: now, imageUrl: 'https://images.unsplash.com/photo-1445116572660-238429888876?auto=format&fit=crop&w=800&q=80' },
+    { id: 14, name: 'Table 14', seats: 1, zone: 'Coffee Bar', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: now, imageUrl: 'https://images.unsplash.com/photo-1498804103079-a6351b050096?auto=format&fit=crop&w=800&q=80' },
+    { id: 15, name: 'Table 15', seats: 1, zone: 'Coffee Bar', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: now, imageUrl: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=800&q=80' },
   ]
   // 456 Bùi Thị Xuân: the same floor the Java seed gives that branch (InMemoryDatabase.branchTwoTables).
+  const secondBranchImages = [
+    'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1525610553991-2bede1a236e2?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1508766917616-d22f3f1eea14?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1497636577773-f1231844b336?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1521017432531-fbd92d768814?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=800&q=80',
+  ]
   const secondBranch: Omit<FloorTable, 'branch'>[] = [
     ['Bàn 01', 2, 'Sân vườn'], ['Bàn 02', 4, 'Sân vườn'], ['Bàn 03', 4, 'Sân vườn'], ['Bàn 04', 6, 'Sân vườn'],
     ['Bàn 05', 2, 'Góc làm việc'], ['Bàn 06', 2, 'Góc làm việc'], ['Bàn 07', 4, 'Tầng 2'], ['Bàn 08', 4, 'Tầng 2'],
   ].map(([name, seats, zone], index) => ({
     id: 16 + index, name: name as string, seats: seats as number, zone: zone as string,
     status: 'available', guestCount: 0, occupiedSince: null, updatedAt: now,
+    imageUrl: secondBranchImages[index],
   }))
   return [
     ...firstBranch.map((table) => ({ ...table, branch: DEFAULT_BRANCH_ID })),
@@ -73,7 +86,7 @@ function createInitialMenuItems(): MenuItem[] {
       inStock: true,
       recipe: 'Cà phê pha phin truyền thống kết hợp lớp kem mặn béo ngậy thơm ngon.',
       variations: [{ name: 'Nóng', price: 0 }, { name: 'Đá', price: 0 }],
-      imageUrl: null,
+      imageUrl: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=800&q=80',
       createdAt: now,
     },
     {
@@ -87,7 +100,7 @@ function createInitialMenuItems(): MenuItem[] {
       inStock: true,
       recipe: 'Double shot espresso, siro vani ngọt thanh và sữa tươi thanh trùng đánh bông mịn.',
       variations: [{ name: 'Sữa tươi', price: 0 }, { name: 'Sữa yến mạch', price: 10000 }, { name: 'Sữa hạnh nhân', price: 10000 }],
-      imageUrl: null,
+      imageUrl: 'https://images.unsplash.com/photo-1534778101976-62847782c213?auto=format&fit=crop&w=800&q=80',
       createdAt: now,
     },
     {
@@ -101,7 +114,7 @@ function createInitialMenuItems(): MenuItem[] {
       inStock: true,
       recipe: 'Nhiều sữa ít cà phê, béo ngậy thơm mát chuẩn vị Sài Gòn.',
       variations: [{ name: 'Nóng', price: 0 }, { name: 'Đá', price: 0 }],
-      imageUrl: null,
+      imageUrl: 'https://images.unsplash.com/photo-1517256064527-09c73fc73e38?auto=format&fit=crop&w=800&q=80',
       createdAt: now,
     },
     {
@@ -115,7 +128,7 @@ function createInitialMenuItems(): MenuItem[] {
       inStock: true,
       recipe: 'Cà phê ủ lạnh thanh mát kết hợp lát cam vàng mọng nước và mật ong hoa rừng.',
       variations: [{ name: 'Chuẩn vị', price: 0 }, { name: 'Ít ngọt', price: 0 }],
-      imageUrl: null,
+      imageUrl: 'https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?auto=format&fit=crop&w=800&q=80',
       createdAt: now,
     },
     {
@@ -129,7 +142,7 @@ function createInitialMenuItems(): MenuItem[] {
       inStock: true,
       recipe: 'Trà đen thơm mát kết hợp miếng đào tươi giòn sần sật, sả đập dập và cam vàng.',
       variations: [],
-      imageUrl: null,
+      imageUrl: 'https://images.unsplash.com/photo-1556679343-c7306c1976bc?auto=format&fit=crop&w=800&q=80',
       createdAt: now,
     },
     {
@@ -143,7 +156,7 @@ function createInitialMenuItems(): MenuItem[] {
       inStock: true,
       recipe: 'Ủ lạnh 20 tiếng rót sục khí Nitơ tạo lớp bọt kem bồng bềnh mịn màng.',
       variations: [{ name: 'Tiêu chuẩn', price: 0 }, { name: 'Kem béo ngọt', price: 10000 }],
-      imageUrl: null,
+      imageUrl: 'https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?auto=format&fit=crop&w=800&q=80',
       createdAt: now,
     },
     {
@@ -157,7 +170,7 @@ function createInitialMenuItems(): MenuItem[] {
       inStock: true,
       recipe: 'Kem trứng đánh bông mịn sánh quyện cùng cà phê nguyên chất đậm đà.',
       variations: [],
-      imageUrl: null,
+      imageUrl: 'https://images.unsplash.com/photo-1751569543716-70c5fb9a8298?auto=format&fit=crop&w=800&q=80',
       createdAt: now,
     },
     {
@@ -171,7 +184,7 @@ function createInitialMenuItems(): MenuItem[] {
       inStock: true,
       recipe: 'Pha thủ công V60, nốt hương hoa nhài hoang dã, đào chín và cam bergamot.',
       variations: [],
-      imageUrl: null,
+      imageUrl: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=800&q=80',
       createdAt: now,
     },
     {
@@ -185,7 +198,7 @@ function createInitialMenuItems(): MenuItem[] {
       inStock: true,
       recipe: 'Lô cà phê quý hiếm Panama Geisha. Hương hoa quả, bergamot và mật ngọt.',
       variations: [],
-      imageUrl: null,
+      imageUrl: 'https://images.unsplash.com/photo-1610882648335-ced8fc8fa6b6?auto=format&fit=crop&w=800&q=80',
       createdAt: now,
     },
     {
@@ -199,7 +212,7 @@ function createInitialMenuItems(): MenuItem[] {
       inStock: true,
       recipe: 'Bánh sừng bò bơ Pháp ngàn lớp nướng giòn rụm với hạnh nhân lát thơm béo.',
       variations: [{ name: 'Nóng ấm', price: 0 }, { name: 'Bình thường', price: 0 }],
-      imageUrl: null,
+      imageUrl: 'https://images.unsplash.com/photo-1555507036-ab1f4038808a?auto=format&fit=crop&w=800&q=80',
       createdAt: now,
     },
     {
@@ -213,7 +226,7 @@ function createInitialMenuItems(): MenuItem[] {
       inStock: true,
       recipe: 'Bánh pastry ngàn lớp bơ vàng giòn thơm cuộn hai thanh socola đen Valrhona.',
       variations: [],
-      imageUrl: null,
+      imageUrl: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=800&q=80',
       createdAt: now,
     },
     {
@@ -227,7 +240,7 @@ function createInitialMenuItems(): MenuItem[] {
       inStock: true,
       recipe: 'Bánh chuối nướng mềm ẩm, giòn bùi hạt óc chó và phết bơ cà phê.',
       variations: [],
-      imageUrl: null,
+      imageUrl: 'https://images.unsplash.com/photo-1607958996333-41aef7caefaa?auto=format&fit=crop&w=800&q=80',
       createdAt: now,
     },
     {
@@ -241,7 +254,7 @@ function createInitialMenuItems(): MenuItem[] {
       inStock: true,
       recipe: 'Phối trộn Colombia & Ethiopia. Hương vị socola fudge, hạt phỉ và vỏ cam.',
       variations: [{ name: 'Nguyên hạt', price: 0 }, { name: 'Xay cho Pour Over', price: 0 }, { name: 'Xay cho Phin', price: 0 }],
-      imageUrl: null,
+      imageUrl: 'https://images.unsplash.com/photo-1580933073521-dc49ac0d4e6a?auto=format&fit=crop&w=800&q=80',
       createdAt: now,
     },
     {
@@ -561,6 +574,7 @@ export const reservationStatuses = ['Chờ xác nhận', 'Đã đặt', 'Hoàn t
 export type ReservationStatusLabel = (typeof reservationStatuses)[number]
 
 export type MockReservation = {
+  userId?: number | null
   tableIds?: number[]
   code: string
   customer: string
@@ -696,7 +710,7 @@ export function deleteMockTable(id: number): void {
   const store = getStore()
   const table = store.tables.find(t => t.id === id && !t.deletedAt)
   if (!table) throw new Error('Không tìm thấy bàn.')
-  const openOrder = store.orders.some(order => (order.tableIds?.length ? order.tableIds : [order.tableId]).includes(id) && (order.status !== 'completed' || order.paymentStatus === 'unpaid'))
+  const openOrder = store.orders.some(order => (order.tableIds?.length ? order.tableIds : [order.tableId]).includes(id) && (order.status !== 'cancelled' && (order.status !== 'completed' || order.paymentStatus === 'unpaid')))
   const booking = store.reservations.some(reservation => (reservation.tableIds ?? [reservation.tableId]).includes(id) && ['Chờ xác nhận', 'Đã đặt'].includes(reservation.status))
   if (table.status === 'occupied' || table.status === 'reserved' || openOrder || booking) throw new Error('Bàn còn khách, đơn chưa kết thúc/thanh toán hoặc lịch đặt chưa xử lý. Vui lòng xử lý trước khi xóa.')
   table.deletedAt = new Date()
@@ -705,7 +719,7 @@ export function deleteMockTable(id: number): void {
 export function getMockActiveOrders(): Order[] {
   const store = getStore()
   return store.orders
-    .filter((order) => order.status !== 'completed')
+    .filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
     .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
 }
 
@@ -715,6 +729,11 @@ export function getMockOrdersSince(days: number): Order[] {
   return store.orders
     .filter((order) => order.createdAt.getTime() >= cutoff)
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+}
+
+export function getMockAllOrders(): Order[] {
+  const store = getStore()
+  return [...store.orders].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
 }
 
 export function getMockOrder(orderId: number): Order | undefined {
@@ -730,18 +749,26 @@ export function updateMockOrderStatus(orderId: number, status: OrderStatus): { o
   const store = getStore()
   const order = store.orders.find((o) => o.id === orderId)
   if (!order) return { ok: false, error: 'Order not found.' }
+  if (order.status === status) return { ok: true }
+  const invalid = orderTransitionError(order, status)
+  if (invalid) return { ok: false, error: invalid }
   order.status = status
+  if (status === 'cancelled' && order.paymentStatus === 'paid') order.paymentStatus = 'refunded'
+  if (status === 'cancelled') {
+    const booking = store.reservations.find(reservation => reservation.code === order.orderCode)
+    if (booking?.status === 'Hoàn thành') booking.status = 'Đã hủy'
+  }
   order.completedAt = status === 'completed' ? new Date() : null
   // Same rule as the Java TableStatusSyncObserver: a finished dine-in order frees its table for cleaning.
-  if (status === 'completed' && order.tableId) {
+  if ((status === 'completed' || status === 'cancelled') && order.tableId) {
     for (const id of order.tableIds?.length ? order.tableIds : [order.tableId]) {
-      const other = store.orders.some(other => other.id !== order.id && (other.tableIds?.length ? other.tableIds : [other.tableId]).includes(id) && other.status !== 'completed')
+      const other = store.orders.some(other => other.id !== order.id && (other.tableIds?.length ? other.tableIds : [other.tableId]).includes(id) && other.status !== 'completed' && other.status !== 'cancelled')
       const table = store.tables.find((t) => t.id === id)
       if (table && !other) {
-      table.status = 'cleaning'
-      table.guestCount = 0
-      table.occupiedSince = null
-      table.updatedAt = new Date()
+        table.status = 'cleaning'
+        table.guestCount = 0
+        table.occupiedSince = null
+        table.updatedAt = new Date()
       }
     }
   }
@@ -752,13 +779,14 @@ export function markMockOrderPaid(orderId: number): { ok: boolean; error?: strin
   const store = getStore()
   const order = store.orders.find((o) => o.id === orderId)
   if (!order) return { ok: false, error: 'Order not found.' }
+  if (order.status === 'cancelled' || order.paymentStatus === 'refunded') return { ok: false, error: 'Không thể thu tiền đơn đã hủy.' }
   order.paymentStatus = 'paid'
   return { ok: true }
 }
 
 export function settleMockTables(tableIds: number[], method: PaymentMethod, tendered?: number, expectedTotal?: number) {
   const store = getStore()
-  const orders = store.orders.filter(order => order.orderType === 'dine-in' && order.paymentStatus === 'unpaid'
+  const orders = store.orders.filter(order => order.orderType === 'dine-in' && order.paymentStatus === 'unpaid' && order.status !== 'cancelled'
     && (order.tableIds?.length ? order.tableIds : [order.tableId]).some(id => id !== null && tableIds.includes(id)))
   if (tableIds.some(id => !orders.some(order => (order.tableIds?.length ? order.tableIds : [order.tableId]).includes(id)))) throw new Error('Một bàn không còn đơn chưa thanh toán.')
   if (orders.some(order => (order.tableIds?.length ? order.tableIds : [order.tableId]).some(id => id !== null && !tableIds.includes(id)))) throw new Error('Cần chọn đủ các bàn thuộc cùng một phiếu đặt bàn.')
@@ -877,6 +905,16 @@ export type NewMockReservationInput = Omit<MockReservation, 'code' | 'status' | 
   branch?: BranchId
 }
 
+function releaseMockReservedTables(reservation: MockReservation, now = Date.now()): void {
+  const store = getStore()
+  for (const id of reservation.tableIds ?? (reservation.tableId ? [reservation.tableId] : [])) {
+    const another = store.reservations.some(other => (other.tableIds ?? [other.tableId]).includes(id) && (other.status === 'Chờ xác nhận' || other.status === 'Đã đặt') && other.dateTime.getTime() < now + 2 * 60 * 60_000)
+    const order = store.orders.some(order => (order.tableIds?.length ? order.tableIds : [order.tableId]).includes(id) && order.status !== 'completed' && order.status !== 'cancelled')
+    const table = store.tables.find(table => table.id === id)
+    if (table?.status === 'reserved' && !another && !order) updateMockTableStatus(id, 'available')
+  }
+}
+
 export function expireMockNoShows(now = Date.now()): number {
   const store = getStore()
   let expired = 0
@@ -884,12 +922,7 @@ export function expireMockNoShows(now = Date.now()): number {
     if ((reservation.status !== 'Chờ xác nhận' && reservation.status !== 'Đã đặt') || now < reservation.dateTime.getTime() + 15 * 60_000) continue
     reservation.status = 'Đã hủy'
     expired++
-    for (const id of reservation.tableIds ?? (reservation.tableId ? [reservation.tableId] : [])) {
-      const another = store.reservations.some(other => (other.tableIds ?? [other.tableId]).includes(id) && (other.status === 'Chờ xác nhận' || other.status === 'Đã đặt') && other.dateTime.getTime() < now + 2 * 60 * 60_000)
-      const order = store.orders.some(order => (order.tableIds?.length ? order.tableIds : [order.tableId]).includes(id) && order.status !== 'completed')
-      const table = store.tables.find(table => table.id === id)
-      if (table?.status === 'reserved' && !another && !order) updateMockTableStatus(id, 'available')
-    }
+    releaseMockReservedTables(reservation, now)
   }
   return expired
 }
@@ -897,8 +930,12 @@ export function expireMockNoShows(now = Date.now()): number {
 // Local stand-in for POST /api/reservations while the Java backend is offline. It repeats the Java
 // Chain of Responsibility (time, opening hours, guests, table availability) with the Java defaults,
 // so a booking stored here would also pass Java.
-export function createMockReservation(input: NewMockReservationInput): { ok: boolean; code?: string; error?: string } {
-  expireMockNoShows()
+type BookingCheck =
+  | { ok: true; ids: number[]; tables: FloorTable[]; branch: BranchId }
+  | { ok: false; error: string }
+
+// The Java chain with its defaults; `ignoreCode` is the booking being edited, which cannot clash with itself.
+function checkMockBooking(input: NewMockReservationInput, ignoreCode?: string): BookingCheck {
   const store = getStore()
   if (hasReservationTimePassed(input.dateTime)) return { ok: false, error: 'Không thể đặt bàn cho thời điểm đã qua.' }
   if (!isWithinDefaultOperatingHours(input.dateTime)) {
@@ -917,9 +954,18 @@ export function createMockReservation(input: NewMockReservationInput): { ok: boo
   const capacity = tables.reduce((sum, table) => sum + table!.seats, 0)
   if (input.guests < 1 || input.guests > capacity) return { ok: false, error: 'Số khách vượt tổng số chỗ các bàn đã chọn.' }
   const taken = store.reservations.some(
-    (r) => ids.some(id => (r.tableIds ?? [r.tableId]).includes(id)) && r.status !== 'Đã hủy' && reservationSlotsOverlap(r.dateTime, input.dateTime),
+    (r) => r.code !== ignoreCode && ids.some(id => (r.tableIds ?? [r.tableId]).includes(id)) && r.status !== 'Đã hủy' && reservationSlotsOverlap(r.dateTime, input.dateTime),
   )
   if (taken) return { ok: false, error: 'Bàn đã được đặt trong khung giờ này.' }
+  return { ok: true, ids, tables: tables as FloorTable[], branch }
+}
+
+export function createMockReservation(input: NewMockReservationInput): { ok: boolean; code?: string; error?: string } {
+  expireMockNoShows()
+  const store = getStore()
+  const check = checkMockBooking(input)
+  if (!check.ok) return { ok: false, error: check.error }
+  const { ids, tables, branch } = check
 
   const localCount = store.reservations.filter((r) => r.code.startsWith('RES-L')).length
   // The L marks a local booking so it is never mistaken for a backend-issued RES-0001.
@@ -928,10 +974,41 @@ export function createMockReservation(input: NewMockReservationInput): { ok: boo
   return { ok: true, code }
 }
 
+// Edits a pending or confirmed local booking; its code, status and pre-orders stay.
+export function updateMockReservation(code: string, input: NewMockReservationInput): { ok: boolean; error?: string } {
+  expireMockNoShows()
+  const reservation = getStore().reservations.find((r) => r.code === code)
+  if (!reservation) return { ok: false, error: 'Không tìm thấy phiếu đặt bàn.' }
+  if (reservation.status !== 'Chờ xác nhận' && reservation.status !== 'Đã đặt') {
+    return { ok: false, error: `Chỉ sửa được phiếu đang chờ hoặc đã xác nhận (${reservation.status}).` }
+  }
+  const check = checkMockBooking({ ...input, branch: input.branch ?? reservation.branch }, code)
+  if (!check.ok) return { ok: false, error: check.error }
+  Object.assign(reservation, {
+    customer: input.customer,
+    contact: input.contact,
+    email: input.email,
+    note: input.note,
+    dateTime: input.dateTime,
+    guests: input.guests,
+    tableId: check.ids[0],
+    tableIds: check.ids,
+    tableName: check.tables.map((table) => table.name).join(', '),
+    branch: check.branch,
+  })
+  return { ok: true }
+}
+
 export function updateMockReservationStatus(code: string, status: ReservationStatusLabel): { ok: boolean; error?: string } {
+  expireMockNoShows()
   const reservation = getStore().reservations.find((r) => r.code === code)
   if (!reservation) return { ok: false, error: 'Reservation not found.' }
+  if (reservation.status === status) return { ok: true }
+  const allowed = (status === 'Đã đặt' && reservation.status === 'Chờ xác nhận')
+    || (status === 'Đã hủy' && (reservation.status === 'Chờ xác nhận' || reservation.status === 'Đã đặt'))
+  if (!allowed) return { ok: false, error: 'Không thể đổi trạng thái phiếu đã hủy hoặc đã nhận bàn. Nhận bàn qua thao tác Sang POS.' }
   reservation.status = status
+  if (status === 'Đã hủy') releaseMockReservedTables(reservation)
   return { ok: true }
 }
 
@@ -990,6 +1067,7 @@ export function transferMockReservation(code: string): { ok: boolean; orderCode?
   if (!reservation) return { ok: false, error: 'Reservation not found.' }
   if (reservation.status === 'Hoàn thành') return { ok: false, error: 'This reservation has already been seated.' }
   if (reservation.status === 'Đã hủy') return { ok: false, error: 'A cancelled reservation cannot be seated.' }
+  if (!hasReservationStarted(reservation.dateTime)) return { ok: false, error: 'Chưa đến giờ đặt bàn. Chỉ được mở đơn POS khi đến giờ khách đã đặt.' }
   if (store.orders.some((o) => o.orderCode === reservation.code)) return { ok: false, error: 'An order already exists for this reservation.' }
 
   const res = createMockOrderFromItems({
@@ -1016,6 +1094,32 @@ export type NewMockItemInput = {
   recipe: string
   imageUrl: string
   variations: Variation[]
+}
+
+// Names stay unique (case-insensitive), as in Java and the database.
+export function updateMockMenuItem(itemId: number, input: NewMockItemInput): { ok: boolean; error?: string } {
+  const store = getStore()
+  const item = store.menuItems.find((m) => m.id === itemId)
+  if (!item) return { ok: false, error: 'Không tìm thấy món trong thực đơn.' }
+  const name = input.name.trim().toLowerCase()
+  if (store.menuItems.some((m) => m.id !== itemId && m.name.trim().toLowerCase() === name)) {
+    return { ok: false, error: 'Tên món đã có trong thực đơn.' }
+  }
+  Object.assign(item, {
+    ...input,
+    unit: input.unit || 'pcs',
+    recipe: input.recipe || null,
+    imageUrl: input.imageUrl || null,
+  })
+  return { ok: true }
+}
+
+export function deleteMockMenuItem(itemId: number): { ok: boolean; error?: string } {
+  const store = getStore()
+  const index = store.menuItems.findIndex((m) => m.id === itemId)
+  if (index < 0) return { ok: false, error: 'Không tìm thấy món trong thực đơn.' }
+  store.menuItems.splice(index, 1)
+  return { ok: true }
 }
 
 export function createMockMenuItem(input: NewMockItemInput): { ok: boolean; id?: number; message?: string; error?: string } {

@@ -9,6 +9,7 @@ import {
   getMockTables,
   getMockActiveOrders,
   getMockOrdersSince,
+  getMockAllOrders,
   getMockReservations,
   getMockOrdersByCode,
   type ReservationStatusLabel,
@@ -70,7 +71,7 @@ export async function getActiveOrders(): Promise<Order[]> {
   }
   try {
     return await db.select().from(adminOrders)
-      .where(and(ne(adminOrders.status, 'completed'), eq(adminOrders.branch, branch)))
+      .where(and(ne(adminOrders.status, 'completed'), ne(adminOrders.status, 'cancelled'), eq(adminOrders.branch, branch)))
       .orderBy(asc(adminOrders.createdAt))
   } catch (error) {
     console.warn('Database query failed, using fallback mock store:', error)
@@ -272,6 +273,7 @@ export type ReservationView = {
   contact: string
   email: string
   dateTime: string
+  scheduledAt: string
   table: string
   tableId: number | null
   guests: number
@@ -303,13 +305,14 @@ function formatSlot(date: Date) {
 export async function getReservations(): Promise<{ reservations: ReservationView[]; javaOnline: boolean }> {
   await assertAdminAccess()
   const branch = await getAdminBranch()
-  const local: ReservationView[] = getMockReservations().filter((r) => r.branch === branch).map((r) => ({
+  const local: ReservationView[] = (isDbConfigured ? [] : getMockReservations()).filter((r) => r.branch === branch).map((r) => ({
     id: r.code,
     source: 'local',
     customer: r.customer,
     contact: r.contact,
     email: r.email ?? '',
     dateTime: formatSlot(r.dateTime),
+    scheduledAt: r.dateTime.toISOString(),
     table: r.tableName.replace('Table', 'Bàn'),
     tableId: r.tableId,
     tableIds: r.tableIds,
@@ -328,6 +331,7 @@ export async function getReservations(): Promise<{ reservations: ReservationView
     contact: r.contact,
     email: r.email ?? '',
     dateTime: formatSlot(new Date(r.dateTime)),
+    scheduledAt: r.dateTime,
     table: r.table ?? (r.tableId ? `Bàn ${String(r.tableId).padStart(2, '0')}` : '—'),
     tableId: r.tableId,
     tableIds: r.tableIds,
@@ -368,5 +372,54 @@ export async function joinContactOrders(contacts: OrderContact[]): Promise<Onlin
   return contacts.flatMap((contact) => {
     const order = byCode.get(contact.orderCode)
     return order ? [{ ...order, contact }] : []
+  })
+}
+
+export type OrderHistoryItem = Order & {
+  contact: OrderContact | null
+  tableName: string | null
+}
+
+// All transactions and orders (online, takeaway, dine-in at table/POS), sorted newest first.
+export async function getOrderHistory(scope: 'branch' | 'all' = 'branch'): Promise<OrderHistoryItem[]> {
+  await assertAdminAccess()
+  await ensureOrderTableGroups()
+  const branch = scope === 'branch' ? await getAdminBranch() : null
+  const [contacts, tables] = await Promise.all([
+    listOrderContacts(),
+    getTables(),
+  ])
+  const contactMap = new Map(contacts.map((c) => [c.orderCode, c]))
+  const tableMap = new Map(tables.map((t) => [t.id, t.name]))
+
+  let orders: Order[] = []
+  if (isDbConfigured && db) {
+    try {
+      orders = await db
+        .select()
+        .from(adminOrders)
+        .where(branch ? eq(adminOrders.branch, branch) : undefined)
+        .orderBy(desc(adminOrders.createdAt))
+    } catch (error) {
+      console.warn('Database query failed, using fallback mock store:', error)
+      orders = getMockAllOrders().filter((o) => !branch || o.branch === branch)
+    }
+  } else {
+    orders = getMockAllOrders().filter((o) => !branch || o.branch === branch)
+  }
+
+  return orders.map((order) => {
+    const contact = contactMap.get(order.orderCode) ?? null
+    let tableName: string | null = null
+    if (order.tableIds && order.tableIds.length > 0) {
+      tableName = order.tableIds.map((id) => tableMap.get(id) ?? `Bàn #${id}`).join(', ')
+    } else if (order.tableId) {
+      tableName = tableMap.get(order.tableId) ?? `Bàn #${order.tableId}`
+    }
+    return {
+      ...order,
+      contact,
+      tableName,
+    }
   })
 }

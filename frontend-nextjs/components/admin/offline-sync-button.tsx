@@ -31,7 +31,7 @@ export function OfflineSyncButton({ pending }: { pending: number }) {
       className="gap-2"
     >
       <CloudUpload className="size-4" />
-      {busy ? 'Đang đồng bộ...' : `Đồng bộ đơn offline (${pending})`}
+      {busy ? 'Đang đồng bộ...' : `Đồng bộ đơn chưa gửi (${pending})`}
     </Button>
   )
 }

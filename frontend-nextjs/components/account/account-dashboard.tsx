@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { signOut } from '@/app/auth/actions'
 import { Logo } from '@/components/brand/logo'
+import { ReservationHistory } from './reservation-history'
 import {
   ArrowLeft,
   Award,
@@ -31,9 +32,10 @@ export type AccountUser = { name: string; email: string }
 const vnd = (amount: number) => `${Math.round(amount).toLocaleString('vi-VN')} đ`
 
 const dateTime = (iso: string) =>
-  new Date(iso).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  new Date(iso).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
 function orderStatus(order: AccountOrder) {
+  if (order.status === 'cancelled') return 'Đã hủy'
   if (order.status === 'pending') return 'Chờ pha chế'
   if (order.status === 'brewing') return 'Đang pha chế'
   if (order.status === 'ready') return order.fulfilment === 'delivery' ? 'Đang giao' : 'Chờ bạn đến lấy'
@@ -151,7 +153,7 @@ export function AccountDashboard({
                 }`}
               >
                 <Receipt className="size-4" />
-                <span>Lịch sử đơn hàng</span>
+                <span>Lịch sử đơn hàng & đặt bàn</span>
               </Link>
 
               <Link
@@ -204,9 +206,11 @@ export function AccountDashboard({
           </div>
 
           {/* Right Main Content Panel */}
-          <div className="lg:col-span-8">
+          <div className="lg:col-span-8 space-y-6">
             {/* TAB: ORDERS */}
             {currentTab === 'orders' && (
+              <>
+              <ReservationHistory reservations={overview.reservations} unavailable={overview.reservationsUnavailable} />
               <div className="rounded-2xl border border-stone-200/80 bg-white p-6 shadow-xs space-y-5">
                 <h3 className="font-bold text-lg text-stone-900 flex items-center gap-2">
                   <Receipt className="size-5 text-[#3E2723]" />
@@ -231,7 +235,7 @@ export function AccountDashboard({
                           <span className="font-mono font-bold text-stone-900">#{order.orderCode}</span>
                           <span className="flex items-center gap-1.5">
                             <Badge variant="outline" className="text-[11px] font-semibold">
-                              {order.paid ? 'Đã thanh toán' : 'Trả khi nhận hàng'}
+                              {order.refunded ? 'Đã ghi nhận hoàn tiền' : order.paid ? 'Đã thanh toán' : order.status === 'cancelled' ? 'Chưa thu tiền' : 'Trả khi nhận hàng'}
                             </Badge>
                             <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold text-[11px]">
                               {orderStatus(order)}
@@ -250,6 +254,7 @@ export function AccountDashboard({
                   </div>
                 )}
               </div>
+              </>
             )}
 
             {/* TAB: VOUCHERS */}

@@ -13,11 +13,33 @@ import java.util.Objects;
 public class Reservation implements Serializable {
     private static final long serialVersionUID = 1L;
 
+    /** The arrival grace period ends only unseated bookings, never a seated guest's visit. */
+    public boolean isNoShowAt(Instant now, int graceMinutes) {
+        return dateTime != null && (status == ReservationStatus.PENDING || status == ReservationStatus.CONFIRMED)
+                && !now.isBefore(dateTime.plusSeconds(graceMinutes * 60L));
+    }
+
     private Integer id;
     private String reservationCode;
     private String customer;
     private String contact;
     private String email;
+    private Integer userId;
+
+    public Integer getUserId() {
+        return userId;
+    }
+
+    public void setUserId(Integer userId) {
+        this.userId = userId;
+    }
+
+    /** Old guest bookings have no account id; their contact email can identify the account. */
+    public boolean belongsToAccount(int accountId, String accountEmail) {
+        if (userId != null) return userId == accountId;
+        return accountEmail != null && !accountEmail.isBlank() && email != null
+                && email.trim().equalsIgnoreCase(accountEmail.trim());
+    }
     private Instant dateTime;
     private String tableName;
     private Integer tableId;

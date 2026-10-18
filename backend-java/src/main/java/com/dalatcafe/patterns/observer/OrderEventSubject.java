@@ -27,9 +27,19 @@ public class OrderEventSubject {
         notifyAll(observer -> observer.onOrderPaid(order));
     }
 
+    public void notifyOrderOpened(Order order) {
+        Objects.requireNonNull(order, "Order must not be null");
+        notifyAll(observer -> observer.onOrderOpened(order));
+    }
+
     public void notifyOrderCompleted(Order order) {
         Objects.requireNonNull(order, "Order must not be null");
         notifyAll(observer -> observer.onOrderCompleted(order));
+    }
+
+    public void notifyOrderCancelled(Order order) {
+        Objects.requireNonNull(order, "Order must not be null");
+        notifyAll(observer -> observer.onOrderCancelled(order));
     }
 
     /**

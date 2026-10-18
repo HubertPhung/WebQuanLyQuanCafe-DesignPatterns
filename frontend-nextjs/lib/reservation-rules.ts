@@ -37,6 +37,11 @@ export function hasReservationTimePassed(dateTime: Date, now = Date.now()): bool
   return dateTime.getTime() < now - RESERVATION_PAST_GRACE_MS
 }
 
+/** Opening a POS order starts the kitchen timer, so never open it before the booking. */
+export function hasReservationStarted(dateTime: Date, now = Date.now()): boolean {
+  return Number.isFinite(dateTime.getTime()) && dateTime.getTime() <= now
+}
+
 export function isWithinDefaultOperatingHours(dateTime: Date): boolean {
   const seconds = secondsOfCafeDay(dateTime)
   return seconds >= secondsOf(DEFAULT_OPENING_TIME) && seconds <= secondsOf(DEFAULT_CLOSING_TIME)

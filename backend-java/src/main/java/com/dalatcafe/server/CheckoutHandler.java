@@ -2,6 +2,8 @@ package com.dalatcafe.server;
 
 import com.dalatcafe.dao.ICustomerDao;
 import com.dalatcafe.dao.ITableDao;
+import com.dalatcafe.dao.IOrderDao;
+import com.dalatcafe.dao.IReservationDao;
 import com.dalatcafe.model.Customer;
 import com.dalatcafe.model.Order;
 import com.dalatcafe.model.OrderType;
@@ -42,13 +44,22 @@ public class CheckoutHandler extends ApiHandler {
     private final PosCheckoutFacade facade;
     private final ICustomerDao customerDao;
     private final ITableDao tableDao;
+    private final IOrderDao orderDao;
+    private final IReservationDao reservationDao;
     private final BooleanSupplier databaseHealthy;
 
     public CheckoutHandler(PosCheckoutFacade facade, ICustomerDao customerDao, ITableDao tableDao,
                            BooleanSupplier databaseHealthy) {
+        this(facade, customerDao, tableDao, null, null, databaseHealthy);
+    }
+
+    public CheckoutHandler(PosCheckoutFacade facade, ICustomerDao customerDao, ITableDao tableDao,
+                           IOrderDao orderDao, IReservationDao reservationDao, BooleanSupplier databaseHealthy) {
         this.facade = Objects.requireNonNull(facade, "Facade must not be null");
         this.customerDao = Objects.requireNonNull(customerDao, "Customer DAO must not be null");
         this.tableDao = Objects.requireNonNull(tableDao, "Table DAO must not be null");
+        this.orderDao = orderDao;
+        this.reservationDao = reservationDao;
         this.databaseHealthy = Objects.requireNonNull(databaseHealthy, "Health check must not be null");
     }
 
@@ -247,6 +258,11 @@ public class CheckoutHandler extends ApiHandler {
                 throw ApiException.badRequest("Bàn " + table.getName() + " không thuộc chi nhánh này.");
             }
             branch = table.getBranch();
+            var orders = orderDao == null ? List.<Order>of() : orderDao.findAll();
+            var reservations = reservationDao == null ? List.<com.dalatcafe.model.Reservation>of() : reservationDao.findAll();
+            if (TableUsage.status(table, orders, reservations, java.time.Instant.now()) != com.dalatcafe.model.TableStatus.AVAILABLE) {
+                throw new ApiException(409, "TABLE_UNAVAILABLE", "Bàn đang được sử dụng, đã có lịch đặt hoặc đang dọn. Vui lòng chọn bàn trống.");
+            }
         }
         return new CheckoutRequest(lines, tableId, orderType(str(body, "orderType")),
                 paymentMethod(requireStr(body, "paymentMethod")), customer,

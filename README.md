@@ -6,7 +6,7 @@
 ![Java SE 17](https://img.shields.io/badge/Backend-Pure%20Java%20SE%2017-orange?style=for-the-badge&logo=openjdk)
 ![Design Patterns](https://img.shields.io/badge/Architecture-9%20GoF%20Patterns-success?style=for-the-badge)
 [![CI/CD Pipeline](https://github.com/HubertPhung/WebQuanLyQuanCafe-DesignPatterns/actions/workflows/ci.yml/badge.svg)](https://github.com/HubertPhung/WebQuanLyQuanCafe-DesignPatterns/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/Tests-320%20JUnit%20%2B%2041%20UI-brightgreen?style=for-the-badge)
+![Tests](https://img.shields.io/badge/Tests-342%20JUnit%20%2B%2043%20UI-brightgreen?style=for-the-badge)
 
 ---
 
@@ -87,7 +87,7 @@ Frontend chạy ngay mà không cần database. Nếu đặt `DATABASE_URL` (Pos
 ### 5.2. Backend Java
 ```bash
 cd backend-java
-mvn clean test                                            # 320 test JUnit 5
+mvn clean test                                            # 342 test JUnit 5
 mvn -q compile
 java -cp target/classes com.dalatcafe.server.MainServer   # cổng 8080, chế độ In-Memory
 ```
@@ -129,8 +129,8 @@ Tài khoản nằm ở backend Java, nên **cần chạy Java** để đăng nh�
 ## 6. Kiểm thử
 
 ```bash
-cd frontend-nextjs && npm test     # 41 test UI/UX (tự khởi động next dev nếu chưa có server)
-cd backend-java && mvn clean test  # 320 test JUnit 5 (kể cả JDBC trên PostgreSQL nhúng)
+cd frontend-nextjs && npm test     # 43 test UI/UX (tự khởi động next dev nếu chưa có server)
+cd backend-java && mvn clean test  # 342 test JUnit 5 (kể cả JDBC trên PostgreSQL nhúng)
 ```
 Danh mục test, báo cáo E2E và các giới hạn đã biết: [docs/TESTING.md](docs/TESTING.md).
 

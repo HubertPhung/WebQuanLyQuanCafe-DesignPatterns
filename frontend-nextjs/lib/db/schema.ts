@@ -5,7 +5,7 @@ export type OrderItem = { name: string; qty: number; price: number; variation?: 
 export type Variation = { name: string; price: number }
 
 export const tableStatuses = ['available', 'occupied', 'reserved', 'cleaning'] as const
-export const orderStatuses = ['pending', 'brewing', 'ready', 'completed'] as const
+export const orderStatuses = ['pending', 'brewing', 'ready', 'completed', 'cancelled'] as const
 export const paymentMethods = ['cash', 'qr', 'card'] as const
 export const orderTypes = ['dine-in', 'pickup', 'delivery'] as const
 

@@ -17,6 +17,9 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -112,6 +115,58 @@ class AuthTest {
                 "{\"email\":\"b@example.com\",\"name\":\"B\",\"password\":\"short1\"}").statusCode());
         assertEquals(400, call("POST", "/api/auth/register", null,
                 "{\"email\":\"b@example.com\",\"name\":\"B\",\"password\":\"onlyletters\"}").statusCode());
+    }
+
+    @Test
+    void customersSeeOnlyTheirReservationsIncludingLegacyEmailAndCancelledBookings() throws Exception {
+        String admin = login(ADMIN_EMAIL, ADMIN_PASSWORD);
+        int ownerId = createUser(admin, "booking-owner@example.com", "customer");
+        int otherId = createUser(admin, "booking-other@example.com", "customer");
+        String owner = login("booking-owner@example.com", "Staff1234");
+        String other = login("booking-other@example.com", "Staff1234");
+        String template = "{\"customer\":\"Booking test\",\"contact\":\"0901234567\",\"tableId\":3,\"guests\":2,\"dateTime\":\"%s\",\"email\":\"%s\",\"userId\":%d}";
+        String slot = LocalDate.now().plusDays(2).atTime(10, 0).toInstant(ZoneOffset.ofHours(7)).toString();
+        HttpResponse<String> created = call("POST", "/api/reservations", owner,
+                template.formatted(slot, "booking-other@example.com", otherId));
+        assertEquals(201, created.statusCode(), created.body());
+        String ownCode = data(created).get("id").toString();
+        var reservations = DaoFactory.getInstance().getReservationDao();
+        assertEquals(ownerId, reservations.findByReservationCode(ownCode).orElseThrow().getUserId());
+        reservations.updateStatus(reservations.findByReservationCode(ownCode).orElseThrow().getId(),
+                com.dalatcafe.model.ReservationStatus.CANCELLED);
+
+        String legacySlot = LocalDate.now().plusDays(2).atTime(12, 0).toInstant(ZoneOffset.ofHours(7)).toString();
+        HttpResponse<String> legacy = call("POST", "/api/reservations", null,
+                template.formatted(legacySlot, "BOOKING-OWNER@example.com", otherId));
+        assertEquals(201, legacy.statusCode(), legacy.body());
+        String legacyCode = data(legacy).get("id").toString();
+        assertNull(reservations.findByReservationCode(legacyCode).orElseThrow().getUserId());
+
+        String otherSlot = LocalDate.now().plusDays(2).atTime(14, 0).toInstant(ZoneOffset.ofHours(7)).toString();
+        assertEquals(201, call("POST", "/api/reservations", other,
+                template.formatted(otherSlot, "booking-owner@example.com", ownerId)).statusCode());
+
+        assertEquals(401, call("GET", "/api/reservations/mine", null, null).statusCode());
+        assertEquals(403, call("GET", "/api/reservations", owner, null).statusCode());
+        HttpResponse<String> history = call("GET", "/api/reservations/mine?userId=" + otherId, owner, null);
+        assertEquals(200, history.statusCode(), history.body());
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> rows = (List<Map<String, Object>>) ((Map<?, ?>) Json.parse(history.body())).get("data");
+        assertEquals(List.of(legacyCode, ownCode), rows.stream().map(row -> row.get("id")).toList());
+        assertEquals("Đã hủy", rows.get(1).get("status"));
+        assertEquals(405, call("POST", "/api/reservations/mine", owner, "{}").statusCode());
+
+        var requests = new java.util.ArrayList<java.util.concurrent.CompletableFuture<HttpResponse<String>>>();
+        for (int i = 0; i < 16; i++) {
+            HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + server.getPort() + "/api/reservations/mine"))
+                    .header("Authorization", "Bearer " + (i % 2 == 0 ? owner : other)).GET().build();
+            requests.add(client.sendAsync(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8)));
+        }
+        for (int i = 0; i < requests.size(); i++) {
+            HttpResponse<String> response = requests.get(i).get(10, java.util.concurrent.TimeUnit.SECONDS);
+            assertEquals(200, response.statusCode(), response.body());
+            assertEquals(i % 2 == 0, response.body().contains(ownCode), "Concurrent accounts must keep separate histories");
+        }
     }
 
     @Test
