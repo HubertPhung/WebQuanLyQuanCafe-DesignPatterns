@@ -11,6 +11,7 @@ Tài liệu gộp danh mục tính năng, lịch sử 15 issue và quy trình l�
 - 🟢 **Đã triển khai**: có trong code ở `master`.
 - 🟡 **Một phần**: chỉ có ở một phía (frontend hoặc Java), hoặc chưa nối với nhau.
 - ⚪ **Chưa triển khai**: mới có trong thiết kế.
+- ⛔ **Đã gỡ**: từng có, đã bỏ khỏi giao diện theo yêu cầu.
 - 🔷 **Mở rộng**: chỉ trình bày trong báo cáo học thuật, không nằm trong 15 issue.
 
 Cột *Frontend* là `frontend-nextjs/`, cột *Java* là `backend-java/`. Cột *Tích hợp* cho biết frontend đã gọi sang Java hay chưa (xem [ARCHITECTURE §2](ARCHITECTURE.md#2-tích-hợp-frontend-nextjs--backend-java)).
@@ -24,8 +25,8 @@ Cột *Frontend* là `frontend-nextjs/`, cột *Java* là `backend-java/`. Cột
 | `FEAT-AUTH-02` | Phân quyền 4 vai trò (CUSTOMER < STAFF < MANAGER < ADMIN) và quản lý tài khoản | — | 🟢 `proxy.ts`, `requirePageRole`, `/admin/users` | 🟢 `SimpleAuthFilter` (Bearer), `/api/users` | 🟢 vai trò đọc lại từ tài khoản mỗi request |
 | `FEAT-AUTH-03` | Cấu hình quán toàn cục (07:00–22:00, 10.000đ = 1 điểm, tự huỷ 30 phút) | **Singleton** | 🟢 `admin/settings` + `store-settings-form.tsx` | 🟢 `SystemConfigManager`, `GET/PUT /api/config` | 🟢 (tự huỷ chưa có tác vụ chạy) |
 | `FEAT-AUTH-04` | Giao diện sáng/tối | — | 🟢 `theme-provider` | — | — |
-| `FEAT-AUTH-05` | Hồ sơ & chức danh nhân sự | — | 🟢 `staff-management.tsx` | ⚪ | ⚪ |
-| `FEAT-AUTH-06` | Lịch ca làm việc | — | 🟢 `schedule-management.tsx` | ⚪ | ⚪ |
+| `FEAT-AUTH-05` | Hồ sơ & chức danh nhân sự | — | ⛔ Đã gỡ (tài khoản nhân viên quản lý ở `/admin/users`) | — | — |
+| `FEAT-AUTH-06` | Lịch ca làm việc | — | ⛔ Đã gỡ | — | — |
 
 ### 1.2. Storefront & Giỏ hàng
 
@@ -80,8 +81,8 @@ Cột *Frontend* là `frontend-nextjs/`, cột *Java* là `backend-java/`. Cột
 
 | Mã | Tính năng | Pattern | Frontend | Java | Tích hợp |
 | :--- | :--- | :---: | :---: | :---: | :---: |
-| `FEAT-INV-01` | Danh sách tồn kho & menu | — | 🟢 `inventory-table.tsx` | 🟢 `IMenuDao` | ⚪ |
-| `FEAT-INV-02` | Cảnh báo sắp hết hàng | — | 🟢 `inventory-table.tsx` | 🟢 `MenuItem` | — |
+| `FEAT-INV-01` | Danh sách tồn kho & menu | — | 🟢 `menu-management.tsx` (trang Kho riêng đã gỡ) | 🟢 `IMenuDao` | ⚪ |
+| `FEAT-INV-02` | Cảnh báo sắp hết hàng | — | 🟢 `menu-management.tsx`, chuông thông báo admin | 🟢 `MenuItem` | — |
 | `FEAT-INV-03` | Bật/tắt bán món | — | 🟢 `setItemInStock` | 🟢 `PATCH /api/menu/{id}/stock` | 🟢 ghép theo tên món |
 | `FEAT-INV-04` | Thêm món mới | — | 🟢 `add-item-dialog.tsx` | 🟢 `POST /api/menu` (MANAGER) | 🟢 |
 | `FEAT-CRM-01` | Xếp hạng khách hàng | — | 🟢 `admin/customers` (điểm, hạng) | 🟢 `GET /api/customers` | 🟢 tổng hợp đơn cục bộ khi Java tắt |

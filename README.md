@@ -6,7 +6,7 @@
 ![Java SE 17](https://img.shields.io/badge/Backend-Pure%20Java%20SE%2017-orange?style=for-the-badge&logo=openjdk)
 ![Design Patterns](https://img.shields.io/badge/Architecture-9%20GoF%20Patterns-success?style=for-the-badge)
 [![CI/CD Pipeline](https://github.com/HubertPhung/WebQuanLyQuanCafe-DesignPatterns/actions/workflows/ci.yml/badge.svg)](https://github.com/HubertPhung/WebQuanLyQuanCafe-DesignPatterns/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/Tests-256%20JUnit%20%2B%2040%20UI-brightgreen?style=for-the-badge)
+![Tests](https://img.shields.io/badge/Tests-256%20JUnit%20%2B%2038%20UI-brightgreen?style=for-the-badge)
 
 ---
 
@@ -129,7 +129,7 @@ Tài khoản nằm ở backend Java, nên **cần chạy Java** để đăng nh�
 ## 6. Kiểm thử
 
 ```bash
-cd frontend-nextjs && npm test     # 40 test UI/UX (tự khởi động next dev nếu chưa có server)
+cd frontend-nextjs && npm test     # 38 test UI/UX (tự khởi động next dev nếu chưa có server)
 cd backend-java && mvn clean test  # 256 test JUnit 5 (kể cả JDBC trên PostgreSQL nhúng)
 ```
 Danh mục test, báo cáo E2E và các giới hạn đã biết: [docs/TESTING.md](docs/TESTING.md).

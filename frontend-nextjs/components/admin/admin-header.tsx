@@ -151,7 +151,7 @@ export function AdminHeader({
                 <DropdownMenuItem
                   key={item.id}
                   className="h-10 rounded-lg px-3 gap-2.5 hover:bg-stone-100 cursor-pointer text-xs whitespace-nowrap"
-                  onClick={() => router.push(`/admin/inventory?q=${encodeURIComponent(item.name)}`)}
+                  onClick={() => router.push('/admin/menu')}
                 >
                   <span className="truncate font-medium text-amber-800">Cảnh báo kho: {item.name}</span>
                   <span className="ml-auto text-xs font-bold text-red-600 tabular-nums whitespace-nowrap">

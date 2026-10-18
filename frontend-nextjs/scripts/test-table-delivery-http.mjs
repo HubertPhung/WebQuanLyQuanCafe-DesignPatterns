@@ -39,7 +39,7 @@ try {
   }
   const staff = await cookie('STAFF')
   const customer = await cookie('CUSTOMER', 2)
-  for (const pathname of ['/admin', '/admin/tables', '/admin/staff', '/admin/schedule', '/checkout']) {
+  for (const pathname of ['/admin', '/admin/tables', '/checkout']) {
     const response = await fetch(base + pathname, { headers: { Cookie: manager } })
     assert.equal(response.status, 200, pathname)
     const html = await response.text()
