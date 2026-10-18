@@ -70,15 +70,17 @@ class ReservationHandlerTest {
 
     @Test
     void twoBookingsForTheSameSlotCannotBothPassTheChain() throws Exception {
-        // The first booking has read the table's schedule but not saved yet when the second arrives.
+        // Pause a scan before saving; either request may reach the booking lock first.
         reservations.pauseNextScan();
         CompletableFuture<HttpResponse<String>> first = book();
         assertTrue(reservations.scanPaused.await(5, TimeUnit.SECONDS));
         HttpResponse<String> second = book().get(10, TimeUnit.SECONDS);
 
-        assertEquals(201, first.get(10, TimeUnit.SECONDS).statusCode());
-        assertEquals(400, second.statusCode(), second.body());
-        assertTrue(second.body().contains("CHAIN_VALIDATION_FAILED"));
+        HttpResponse<String> firstResponse = first.get(10, TimeUnit.SECONDS);
+        assertEquals(List.of(201, 400), List.of(firstResponse.statusCode(), second.statusCode())
+                .stream().sorted().toList(), firstResponse.body() + " / " + second.body());
+        HttpResponse<String> rejected = firstResponse.statusCode() == 400 ? firstResponse : second;
+        assertTrue(rejected.body().contains("CHAIN_VALIDATION_FAILED"), rejected.body());
         assertEquals(1, reservations.findAll().stream()
                 .filter(r -> r.getTableId() == TABLE_ID && SLOT.equals(r.getDateTime()))
                 .count());

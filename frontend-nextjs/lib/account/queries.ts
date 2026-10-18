@@ -2,6 +2,7 @@ import 'server-only'
 import { findCustomerByPhone } from '@/lib/api-client'
 import { joinContactOrders } from '@/lib/admin/queries'
 import { listContactsForUser } from '@/lib/orders/online-contacts'
+import { isFirstOnlineOrderAvailable } from '@/lib/orders/first-online-order'
 import type { Session } from '@/lib/auth/session'
 import type { Rank } from './loyalty'
 
@@ -30,10 +31,12 @@ export type AccountOverview = {
   member: AccountMember | null
   // Java could not be asked, so whether the phone is a member is unknown.
   memberUnknown: boolean
+  welcomeVoucherEligible: boolean
 }
 
 export async function getAccountOverview(session: Session): Promise<AccountOverview> {
   const contacts = await listContactsForUser(session.userId)
+  const welcomeVoucherEligible = await isFirstOnlineOrderAvailable(session.userId).catch(() => false)
   const orders = (await joinContactOrders(contacts)).map<AccountOrder>((order) => ({
     orderCode: order.orderCode,
     createdAt: new Date(order.createdAt).toISOString(),
@@ -68,6 +71,7 @@ export async function getAccountOverview(session: Session): Promise<AccountOverv
     }
   }
   return {
+    welcomeVoucherEligible,
     orders,
     addresses: [...addresses.values()],
     phone: member?.phone ?? phones[0] ?? null,

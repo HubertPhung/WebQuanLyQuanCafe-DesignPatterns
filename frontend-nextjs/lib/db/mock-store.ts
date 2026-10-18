@@ -1,4 +1,5 @@
 import type { FloorTable, MenuItem, Order, OrderStatus, TableStatus, Variation, OrderItem, PaymentMethod, OrderType } from './schema'
+import { shippingFee } from '../storefront/delivery'
 import { customizationSurcharge, describeCustomizations, type PosCustomization } from '../admin/customizations'
 import {
   DEFAULT_CLOSING_TIME,
@@ -577,6 +578,7 @@ export const reservationStatuses = ['Chờ xác nhận', 'Đã đặt', 'Hoàn t
 export type ReservationStatusLabel = (typeof reservationStatuses)[number]
 
 export type MockReservation = {
+  tableIds?: number[]
   code: string
   customer: string
   contact: string
@@ -677,8 +679,37 @@ export function getMockMenuItems(): MenuItem[] {
 }
 
 export function getMockTables(): FloorTable[] {
+  expireMockNoShows()
   const store = getStore()
-  return [...store.tables].sort((a, b) => a.id - b.id)
+  return store.tables.filter(table => !table.deletedAt).sort((a, b) => a.id - b.id)
+}
+
+export function saveMockTable(input: { name: string; seats: number; zone: string; imageUrl: string | null }, id?: number): FloorTable {
+  const store = getStore()
+  if (store.tables.some(t => !t.deletedAt && t.id !== id && t.name.toLowerCase() === input.name.toLowerCase())) throw new Error('Tên bàn đã tồn tại.')
+  let table = id === undefined ? undefined : store.tables.find(t => t.id === id && !t.deletedAt)
+  if (id !== undefined && !table) throw new Error('Không tìm thấy bàn.')
+  if (table && input.seats < table.guestCount) throw new Error('Số chỗ nhỏ hơn số khách đang ngồi.')
+  if (id !== undefined && store.reservations.some(r => {
+    const ids = r.tableIds ?? [r.tableId]
+    return ids.includes(id) && (r.status === 'Chờ xác nhận' || r.status === 'Đã đặt')
+      && r.guests > ids.reduce<number>((sum, selected) => sum + (selected === id ? input.seats : store.tables.find(table => table.id === selected)?.seats ?? 0), 0)
+  })) throw new Error('Số chỗ nhỏ hơn số khách đã đặt bàn.')
+  if (!table) {
+    table = { id: Math.max(0, ...store.tables.map(t => t.id)) + 1, ...input, status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date() }
+    store.tables.push(table)
+  } else Object.assign(table, input, { updatedAt: new Date() })
+  return { ...table }
+}
+
+export function deleteMockTable(id: number): void {
+  const store = getStore()
+  const table = store.tables.find(t => t.id === id && !t.deletedAt)
+  if (!table) throw new Error('Không tìm thấy bàn.')
+  const openOrder = store.orders.some(order => (order.tableIds?.length ? order.tableIds : [order.tableId]).includes(id) && (order.status !== 'completed' || order.paymentStatus === 'unpaid'))
+  const booking = store.reservations.some(reservation => (reservation.tableIds ?? [reservation.tableId]).includes(id) && ['Chờ xác nhận', 'Đã đặt'].includes(reservation.status))
+  if (table.status === 'occupied' || table.status === 'reserved' || openOrder || booking) throw new Error('Bàn còn khách, đơn chưa kết thúc/thanh toán hoặc lịch đặt chưa xử lý. Vui lòng xử lý trước khi xóa.')
+  table.deletedAt = new Date()
 }
 
 export function getMockActiveOrders(): Order[] {
@@ -713,12 +744,15 @@ export function updateMockOrderStatus(orderId: number, status: OrderStatus): { o
   order.completedAt = status === 'completed' ? new Date() : null
   // Same rule as the Java TableStatusSyncObserver: a finished dine-in order frees its table for cleaning.
   if (status === 'completed' && order.tableId) {
-    const table = store.tables.find((t) => t.id === order.tableId)
-    if (table) {
+    for (const id of order.tableIds?.length ? order.tableIds : [order.tableId]) {
+      const other = store.orders.some(other => other.id !== order.id && (other.tableIds?.length ? other.tableIds : [other.tableId]).includes(id) && other.status !== 'completed')
+      const table = store.tables.find((t) => t.id === id)
+      if (table && !other) {
       table.status = 'cleaning'
       table.guestCount = 0
       table.occupiedSince = null
       table.updatedAt = new Date()
+      }
     }
   }
   return { ok: true }
@@ -732,9 +766,22 @@ export function markMockOrderPaid(orderId: number): { ok: boolean; error?: strin
   return { ok: true }
 }
 
+export function settleMockTables(tableIds: number[], method: PaymentMethod, tendered?: number, expectedTotal?: number) {
+  const store = getStore()
+  const orders = store.orders.filter(order => order.orderType === 'dine-in' && order.paymentStatus === 'unpaid'
+    && (order.tableIds?.length ? order.tableIds : [order.tableId]).some(id => id !== null && tableIds.includes(id)))
+  if (tableIds.some(id => !orders.some(order => (order.tableIds?.length ? order.tableIds : [order.tableId]).includes(id)))) throw new Error('Một bàn không còn đơn chưa thanh toán.')
+  if (orders.some(order => (order.tableIds?.length ? order.tableIds : [order.tableId]).some(id => id !== null && !tableIds.includes(id)))) throw new Error('Cần chọn đủ các bàn thuộc cùng một phiếu đặt bàn.')
+  const total = orders.reduce((sum, order) => sum + order.total, 0)
+  if (expectedTotal !== undefined && Math.abs(total - expectedTotal) > 0.01) throw new Error('Hóa đơn vừa thay đổi. Vui lòng kiểm tra lại.')
+  if (method === 'cash' && (tendered === undefined || !Number.isFinite(tendered) || tendered < total)) throw new Error('Tiền khách đưa chưa đủ hóa đơn gộp.')
+  for (const order of orders) { order.paymentMethod = method; order.paymentStatus = 'paid' }
+  return { transactionId: `LOCAL-GROUP-${crypto.randomUUID()}`, tableIds, total, orders: orders.map(order => ({ orderCode: order.orderCode, status: order.status, paymentStatus: order.paymentStatus, total: order.total })) }
+}
+
 export function updateMockTableStatus(tableId: number, status: TableStatus, guestCount = 0): { ok: boolean; error?: string } {
   const store = getStore()
-  const table = store.tables.find((t) => t.id === tableId)
+  const table = store.tables.find((t) => t.id === tableId && !t.deletedAt)
   if (!table) return { ok: false, error: 'Table not found.' }
   table.status = status
   table.guestCount = status === 'occupied' ? Math.max(guestCount, 1) : 0
@@ -804,6 +851,7 @@ export function cashTenderError(input: Pick<NewMockOrderInput, 'paid' | 'payment
 
 export function createMockOrder(input: NewMockOrderInput): { ok: boolean; message?: string; error?: string } {
   const store = getStore()
+  if (input.tableId != null && !store.tables.some(table => table.id === input.tableId && !table.deletedAt)) return { ok: false, error: 'Bàn không còn phục vụ.' }
   const byId = new Map(store.menuItems.map((item) => [item.id, item]))
 
   const items: OrderItem[] = []
@@ -825,7 +873,7 @@ export function createMockOrder(input: NewMockOrderInput): { ok: boolean; messag
   }
 
   const subtotal = input.totals?.subtotal ?? Math.round(items.reduce((s, it) => s + it.price * it.qty, 0) * 100) / 100
-  const total = input.totals?.total ?? Math.round(subtotal * (1 + TAX_RATE) * 100) / 100
+  const total = input.totals?.total ?? Math.round(subtotal * (1 + TAX_RATE) * 100) / 100 + shippingFee(input.orderType)
   const tenderError = cashTenderError(input, total)
   if (tenderError) return { ok: false, error: tenderError }
   const shortStock = input.javaSold ? null : shortStockError([...new Set(sold.map(({ item }) => item))], quantitiesOf(input.lines))
@@ -866,12 +914,31 @@ export function createMockOrder(input: NewMockOrderInput): { ok: boolean; messag
 
 export type NewMockReservationInput = Omit<MockReservation, 'code' | 'status' | 'tableName' | 'preOrders' | 'tableId'> & {
   tableId: number
+  preOrders?: MockReservation['preOrders']
+}
+
+export function expireMockNoShows(now = Date.now()): number {
+  const store = getStore()
+  let expired = 0
+  for (const reservation of store.reservations) {
+    if ((reservation.status !== 'Chờ xác nhận' && reservation.status !== 'Đã đặt') || now < reservation.dateTime.getTime() + 15 * 60_000) continue
+    reservation.status = 'Đã hủy'
+    expired++
+    for (const id of reservation.tableIds ?? (reservation.tableId ? [reservation.tableId] : [])) {
+      const another = store.reservations.some(other => (other.tableIds ?? [other.tableId]).includes(id) && (other.status === 'Chờ xác nhận' || other.status === 'Đã đặt') && other.dateTime.getTime() < now + 2 * 60 * 60_000)
+      const order = store.orders.some(order => (order.tableIds?.length ? order.tableIds : [order.tableId]).includes(id) && order.status !== 'completed')
+      const table = store.tables.find(table => table.id === id)
+      if (table?.status === 'reserved' && !another && !order) updateMockTableStatus(id, 'available')
+    }
+  }
+  return expired
 }
 
 // Local stand-in for POST /api/reservations while the Java backend is offline. It repeats the Java
 // Chain of Responsibility (time, opening hours, guests, table availability) with the Java defaults,
 // so a booking stored here would also pass Java.
 export function createMockReservation(input: NewMockReservationInput): { ok: boolean; code?: string; error?: string } {
+  expireMockNoShows()
   const store = getStore()
   if (hasReservationTimePassed(input.dateTime)) return { ok: false, error: 'Không thể đặt bàn cho thời điểm đã qua.' }
   if (!isWithinDefaultOperatingHours(input.dateTime)) {
@@ -880,18 +947,21 @@ export function createMockReservation(input: NewMockReservationInput): { ok: boo
   if (input.guests > DEFAULT_MAX_RESERVATION_GUESTS) {
     return { ok: false, error: `Mỗi phiếu nhận tối đa ${DEFAULT_MAX_RESERVATION_GUESTS} khách.` }
   }
-  const table = store.tables.find((t) => t.id === input.tableId)
-  if (!table) return { ok: false, error: 'Table not found.' }
-  if (input.guests > table.seats) return { ok: false, error: `${table.name} seats at most ${table.seats} guests.` }
+  const ids = input.tableIds ?? [input.tableId]
+  if (!ids.length || ids.length > 10 || new Set(ids).size !== ids.length || ids.some(id => !Number.isInteger(id) || id < 1)) return { ok: false, error: 'Chọn từ 1 đến 10 bàn khác nhau.' }
+  const tables = ids.map(id => store.tables.find(table => table.id === id && !table.deletedAt))
+  if (tables.some(table => !table)) return { ok: false, error: 'Table not found.' }
+  const capacity = tables.reduce((sum, table) => sum + table!.seats, 0)
+  if (input.guests < 1 || input.guests > capacity) return { ok: false, error: 'Số khách vượt tổng số chỗ các bàn đã chọn.' }
   const taken = store.reservations.some(
-    (r) => r.tableId === input.tableId && r.status !== 'Đã hủy' && reservationSlotsOverlap(r.dateTime, input.dateTime),
+    (r) => ids.some(id => (r.tableIds ?? [r.tableId]).includes(id)) && r.status !== 'Đã hủy' && reservationSlotsOverlap(r.dateTime, input.dateTime),
   )
   if (taken) return { ok: false, error: 'Bàn đã được đặt trong khung giờ này.' }
 
   const localCount = store.reservations.filter((r) => r.code.startsWith('RES-L')).length
   // The L marks a local booking so it is never mistaken for a backend-issued RES-0001.
   const code = `RES-L${String(localCount + 1).padStart(4, '0')}`
-  store.reservations.push({ ...input, code, tableName: table.name, status: 'Chờ xác nhận', preOrders: [] })
+  store.reservations.push({ ...input, tableId: ids[0], tableIds: ids, code, tableName: tables.map(table => table!.name).join(', '), status: 'Chờ xác nhận', preOrders: input.preOrders ?? [] })
   return { ok: true, code }
 }
 
@@ -903,10 +973,12 @@ export function updateMockReservationStatus(code: string, status: ReservationSta
 }
 
 export function getMockReservations(): MockReservation[] {
+  expireMockNoShows()
   return [...getStore().reservations].sort((a, b) => b.dateTime.getTime() - a.dateTime.getTime())
 }
 
 export type ExternalOrderInput = {
+  tableIds?: number[]
   orderCode: string
   customer: string
   tableId: number | null
@@ -925,6 +997,7 @@ export function createMockOrderFromItems(input: ExternalOrderInput): { ok: boole
     orderCode: input.orderCode,
     customer: input.customer.trim().slice(0, 60) || 'Walk-in',
     tableId: input.tableId,
+    tableIds: input.tableIds,
     orderType: 'dine-in',
     items: input.items,
     subtotal,
@@ -935,7 +1008,10 @@ export function createMockOrderFromItems(input: ExternalOrderInput): { ok: boole
     createdAt: new Date(),
     completedAt: null,
   })
-  if (input.tableId) updateMockTableStatus(input.tableId, 'occupied', input.guests ?? 1)
+  for (const id of input.tableIds ?? (input.tableId ? [input.tableId] : [])) {
+    const table = store.tables.find(table => table.id === id)
+    updateMockTableStatus(id, 'occupied', Math.min(input.guests ?? 1, table?.seats ?? 1))
+  }
   return { ok: true, message: `Order ${input.orderCode} opened for ${input.customer}.` }
 }
 
@@ -943,6 +1019,7 @@ export function createMockOrderFromItems(input: ExternalOrderInput): { ok: boole
 // order code and the pre-ordered dishes are copied, so the booking itself is never modified
 // except for its status.
 export function transferMockReservation(code: string): { ok: boolean; orderCode?: string; error?: string } {
+  expireMockNoShows()
   const store = getStore()
   const reservation = store.reservations.find((r) => r.code === code)
   if (!reservation) return { ok: false, error: 'Reservation not found.' }
@@ -954,6 +1031,7 @@ export function transferMockReservation(code: string): { ok: boolean; orderCode?
     orderCode: reservation.code,
     customer: reservation.customer || reservation.contact,
     tableId: reservation.tableId,
+    tableIds: reservation.tableIds,
     items: reservation.preOrders.map((item) => ({ name: item.name, qty: item.qty, price: item.price })),
     guests: reservation.guests,
   })

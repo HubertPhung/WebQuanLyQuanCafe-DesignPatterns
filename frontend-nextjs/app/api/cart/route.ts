@@ -5,6 +5,7 @@ import { validateVoucher } from '@/lib/api-client'
 import { findMenuVariant } from '@/lib/storefront/menu-catalog'
 import { findVoucher, voucherDiscount } from '@/lib/storefront/vouchers'
 import { getSession } from '@/lib/auth/session'
+import { isFirstOnlineOrderAvailable } from '@/lib/orders/first-online-order'
 
 const isShopifyConfigured = Boolean(process.env.SHOPIFY_STORE_DOMAIN && process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN)
 
@@ -13,6 +14,10 @@ const OPTION_KEYS = ['Milk', 'Sugar', 'Sweetness', 'Ice']
 // Java's VoucherCatalog decides whether a code exists (POST /api/vouchers/validate, the same
 // Strategy checkout applies); without Java, the copy of that catalog in lib/storefront/vouchers.
 async function isVoucherApplicable(code: string, subtotal: number): Promise<boolean> {
+  if (code.trim().toUpperCase() === 'WELCOME10') {
+    const session = await getSession()
+    if (!session || !(await isFirstOnlineOrderAvailable(session.userId))) return false
+  }
   const verdict = await validateVoucher(code, subtotal)
   if (verdict.ok) return verdict.data.valid
   return Boolean(findVoucher(code))
@@ -44,6 +49,18 @@ async function setLocalCart(cart: Cart | null) {
   })
 }
 
+async function refreshWelcomeEligibility(cart: Cart | null): Promise<Cart | null> {
+  if (!cart || isShopifyConfigured) return cart
+  for (const code of cart.discountCodes) {
+    if (code.code.trim().toUpperCase() === 'WELCOME10') {
+      const subtotal = cart.lines.nodes.reduce((sum, line) => sum + Number(line.merchandise.price.amount) * line.quantity, 0)
+      code.applicable = await isVoucherApplicable(code.code, subtotal)
+    }
+  }
+  cart.cost = calculateCost(cart.lines.nodes, cart.discountCodes)
+  return cart
+}
+
 function calculateCost(lines: Cart['lines']['nodes'], discountCodes: { code: string; applicable: boolean }[]) {
   const subtotal = lines.reduce((sum, line) => sum + Number(line.merchandise.price.amount) * line.quantity, 0)
   const discount = voucherDiscount(subtotal, discountCodes.find((d) => d.applicable)?.code)
@@ -70,7 +87,7 @@ async function currentCart(): Promise<Cart | null> {
 
 export async function GET() {
   try {
-    return NextResponse.json(await currentCart())
+    return NextResponse.json(await refreshWelcomeEligibility(await currentCart()))
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 503 })
   }
@@ -156,6 +173,7 @@ export async function POST(request: NextRequest) {
       }
 
       cart.totalQuantity = cart.lines.nodes.reduce((sum, l) => sum + l.quantity, 0)
+      await refreshWelcomeEligibility(cart)
       cart.cost = calculateCost(cart.lines.nodes, cart.discountCodes)
 
       await setLocalCart(cart)
@@ -205,6 +223,9 @@ export async function POST(request: NextRequest) {
           variables = { id: cart.id, lines: [{ id: line.id, quantity: body.quantity }] }
         }
       } else if (body.action === 'discount') {
+        if (String(body.code ?? '').trim().toUpperCase() === 'WELCOME10' && !(await isVoucherApplicable('WELCOME10', Number(cart.cost.subtotalAmount.amount)))) {
+          throw new Error('WELCOME10 chỉ áp dụng cho đơn online đầu tiên của tài khoản mới.')
+        }
         operation = 'cartDiscountCodesUpdate'
         definitions = '$id: ID!, $codes: [String!]!'
         args = 'cartId: $id, discountCodes: $codes'

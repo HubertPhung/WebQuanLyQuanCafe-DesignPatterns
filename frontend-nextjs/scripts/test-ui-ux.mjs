@@ -5,7 +5,14 @@
 
 import { createServer } from 'http'
 import { spawn, execSync } from 'child_process'
+import { existsSync } from 'node:fs'
+import { loadEnvFile } from 'node:process'
+import { fileURLToPath } from 'node:url'
 import { SignJWT } from 'jose'
+
+// Match the local Next.js server's signing key without overriding CI's environment.
+const localEnvFile = fileURLToPath(new URL('../.env.local', import.meta.url))
+if (existsSync(localEnvFile)) loadEnvFile(localEnvFile)
 
 const BASE_URL = process.env.TEST_BASE_URL || 'http://localhost:3000'
 

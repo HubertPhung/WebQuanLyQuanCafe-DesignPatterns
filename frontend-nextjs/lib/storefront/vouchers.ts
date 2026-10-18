@@ -10,7 +10,7 @@ export const VOUCHERS: StorefrontVoucher[] = [
     rate: 0.1,
     cap: 50_000,
     title: 'Giảm 10% cho đơn hàng',
-    terms: 'Giảm tối đa 50.000 đ, áp dụng cho đơn đặt online.',
+    terms: 'Giảm tối đa 50.000 đ, chỉ cho đơn online đầu tiên của tài khoản mới. Mỗi tài khoản một lần.',
   },
 ]
 

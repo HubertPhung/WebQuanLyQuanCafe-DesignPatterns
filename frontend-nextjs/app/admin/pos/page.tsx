@@ -1,6 +1,7 @@
 import { KdsBoard } from '@/components/admin/kds-board'
 import { OfflineSyncButton } from '@/components/admin/offline-sync-button'
 import { PosTerminal } from '@/components/admin/pos-terminal'
+import { GroupTablePayment } from '@/components/admin/group-table-payment'
 import { AutoRefresh, PageHeading } from '@/components/admin/shared'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { fetchConfig } from '@/lib/api-client'
@@ -35,6 +36,7 @@ export default async function PosPage({ searchParams }: { searchParams: Promise<
           </TabsTrigger>
         </TabsList>
         <TabsContent value="pos">
+          <GroupTablePayment tables={tables} orders={activeOrders} />
           <PosTerminal menu={menu} tables={tables} pointValue={config.ok ? config.data.pointRedeemValueVnd : undefined} />
         </TabsContent>
         <TabsContent value="kitchen">

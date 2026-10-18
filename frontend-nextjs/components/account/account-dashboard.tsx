@@ -61,6 +61,7 @@ export function AccountDashboard({
   currentTab: string
   overview: AccountOverview
 }) {
+  const availableVouchers = VOUCHERS.filter(voucher => voucher.code !== 'WELCOME10' || overview.welcomeVoucherEligible)
   const copyVoucher = (code: string) => {
     navigator.clipboard.writeText(code)
     toast.success(`Đã sao chép mã ưu đãi ${code}!`)
@@ -165,7 +166,7 @@ export function AccountDashboard({
                   <Gift className="size-4" />
                   <span>Voucher của tôi</span>
                 </div>
-                <Badge className="bg-amber-100 text-amber-800 text-[10px]">{VOUCHERS.length} mã</Badge>
+                <Badge className="bg-amber-100 text-amber-800 text-[10px]">{availableVouchers.length} mã</Badge>
               </Link>
 
               <Link
@@ -260,7 +261,8 @@ export function AccountDashboard({
                 </h3>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {VOUCHERS.map((v) => (
+                  {availableVouchers.length === 0 && <p className="text-sm text-stone-500">Chưa có voucher khả dụng. WELCOME10 chỉ dành cho đơn online đầu tiên của tài khoản mới.</p>}
+                  {availableVouchers.map((v) => (
                     <div
                       key={v.code}
                       className="rounded-xl border border-amber-200/80 bg-amber-50/40 p-4 space-y-2 relative"

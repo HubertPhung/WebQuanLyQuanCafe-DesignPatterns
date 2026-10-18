@@ -125,7 +125,7 @@ class SingletonTest {
                     () -> assertEquals(10000, config.getLoyaltyRateVndPerPoint()),
                     () -> assertEquals(1000, config.getPointRedeemValueVnd()),
                     () -> assertEquals(20, config.getMaxReservationGuests()),
-                    () -> assertEquals(30, config.getAutoCancelMinutes()),
+                    () -> assertEquals(15, config.getAutoCancelMinutes()),
                     () -> assertEquals(LocalTime.of(7, 0), config.getOpeningTime()),
                     () -> assertEquals(LocalTime.of(22, 0), config.getClosingTime())
             );

@@ -11,9 +11,13 @@ import {
   Plus,
   ShoppingBag,
   Trash2,
+  CalendarCheck,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Logo } from '@/components/brand/logo'
 import { useCartStore, formatMoneyVND } from '@/lib/store/cart-store'
+import { useReservationStore } from '@/lib/store/reservation-store'
+import { ReservationDialog } from '@/components/storefront/ReservationDialog'
 import { toast } from 'sonner'
 
 export default function CartPage() {
@@ -53,13 +57,10 @@ export default function CartPage() {
               Tiếp tục chọn cà phê
             </span>
           </Link>
-          <div className="flex items-center gap-2">
-            <div className="size-8 rounded-lg bg-[#3E2723] text-white flex items-center justify-center">
-              <Coffee className="size-4.5" />
-            </div>
-            <span className="font-extrabold text-base text-stone-900">Giỏ hàng Đà Lạt Cafe</span>
-          </div>
-          <div className="text-xs font-bold tabular-nums text-stone-600">
+          <Link href="/" className="flex items-center hover:opacity-90 transition-opacity" title="Về trang chủ Đà Lạt Cafe">
+            <Logo markClassName="size-8 sm:size-9" tagline="Chi tiết giỏ hàng" />
+          </Link>
+          <div className="text-xs font-bold tabular-nums text-stone-600 bg-stone-100 px-3 py-1.5 rounded-full border border-stone-200">
             {cart?.totalQuantity ?? 0} món
           </div>
         </div>
@@ -222,11 +223,33 @@ export default function CartPage() {
                   <span>Tiến hành đặt hàng</span>
                   <ArrowRight className="size-4" />
                 </Button>
+
+                {/* Secondary Action: Đặt bàn tại chỗ */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    const preOrders = lineItems.map((line, idx) => ({
+                      id: idx + 1,
+                      title: line.merchandise.product.title,
+                      quantity: line.quantity,
+                      price: Number(line.merchandise.price.amount) || 0,
+                    }))
+                    useReservationStore.getState().openReservation(preOrders)
+                  }}
+                  className="w-full h-11 rounded-xl border-[#B4703F]/40 bg-amber-50/60 hover:bg-amber-100/80 text-[#3E2723] font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all shadow-2xs"
+                >
+                  <CalendarCheck className="size-4 text-[#B45309]" />
+                  <span>Đặt bàn tại chỗ (Kèm {cart?.totalQuantity ?? 0} món)</span>
+                </Button>
               </div>
             </div>
           </div>
         )}
       </main>
+
+      {/* Reservation Dialog Modal */}
+      <ReservationDialog />
     </div>
   )
 }

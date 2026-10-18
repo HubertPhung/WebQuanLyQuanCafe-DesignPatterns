@@ -7,6 +7,8 @@ import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -63,6 +65,20 @@ class MenuHandlerTest {
         HttpResponse<String> response = patchStock("{\"stockQty\":4}");
 
         assertEquals(200, response.statusCode(), response.body());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "{\"change\":3,\"inStock\":\"false\"}",
+            "{\"change\":-3,\"inStock\":1}",
+            "{\"stockQty\":4,\"inStock\":{}}"
+    })
+    void invalidStockSwitchDoesNotChangeInventory(String body) throws Exception {
+        HttpResponse<String> response = patchStock(body);
+
+        assertEquals(400, response.statusCode(), response.body());
+        assertEquals(10.0, stock(), "rejected requests must not change stock");
+        assertEquals(true, menu.findById(ITEM_ID).orElseThrow().isInStock());
     }
 
     private HttpResponse<String> patchStock(String body) throws Exception {

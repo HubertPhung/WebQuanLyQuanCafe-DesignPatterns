@@ -2,13 +2,38 @@
 
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, CheckCircle2, Coffee, CreditCard, ShoppingBag, Store, Truck, User } from 'lucide-react'
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Coffee,
+  CreditCard,
+  ShoppingBag,
+  Store,
+  Truck,
+  User,
+  QrCode,
+  Check,
+  Copy,
+  Sparkles,
+  ShieldCheck,
+  ExternalLink,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { placeOnlineOrder, type OnlineOrderInput } from '@/app/admin/actions'
 import { Button } from '@/components/ui/button'
+import { Logo } from '@/components/brand/logo'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Badge } from '@/components/ui/badge'
 import { TAX_RATE } from '@/lib/admin/format'
 import { formatMoneyVND, useCartStore } from '@/lib/store/cart-store'
 import { voucherDiscount } from '@/lib/storefront/vouchers'
+import { isDaLatAddress, shippingFee } from '@/lib/storefront/delivery'
 
 type Payment = OnlineOrderInput['payment']
 type Fulfilment = OnlineOrderInput['fulfilment']
@@ -68,25 +93,78 @@ export function CheckoutForm({ account }: { account: { name: string; email: stri
   const [placed, setPlaced] = useState<Placed | null>(null)
   const [pending, startTransition] = useTransition()
 
+  // Payment Demo Modals
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false)
+  const [isCardModalOpen, setIsCardModalOpen] = useState(false)
+  const [isCopied, setIsCopied] = useState(false)
+
+  // Card demo states
+  const [cardNumber, setCardNumber] = useState('5412 7512 3412 8899')
+  const [cardHolder, setCardHolder] = useState(account?.name?.toUpperCase() || 'NGUYEN VAN AN')
+  const [cardExpiry, setCardExpiry] = useState('12/28')
+  const [cardCvv, setCardCvv] = useState('888')
+  const [isProcessingCard, setIsProcessingCard] = useState(false)
+
   const lineItems = cart?.lines?.nodes ?? []
   const subtotal = Number(cart?.cost?.subtotalAmount?.amount ?? '0')
   const voucher = cart?.discountCodes?.find((code) => code.applicable)
-  // Priced as Java's VoucherCatalog does; the server re-checks the code and Java the total.
   const discount = voucherDiscount(subtotal, voucher?.code)
   const vat = Math.round((subtotal - discount) * TAX_RATE)
-  const total = subtotal - discount + vat
+  const deliveryFee = shippingFee(fulfilment)
+  const total = subtotal - discount + vat + deliveryFee
 
-  function submit(event: React.FormEvent) {
-    event.preventDefault()
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text)
+    setIsCopied(true)
+    toast.success('Đã sao chép vào bộ nhớ tạm!')
+    setTimeout(() => setIsCopied(false), 2000)
+  }
+
+  const executePlaceOrder = (chosenPayment: Payment) => {
     startTransition(async () => {
-      const result = await placeOnlineOrder({ name, phone, email, address, note, fulfilment, payment })
+      const result = await placeOnlineOrder({ name, phone, email, address, note, fulfilment, payment: chosenPayment })
       if (!result.ok) {
         toast.error(result.error)
         return
       }
-      setPlaced({ ...result, name, payment, fulfilment })
+      setIsQrModalOpen(false)
+      setIsCardModalOpen(false)
+      setPlaced({ ...result, name, payment: chosenPayment, fulfilment })
       await fetchCart()
+      toast.success('Đơn hàng đã được xác nhận thành công!')
     })
+  }
+
+  function submit(event: React.FormEvent) {
+    event.preventDefault()
+    if (!name.trim()) {
+      toast.error('Vui lòng nhập họ và tên người nhận.')
+      return
+    }
+    if (!phone.trim()) {
+      toast.error('Vui lòng nhập số điện thoại người nhận.')
+      return
+    }
+    if (fulfilment === 'delivery' && !isDaLatAddress(address)) {
+      toast.error('Quán chỉ giao trong Đà Lạt. Vui lòng ghi Đà Lạt hoặc ĐL trong địa chỉ, hoặc chọn tự đến lấy.')
+      return
+    }
+
+    if (payment === 'vietqr') {
+      setIsQrModalOpen(true)
+    } else if (payment === 'card') {
+      setIsCardModalOpen(true)
+    } else {
+      executePlaceOrder('cod')
+    }
+  }
+
+  const handleConfirmCardPayment = () => {
+    setIsProcessingCard(true)
+    setTimeout(() => {
+      setIsProcessingCard(false)
+      executePlaceOrder('card')
+    }, 1200)
   }
 
   if (placed) {
@@ -113,7 +191,9 @@ export function CheckoutForm({ account }: { account: { name: string; email: stri
             </div>
             <div className="flex justify-between font-semibold text-stone-700">
               <span>Trạng thái:</span>
-              <span className={placed.paid ? 'text-emerald-700' : 'text-amber-800'}>{placed.paid ? 'Đã thanh toán' : 'Thanh toán khi nhận'}</span>
+              <span className={placed.paid ? 'text-emerald-700 font-bold' : 'text-amber-800'}>
+                {placed.paid ? '✓ Đã thanh toán trực tuyến' : 'Thanh toán khi nhận'}
+              </span>
             </div>
             <div className="flex justify-between border-t border-amber-200/40 pt-1 text-sm font-bold text-stone-900">
               <span>Tổng thanh toán:</span>
@@ -136,12 +216,9 @@ export function CheckoutForm({ account }: { account: { name: string; email: stri
             <ArrowLeft className="size-4 text-stone-500 transition-colors group-hover:text-stone-900" aria-hidden="true" />
             <span className="text-xs font-semibold text-stone-600 group-hover:text-stone-900">Quay lại cửa hàng</span>
           </Link>
-          <div className="flex items-center gap-2">
-            <div className="flex size-8 items-center justify-center rounded-lg bg-[#3E2723] text-white">
-              <Coffee className="size-4.5" aria-hidden="true" />
-            </div>
-            <span className="text-base font-extrabold text-stone-900">Đà Lạt Cafe Checkout</span>
-          </div>
+          <Link href="/" className="flex items-center hover:opacity-90 transition-opacity" title="Về trang chủ Đà Lạt Cafe">
+            <Logo markClassName="size-8 sm:size-9" tagline="Thanh toán an toàn" />
+          </Link>
           <span className="w-24" aria-hidden="true" />
         </div>
       </header>
@@ -182,7 +259,7 @@ export function CheckoutForm({ account }: { account: { name: string; email: stri
                   onSelect={() => setFulfilment('delivery')}
                   title="Giao hàng tận nơi"
                   hint="Trong nội thành Đà Lạt, khoảng 30–45 phút"
-                  aside={<span className="font-bold text-emerald-700">Miễn phí</span>}
+                  aside={<span className="font-bold text-emerald-700">{formatMoneyVND(shippingFee('delivery'))}</span>}
                 />
                 <Choice
                   name="fulfilment"
@@ -196,7 +273,8 @@ export function CheckoutForm({ account }: { account: { name: string; email: stri
               {fulfilment === 'delivery' && (
                 <div className="text-xs">
                   <label htmlFor="checkout-address" className="mb-1 block font-medium text-stone-500">Địa chỉ nhận hàng</label>
-                  <input id="checkout-address" required minLength={8} maxLength={200} autoComplete="street-address" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Số nhà, đường, phường tại Đà Lạt" className={inputClass} />
+                  <input id="checkout-address" required minLength={8} maxLength={200} autoComplete="street-address" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="12 Trần Phú, Phường Xuân Hương, Đà Lạt" className={inputClass} />
+                  <p className="mt-2 text-stone-500">Chỉ giao trong Đà Lạt, phí cố định 10.000đ. Địa chỉ có thể ghi Đà Lạt, Da Lat, Dalat hoặc ĐL ở bất kỳ vị trí nào.</p>
                 </div>
               )}
               <div className="text-xs">
@@ -206,14 +284,58 @@ export function CheckoutForm({ account }: { account: { name: string; email: stri
             </section>
 
             <section className="space-y-4 rounded-2xl border border-stone-200/80 bg-white p-6 shadow-xs">
-              <h3 className="flex items-center gap-2 text-base font-bold text-stone-900">
-                <CreditCard className="size-4.5 text-[#3E2723]" aria-hidden="true" />
-                <span>Phương thức thanh toán</span>
-              </h3>
+              <div className="flex items-center justify-between">
+                <h3 className="flex items-center gap-2 text-base font-bold text-stone-900">
+                  <CreditCard className="size-4.5 text-[#3E2723]" aria-hidden="true" />
+                  <span>Phương thức thanh toán</span>
+                </h3>
+              </div>
               <div className="space-y-2.5 text-xs">
-                <Choice name="payment" checked={payment === 'vietqr'} onSelect={() => setPayment('vietqr')} title="VietQR Napas 24/7" hint="Quét mã QR bằng ứng dụng ngân hàng (mô phỏng trong bản đồ án)" />
-                <Choice name="payment" checked={payment === 'card'} onSelect={() => setPayment('card')} title="Thẻ Visa / Mastercard / JCB" hint="Thanh toán thẻ (mô phỏng trong bản đồ án)" />
-                <Choice name="payment" checked={payment === 'cod'} onSelect={() => setPayment('cod')} title="Tiền mặt khi nhận hàng (COD)" hint="Thanh toán khi nhận đồ uống" />
+                <Choice
+                  name="payment"
+                  checked={payment === 'vietqr'}
+                  onSelect={() => setPayment('vietqr')}
+                  title="VietQR Napas 24/7"
+                  hint="Xem mã QR và hướng dẫn chuyển khoản"
+                  aside={
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        setIsQrModalOpen(true)
+                      }}
+                      className="text-[11px] font-bold text-[#005ba6] hover:underline flex items-center gap-1 px-2 py-1 rounded bg-sky-50"
+                    >
+                      <QrCode className="size-3.5" /> Xem QR
+                    </button>
+                  }
+                />
+                <Choice
+                  name="payment"
+                  checked={payment === 'card'}
+                  onSelect={() => setPayment('card')}
+                  title="Thẻ Visa / Mastercard / JCB"
+                  hint="Thanh toán thẻ quốc tế (Mở giao diện thẻ ảo Mastercard 3D)"
+                  aside={
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        setIsCardModalOpen(true)
+                      }}
+                      className="text-[11px] font-bold text-amber-900 hover:underline flex items-center gap-1 px-2 py-1 rounded bg-amber-50"
+                    >
+                      <CreditCard className="size-3.5" /> Xem thẻ
+                    </button>
+                  }
+                />
+                <Choice
+                  name="payment"
+                  checked={payment === 'cod'}
+                  onSelect={() => setPayment('cod')}
+                  title="Tiền mặt khi nhận hàng (COD)"
+                  hint="Thanh toán khi nhận đồ uống tận nơi"
+                />
               </div>
             </section>
           </div>
@@ -268,6 +390,7 @@ export function CheckoutForm({ account }: { account: { name: string; email: stri
                   <span>VAT {Math.round(TAX_RATE * 100)}%</span>
                   <span className="font-semibold tabular-nums text-stone-900">{formatMoneyVND(vat)}</span>
                 </div>
+                <div className="flex justify-between text-xs text-stone-500"><span>Phí giao hàng</span><span className="font-semibold text-stone-900">{formatMoneyVND(deliveryFee)}</span></div>
                 <div className="flex justify-between border-t border-stone-200/80 pt-3 text-sm font-bold text-stone-900">
                   <span>Tổng thanh toán</span>
                   <span className="text-lg font-extrabold tabular-nums text-[#3E2723]">{formatMoneyVND(total)}</span>
@@ -279,15 +402,262 @@ export function CheckoutForm({ account }: { account: { name: string; email: stri
                 disabled={pending || lineItems.length === 0}
                 className="h-12 w-full cursor-pointer rounded-xl bg-[#3E2723] text-sm font-bold text-white shadow-md transition-all hover:bg-[#2b1b18]"
               >
-                {pending ? 'Đang gửi đơn hàng...' : 'Xác nhận đặt hàng'}
+                {pending ? 'Đang gửi đơn hàng...' : payment === 'vietqr' ? 'Quét mã VietQR thanh toán' : payment === 'card' ? 'Thanh toán thẻ Mastercard' : 'Xác nhận đặt hàng (COD)'}
               </Button>
-              <p className="text-center text-[10px] leading-tight text-stone-400">
-                Tổng tiền cuối cùng do hệ thống của quán tính khi xác nhận đơn.
-              </p>
             </div>
           </div>
         </div>
       </form>
+
+      {/* 1. VIETQR PAYMENT DEMO MODAL */}
+      <Dialog open={isQrModalOpen} onOpenChange={setIsQrModalOpen}>
+        <DialogContent className="max-w-md rounded-3xl border-stone-200 bg-white p-6 text-stone-900 shadow-2xl font-sans">
+          <DialogHeader className="text-center sm:text-left">
+            <div className="flex items-center justify-between mb-1">
+              <Badge className="bg-[#005ba6] text-white text-xs px-2.5 py-0.5">
+                VietQR · Chuyển khoản tức thì
+              </Badge>
+              <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-emerald-500 animate-pulse" /> Đang chờ quét mã
+              </span>
+            </div>
+            <DialogTitle className="text-xl font-bold text-stone-900">
+              Quét mã QR để thanh toán
+            </DialogTitle>
+            <DialogDescription className="text-xs text-stone-500">
+              Mở ứng dụng ngân hàng bất kỳ (Vietcombank, MBBank, Techcombank, Momo, v.v.) và quét mã bên dưới:
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col items-center justify-center py-2">
+            <div className="relative rounded-2xl border-2 border-[#005ba6]/30 bg-slate-50 p-4 shadow-sm flex flex-col items-center w-full">
+              {/* Simulated QR Box */}
+              <div className="size-48 bg-white border border-slate-200 rounded-xl p-2 flex items-center justify-center shadow-inner relative">
+                <svg className="size-full text-slate-800" viewBox="0 0 100 100" fill="currentColor">
+                  <path d="M10 10 h25 v25 h-25 z M15 15 v15 h15 v-15 z M19 19 h7 v7 h-7 z" />
+                  <path d="M65 10 h25 v25 h-25 z M70 15 v15 h15 v-15 z M74 19 h7 v7 h-7 z" />
+                  <path d="M10 65 h25 v25 h-25 z M15 70 v15 h15 v-15 z M19 74 h7 v7 h-7 z" />
+                  <rect x="42" y="10" width="16" height="6" />
+                  <rect x="42" y="22" width="6" height="18" />
+                  <rect x="52" y="24" width="8" height="8" />
+                  <rect x="10" y="42" width="8" height="16" />
+                  <rect x="24" y="42" width="16" height="6" />
+                  <rect x="42" y="42" width="16" height="16" />
+                  <rect x="65" y="42" width="10" height="12" />
+                  <rect x="80" y="42" width="10" height="24" />
+                  <rect x="42" y="65" width="8" height="25" />
+                  <rect x="56" y="70" width="14" height="8" />
+                  <rect x="56" y="82" width="24" height="8" />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="size-9 rounded-full bg-white shadow-md flex items-center justify-center border border-stone-200">
+                    <Coffee className="size-5 text-[#3E2723]" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-3 text-center w-full">
+                <p className="text-xs font-semibold text-stone-700">Ngân hàng TMCP Ngoại Thương (Vietcombank)</p>
+                <div className="mt-1 flex items-center justify-center gap-1.5">
+                  <span className="font-mono text-sm font-bold text-stone-900 tracking-wider">
+                    0123 4567 8999
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard('012345678999')}
+                    className="p-1 hover:bg-stone-200 rounded text-stone-600 transition-colors cursor-pointer"
+                    title="Sao chép số tài khoản"
+                  >
+                    {isCopied ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5" />}
+                  </button>
+                </div>
+                <p className="text-[11px] text-stone-500 mt-0.5">Chủ TK: CONG TY TNHH DA LAT CAFE</p>
+                <div className="mt-2.5 pt-2 border-t border-slate-200/80 flex items-center justify-between text-xs px-2">
+                  <span className="text-stone-500">Số tiền cần trả:</span>
+                  <span className="text-base font-extrabold text-[#3E2723] tabular-nums">
+                    {formatMoneyVND(total)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <p className="mt-3 text-center text-[11px] text-stone-500 leading-relaxed">
+              Chưa kết nối xác nhận giao dịch ngân hàng. Nút xác nhận chỉ tạo đơn thử nghiệm, không xác minh tiền đã chuyển.
+            </p>
+          </div>
+
+          <div className="mt-1 flex flex-col gap-2">
+            <Button
+              type="button"
+              disabled={pending}
+              onClick={() => executePlaceOrder('vietqr')}
+              className="w-full h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md cursor-pointer transition-all"
+            >
+              {pending ? 'Đang xác nhận...' : '✓ Tôi đã chuyển khoản thành công'}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setIsQrModalOpen(false)}
+              className="w-full text-xs text-stone-600 cursor-pointer"
+            >
+              Quay lại chỉnh sửa đơn hàng
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 2. MASTERCARD / VISA PAYMENT DEMO MODAL */}
+      <Dialog open={isCardModalOpen} onOpenChange={setIsCardModalOpen}>
+        <DialogContent className="max-w-md rounded-3xl border-stone-200 bg-white p-6 text-stone-900 shadow-2xl font-sans">
+          <DialogHeader className="text-center sm:text-left">
+            <div className="flex items-center justify-between mb-1">
+              <Badge className="bg-amber-800 text-amber-100 text-xs px-2.5 py-0.5">
+                Mastercard · Global Pay
+              </Badge>
+            </div>
+            <DialogTitle className="text-xl font-bold text-stone-900">
+              Thanh toán thẻ Mastercard / Visa
+            </DialogTitle>
+            <DialogDescription className="text-xs text-stone-500">
+              Chưa kết nối cổng thanh toán thẻ. Chỉ dùng thông tin mẫu; dữ liệu này không được gửi tới ngân hàng.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* 3D Realistic Virtual Mastercard Graphic */}
+          <div className="relative h-44 w-full rounded-2xl bg-gradient-to-tr from-stone-950 via-[#2c1b18] to-[#4E342E] p-5 text-white shadow-xl ring-1 ring-white/10 overflow-hidden font-mono flex flex-col justify-between my-2">
+            <div className="absolute -right-8 -top-8 size-32 rounded-full bg-amber-500/10 blur-xl pointer-events-none" />
+            <div className="absolute -left-8 -bottom-8 size-32 rounded-full bg-red-500/10 blur-xl pointer-events-none" />
+
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {/* Metallic Chip */}
+                <div className="size-7 rounded-sm bg-gradient-to-br from-amber-200 via-amber-400 to-amber-600 p-0.5 shadow-inner">
+                  <div className="size-full border border-amber-900/40 rounded-xs grid grid-cols-2 gap-0.5" />
+                </div>
+                <span className="text-stone-400 text-[10px] tracking-widest font-sans">CONTACTLESS</span>
+              </div>
+              {/* Mastercard interlocking circles */}
+              <div className="flex items-center -space-x-2">
+                <div className="size-6 rounded-full bg-[#EB001B] opacity-95 shadow-sm" />
+                <div className="size-6 rounded-full bg-[#F79E1B] opacity-95 shadow-sm" />
+              </div>
+            </div>
+
+            <div>
+              <p className="text-stone-400 text-[9px] uppercase font-sans tracking-wider">Card Number</p>
+              <p className="text-base sm:text-lg font-bold tracking-widest text-amber-50 drop-shadow">
+                {cardNumber || '•••• •••• •••• ••••'}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between text-xs">
+              <div>
+                <p className="text-stone-400 text-[8px] uppercase font-sans">Cardholder</p>
+                <p className="font-semibold text-stone-100 uppercase tracking-wider text-[11px] truncate max-w-[150px]">
+                  {cardHolder || 'NGUYEN VAN AN'}
+                </p>
+              </div>
+              <div>
+                <p className="text-stone-400 text-[8px] uppercase font-sans text-right">Expires</p>
+                <p className="font-semibold text-stone-100 tracking-wider text-[11px]">
+                  {cardExpiry || '12/28'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Form fields to edit or use mock */}
+          <div className="space-y-3 text-xs">
+            <div>
+              <label className="text-[11px] font-medium text-stone-500 block mb-1">Số thẻ Mastercard</label>
+              <input
+                type="text"
+                maxLength={19}
+                value={cardNumber}
+                onChange={(e) => setCardNumber(e.target.value)}
+                placeholder="5412 7512 3412 8899"
+                className="w-full h-9 px-3 rounded-xl border border-stone-200 font-mono text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#3E2723]"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[11px] font-medium text-stone-500 block mb-1">Tên in trên thẻ</label>
+                <input
+                  type="text"
+                  value={cardHolder}
+                  onChange={(e) => setCardHolder(e.target.value.toUpperCase())}
+                  placeholder="NGUYEN VAN AN"
+                  className="w-full h-9 px-3 rounded-xl border border-stone-200 uppercase text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#3E2723]"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                <div>
+                  <label className="text-[11px] font-medium text-stone-500 block mb-1">Hết hạn</label>
+                  <input
+                    type="text"
+                    maxLength={5}
+                    value={cardExpiry}
+                    onChange={(e) => setCardExpiry(e.target.value)}
+                    placeholder="12/28"
+                    className="w-full h-9 px-2 rounded-xl border border-stone-200 text-center text-xs font-mono font-semibold focus:outline-none focus:ring-1 focus:ring-[#3E2723]"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-medium text-stone-500 block mb-1">CVV</label>
+                  <input
+                    type="password"
+                    maxLength={3}
+                    value={cardCvv}
+                    onChange={(e) => setCardCvv(e.target.value)}
+                    placeholder="888"
+                    className="w-full h-9 px-2 rounded-xl border border-stone-200 text-center text-xs font-mono font-semibold focus:outline-none focus:ring-1 focus:ring-[#3E2723]"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setCardNumber('5412 7512 3412 8899')
+                  setCardHolder(name.toUpperCase() || 'NGUYEN VAN AN')
+                  setCardExpiry('12/28')
+                  setCardCvv('888')
+                  toast.success('Đã điền thông tin thẻ mẫu.')
+                }}
+                className="text-[11px] text-[#3E2723] hover:underline font-semibold cursor-pointer flex items-center gap-1"
+              >
+                <Sparkles className="size-3 text-amber-600" /> Điền thông tin mẫu
+              </button>
+              <span className="text-[11px] font-bold text-stone-900">
+                Tổng trừ thẻ: <strong className="text-amber-900">{formatMoneyVND(total)}</strong>
+              </span>
+            </div>
+          </div>
+
+          <div className="mt-2 flex flex-col gap-2">
+            <Button
+              type="button"
+              disabled={isProcessingCard || pending}
+              onClick={handleConfirmCardPayment}
+              className="w-full h-11 rounded-xl bg-[#3E2723] hover:bg-[#2b1b18] text-white font-bold text-xs shadow-md cursor-pointer transition-all"
+            >
+              {isProcessingCard ? 'Đang xử lý yêu cầu...' : `Xác nhận thanh toán ${formatMoneyVND(total)}`}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setIsCardModalOpen(false)}
+              className="w-full text-xs text-stone-600 cursor-pointer"
+            >
+              Quay lại
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
+export default CheckoutForm

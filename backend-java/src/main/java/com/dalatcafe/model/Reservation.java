@@ -21,6 +21,16 @@ public class Reservation implements Serializable {
     private Instant dateTime;
     private String tableName;
     private Integer tableId;
+    private List<Integer> tableIds = List.of();
+
+    public List<Integer> getTableIds() {
+        return tableIds.isEmpty() ? (tableId == null ? List.of() : List.of(tableId)) : List.copyOf(tableIds);
+    }
+
+    public void setTableIds(List<Integer> ids) {
+        tableIds = ids == null ? List.of() : ids.stream().distinct().toList();
+        if (!tableIds.isEmpty()) tableId = tableIds.get(0);
+    }
     private int guests;
     private ReservationStatus status;
     private String note;

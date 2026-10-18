@@ -14,6 +14,10 @@ export const DEFAULT_CLOSING_TIME = '22:00'
 
 /** SystemConfigManager.DEFAULT_MAX_RESERVATION_GUESTS. */
 export const DEFAULT_MAX_RESERVATION_GUESTS = 20
+export const RESERVATION_TIME_SLOTS = Array.from({ length: 31 }, (_, index) => {
+  const minutes = 7 * 60 + index * 30
+  return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
+})
 
 // Vietnam keeps UTC+7 all year (no daylight saving), so a fixed offset matches Asia/Ho_Chi_Minh.
 const CAFE_UTC_OFFSET_MS = 7 * 60 * 60 * 1000

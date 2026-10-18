@@ -16,6 +16,7 @@ import com.dalatcafe.patterns.adapter.ReservationToOrderAdapter;
 import com.dalatcafe.patterns.chain.ReservationValidationChainFactory;
 import com.dalatcafe.patterns.chain.ReservationValidatorHandler;
 import com.dalatcafe.patterns.chain.ValidationResult;
+import com.dalatcafe.patterns.singleton.SystemConfigManager;
 import com.sun.net.httpserver.HttpExchange;
 
 import java.io.IOException;
@@ -54,6 +55,7 @@ public class ReservationHandler extends ApiHandler {
 
     @Override
     protected void route(HttpExchange exchange) throws IOException {
+        expireNoShows(Instant.now());
         List<String> parts = segments(exchange);
         if (parts.size() == 4 && parts.get(3).equals(TRANSFER)) {
             if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
@@ -115,6 +117,7 @@ public class ReservationHandler extends ApiHandler {
 
         // Checking and saving are one step, or two requests could both claim the same slot.
         synchronized (this) {
+            expireNoShows(Instant.now());
             ValidationResult result = validationChain.validate(reservation);
             if (!result.isValid()) {
                 throw new ApiException(400, "CHAIN_VALIDATION_FAILED", result.getErrorMessage());
@@ -170,6 +173,30 @@ public class ReservationHandler extends ApiHandler {
         sendOk(exchange, 200, toJson(reservation), "Reservation " + code + ": " + target.getDescription());
     }
 
+    /** Releases only pending/confirmed no-shows, never a booking that has been seated. */
+    public synchronized int expireNoShows(Instant now) {
+        int expired = 0;
+        int grace = SystemConfigManager.getInstance().getAutoCancelMinutes();
+        for (Reservation reservation : reservationDao.findAll()) {
+            if (reservation.getDateTime() == null || reservation.getId() == null
+                    || (reservation.getStatus() != ReservationStatus.PENDING && reservation.getStatus() != ReservationStatus.CONFIRMED)
+                    || now.isBefore(reservation.getDateTime().plusSeconds(grace * 60L))) continue;
+            if (!reservationDao.updateStatus(reservation.getId(), ReservationStatus.CANCELLED)) continue;
+            reservation.setStatus(ReservationStatus.CANCELLED);
+            expired++;
+            for (int tableId : reservation.getTableIds()) {
+                boolean anotherBooking = reservationDao.findAll().stream().anyMatch(other -> other.getTableIds().contains(tableId)
+                        && (other.getStatus() == ReservationStatus.PENDING || other.getStatus() == ReservationStatus.CONFIRMED)
+                        && other.getDateTime() != null && other.getDateTime().isBefore(now.plusSeconds(7200)));
+                boolean openOrder = orderDao.findByTableId(tableId).stream().anyMatch(order -> order.getStatus() != com.dalatcafe.model.OrderStatus.COMPLETED
+                        && order.getStatus() != com.dalatcafe.model.OrderStatus.CANCELLED);
+                if (!anotherBooking && !openOrder) tableDao.findById(tableId).filter(table -> table.getStatus() == TableStatus.RESERVED)
+                        .ifPresent(table -> tableDao.updateStatus(tableId, TableStatus.AVAILABLE, 0));
+            }
+        }
+        return expired;
+    }
+
     private static ReservationStatus parseStatus(String raw) {
         try {
             return ReservationStatus.valueOf(raw.trim().toUpperCase(Locale.ROOT));
@@ -202,10 +229,12 @@ public class ReservationHandler extends ApiHandler {
             if (reservation.getId() != null) {
                 reservationDao.updateStatus(reservation.getId(), ReservationStatus.SEATED);
             }
-            int tableId = target.getAssignedTableId();
-            if (tableId > 0) {
-                tableDao.findById(tableId).ifPresent(table ->
-                        tableDao.updateStatus(tableId, TableStatus.OCCUPIED, Math.min(reservation.getGuests(), table.getSeats())));
+            int remaining = reservation.getGuests();
+            for (int tableId : reservation.getTableIds()) {
+                Table table = tableDao.findById(tableId).orElseThrow(() -> ApiException.notFound("Table not found"));
+                int count = Math.min(remaining, table.getSeats());
+                remaining -= count;
+                tableDao.updateStatus(tableId, TableStatus.OCCUPIED, Math.max(1, count));
             }
         }
         sendOk(exchange, 200, orderJson(order, target.getCustomerIdentifier()), "Reservation " + code + " transferred to POS");
@@ -218,6 +247,23 @@ public class ReservationHandler extends ApiHandler {
     }
 
     private void resolveTable(Map<String, Object> body, Reservation reservation) {
+        if (body.get("tableIds") != null) {
+            List<Object> requested = list(body, "tableIds");
+            if (requested.isEmpty() || requested.size() > 10) throw ApiException.badRequest("Chọn từ 1 đến 10 bàn.");
+            List<Integer> ids = new ArrayList<>();
+            List<String> names = new ArrayList<>();
+            for (Object raw : requested) {
+                if (raw == null) throw ApiException.badRequest("Mã bàn không hợp lệ.");
+                int id = requireInt(Map.of("id", raw), "id");
+                if (id < 1 || ids.contains(id)) throw ApiException.badRequest("Mã bàn không hợp lệ hoặc bị trùng.");
+                Table table = tableDao.findById(id).orElseThrow(() -> ApiException.notFound("Table not found: " + id));
+                ids.add(id);
+                names.add(table.getName());
+            }
+            reservation.setTableIds(ids);
+            reservation.setTableName(String.join(", ", names));
+            return;
+        }
         if (body.get("tableId") != null) {
             int tableId = requireInt(body, "tableId");
             Table table = tableDao.findById(tableId)
@@ -252,6 +298,7 @@ public class ReservationHandler extends ApiHandler {
         json.put("dateTime", r.getDateTime());
         json.put("table", r.getTableName());
         json.put("tableId", r.getTableId());
+        json.put("tableIds", r.getTableIds());
         json.put("guests", r.getGuests());
         json.put("status", r.getStatus() == null ? null : r.getStatus().getDescription());
         json.put("note", r.getNote());

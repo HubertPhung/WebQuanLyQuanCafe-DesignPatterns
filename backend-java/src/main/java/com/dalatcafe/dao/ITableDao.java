@@ -17,5 +17,7 @@ public interface ITableDao {
     boolean save(Table table);
     boolean updateStatus(int id, TableStatus status, int guestCount);
     boolean deleteById(int id);
+    default boolean archiveById(int id) { return false; }
+    default int nextId() { return findAll().stream().mapToInt(Table::getId).max().orElse(0) + 1; }
 }
 

@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { DemoNotice } from '@/components/admin/shared'
+import type { ReservationView } from '@/lib/admin/queries'
 import {
   AlertTriangle,
   Armchair,
@@ -26,7 +27,6 @@ import {
   UtensilsCrossed,
   X,
 } from 'lucide-react'
-import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -119,32 +119,21 @@ const defaultOrders: Order[] = [
   },
 ]
 
-const sparklineData = [
-  { time: '07:00', revenue: 95000 },
-  { time: '08:30', revenue: 210000 },
-  { time: '10:00', revenue: 420000 },
-  { time: '11:30', revenue: 580000 },
-  { time: '13:00', revenue: 690000 },
-  { time: '14:30', revenue: 775000 },
-]
-
-const topSellers = [
-  { name: 'Nước cam tươi nguyên chất', sold: 42, revenue: '189.000 đ', percent: 85 },
-  { name: 'Cơm chiên hoàng bào', sold: 28, revenue: '196.000 đ', percent: 70 },
-  { name: 'Cà phê Americano đá', sold: 35, revenue: '140.000 đ', percent: 65 },
-  { name: 'Bánh Croissant bơ Pháp', sold: 25, revenue: '125.000 đ', percent: 55 },
-]
-
 export interface DashboardOperationalViewProps {
   initialTables?: FloorTable[]
   initialOrders?: Order[]
   overview?: any
   menuItems?: MenuItem[]
+  reportOrders?: Order[]
+  reservations?: ReservationView[]
 }
 
 export function DashboardOperationalView({
   initialTables,
   initialOrders,
+  menuItems = [],
+  reportOrders = [],
+  reservations = [],
 }: DashboardOperationalViewProps) {
   // Normalize tables with zone mapping
   // Sample data only when the page passed nothing at all; an empty list is a real, quiet shop.
@@ -162,6 +151,21 @@ export function DashboardOperationalView({
   const [activeTableDetail, setActiveTableDetail] = useState<FloorTable | null>(null)
   const [isShiftModalOpen, setIsShiftModalOpen] = useState(false)
   const [pending, startTransition] = useTransition()
+
+  const router = useRouter()
+  useEffect(() => {
+    if (initialTables) setTables(initialTables.map(t => ({ ...t, zone: t.zone === 'Coffee Bar' ? 'Quầy Bar' : t.zone === 'Main Floor' ? 'Phòng lạnh' : t.zone === 'Patio' ? 'Sân vườn' : t.zone })))
+  }, [initialTables])
+  useEffect(() => { if (initialOrders) setOrders(initialOrders) }, [initialOrders])
+  const paidOrders = reportOrders.filter(order => order.paymentStatus === 'paid')
+  const reportTotal = paidOrders.reduce((sum, order) => sum + order.total, 0)
+  const cashTotal = paidOrders.filter(order => order.paymentMethod === 'cash').reduce((sum, order) => sum + order.total, 0)
+  const lowStock = menuItems.filter(item => item.stockQty <= item.lowStockThreshold)
+  const sold = new Map<string, number>()
+  for (const order of paidOrders) for (const item of order.items) sold.set(item.name, (sold.get(item.name) ?? 0) + item.qty)
+  const bestSellers = [...sold].sort((a, b) => b[1] - a[1]).slice(0, 4)
+  const pendingReservations = reservations.filter(r => r.status === 'Chờ xác nhận' || r.status === 'Đã đặt').slice(0, 4)
+  const money = (value: number) => `${Math.round(value).toLocaleString('vi-VN')} đ`
 
   // Compute live operational metrics
   const activeOrdersCount = orders.filter((o) => o.status !== 'completed').length
@@ -183,12 +187,10 @@ export function DashboardOperationalView({
   // Handle live ticket progression
   const handleAdvanceOrder = (orderId: number, nextStatus: OrderStatus) => {
     startTransition(async () => {
-      // Optimistic update
-      setOrders((prev) =>
-        prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o))
-      )
       const res = await updateOrderStatus(orderId, nextStatus)
       if (res.ok) {
+        setOrders(prev => prev.map(order => order.id === orderId ? { ...order, status: nextStatus } : order))
+        router.refresh()
         const label =
           nextStatus === 'brewing'
             ? 'Bắt đầu pha chế vé #'
@@ -205,25 +207,25 @@ export function DashboardOperationalView({
   // Handle table quick status change
   const handleSetTableStatus = (tableId: number, newStatus: TableStatus) => {
     startTransition(async () => {
+      const table = tables.find(t => t.id === tableId)
+      const guests = newStatus === 'occupied' ? Math.min(table?.seats ?? 1, table?.guestCount || 2) : 0
+      const res = await updateTableStatus(tableId, newStatus, guests)
+      if (!res.ok) { toast.error(res.error || 'Không thể đổi trạng thái bàn'); return }
       setTables((prev) =>
         prev.map((t) =>
           t.id === tableId
             ? {
                 ...t,
                 status: newStatus,
-                occupiedSince: newStatus === 'occupied' ? new Date() : null,
-                guestCount: newStatus === 'occupied' ? 2 : 0,
+                occupiedSince: newStatus === 'occupied' ? (t.occupiedSince ?? new Date()) : null,
+                guestCount: guests,
               }
             : t
         )
       )
       setActiveTableDetail(null)
-      const res = await updateTableStatus(tableId, newStatus, newStatus === 'occupied' ? 2 : 0)
-      if (res.ok) {
-        toast.success(`Đã cập nhật trạng thái bàn sang "${tableStatusLabels[newStatus]}"`)
-      } else {
-        toast.error(res.error || 'Không thể đổi trạng thái bàn')
-      }
+      router.refresh()
+      toast.success(`Đã cập nhật trạng thái bàn sang "${tableStatusLabels[newStatus]}"`)
     })
   }
 
@@ -235,7 +237,7 @@ export function DashboardOperationalView({
           <div className="flex flex-wrap items-center gap-2.5">
             <span className="inline-flex items-center gap-2 rounded-full bg-stone-100/90 px-3 py-1 text-xs font-semibold text-stone-800">
               <span className="size-2 rounded-full bg-[#5A3E2B]" />
-              Ca sáng · Thứ Ba, 14/10/2026
+              {new Date().toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}
             </span>
 
             <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800">
@@ -245,9 +247,9 @@ export function DashboardOperationalView({
           </div>
 
           <div className="flex items-center gap-2 text-xs text-stone-500 pt-0.5">
-            <span>Trưởng ca: <strong className="text-stone-700 font-semibold">Nguyễn Hoàng Nam</strong></span>
+            <span>Tổng quan vận hành</span>
             <span className="text-stone-300">·</span>
-            <span>Khung giờ: 06:30 - 14:30</span>
+            <span>Dữ liệu từ đơn hàng, kho và đặt bàn</span>
             <span className="text-stone-300">·</span>
             <span className="text-emerald-700 font-medium">Trực tiếp từ POS & KDS</span>
           </div>
@@ -276,8 +278,8 @@ export function DashboardOperationalView({
             className="h-10 rounded-lg bg-[#5A3E2B] text-white hover:bg-[#684732] shadow-xs font-semibold text-xs gap-1.5 px-4 cursor-pointer"
           >
             <Printer className="size-3.5" />
-            <span>Chốt ca & in báo cáo</span>
-            <DemoNotice compact />
+            <span>In báo cáo doanh thu</span>
+
           </Button>
         </div>
       </div>
@@ -355,7 +357,7 @@ export function DashboardOperationalView({
             </div>
 
             {/* Table Floor Cards Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
               {filteredTables.map((table) => {
                 const isOccupied = table.status === 'occupied'
                 const isReserved = table.status === 'reserved'
@@ -367,7 +369,7 @@ export function DashboardOperationalView({
 
                 // Attached order if occupied
                 const matchingOrder = isOccupied
-                  ? orders.find((o) => o.tableId === table.id && o.status !== 'completed')
+                  ? orders.find((o) => (o.tableIds?.length ? o.tableIds : [o.tableId]).includes(table.id) && o.status !== 'completed')
                   : null
 
                 return (
@@ -375,7 +377,7 @@ export function DashboardOperationalView({
                     key={table.id}
                     onClick={() => setActiveTableDetail(table)}
                     className={cn(
-                      'group rounded-lg p-3 text-left transition-all cursor-pointer relative',
+                      'group isolate overflow-hidden min-h-[140px] rounded-lg p-3 text-left transition-all cursor-pointer relative',
                       'shadow-2xs hover:shadow-md hover:-translate-y-0.5',
                       isOccupied && !isOverdue && 'bg-amber-500/10 ring-1 ring-amber-300/60',
                       isOverdue && 'bg-rose-50 ring-1 ring-rose-300/80',
@@ -384,6 +386,7 @@ export function DashboardOperationalView({
                       table.status === 'available' && 'bg-emerald-50/70 hover:bg-emerald-50/90'
                     )}
                   >
+                    {table.imageUrl && <><img src={table.imageUrl} alt="" className="absolute inset-0 -z-20 h-full w-full object-cover" loading="lazy" /><div className="absolute inset-0 -z-10 bg-white/65" /></>}
                     <div className="flex items-center justify-between gap-1 mb-1.5">
                       <span className="font-extrabold text-sm text-stone-900 tracking-tight">
                         {table.name}
@@ -575,244 +578,27 @@ export function DashboardOperationalView({
         {/* RIGHT 30%: SLEEK COMPACT SIDE PANEL (Thước đo & Cảnh báo) */}
         {/* ======================================================== */}
         <div className="lg:col-span-4 space-y-6">
-          {/* Card 1: Tóm tắt dòng tiền ca trực (Shift Financial Pulse) */}
-          <div className="bg-white rounded-xl border border-stone-200/80 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500 flex items-center gap-1.5">
-                  Dòng tiền ca trực <DemoNotice compact />
-                </h4>
-                <div className="flex items-baseline gap-2 mt-1">
-                  <span className="text-2xl font-black text-stone-900 tabular-nums">
-                    775.000 đ
-                  </span>
-                  <span className="text-xs font-bold text-emerald-700">
-                    +18.4%
-                  </span>
-                </div>
-              </div>
-              <div className="size-9 rounded-lg bg-amber-500/10 text-[#5A3E2B] flex items-center justify-center">
-                <DollarSign className="size-4.5" />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 text-xs pt-1">
-              <div className="rounded-lg bg-stone-50 p-2.5 border border-stone-200/60">
-                <span className="text-stone-500 text-[11px] block">Đơn hoàn thành</span>
-                <span className="text-sm font-bold text-stone-900 tabular-nums">28 đơn</span>
-              </div>
-              <div className="rounded-lg bg-stone-50 p-2.5 border border-stone-200/60">
-                <span className="text-stone-500 text-[11px] block">Giá trị TB/đơn</span>
-                <span className="text-sm font-bold text-stone-900 tabular-nums">27.600 đ</span>
-              </div>
-            </div>
-
-            {/* Sparkline Area Chart */}
-            <div className="h-28 w-full pt-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={sparklineData} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="sparkGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#5A3E2B" stopOpacity={0.25} />
-                      <stop offset="95%" stopColor="#5A3E2B" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <Tooltip
-                    contentStyle={{ backgroundColor: '#ffffff', borderRadius: '8px', fontSize: '11px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
-                    formatter={(val: any) => [`${Number(val).toLocaleString('vi-VN')} đ`, 'Doanh thu tích lũy']}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="revenue"
-                    stroke="#5A3E2B"
-                    strokeWidth={2.5}
-                    fill="url(#sparkGradient)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* Payment method split pill */}
-            <div className="space-y-1.5 pt-1 border-t border-stone-200/50">
-              <div className="flex items-center justify-between text-[11px] font-semibold text-stone-600">
-                <span>Phương thức</span>
-                <span>Tiền mặt 45% · QR 35% · Thẻ 20%</span>
-              </div>
-              <div className="w-full h-1.5 rounded-full bg-stone-100 overflow-hidden flex">
-                <div className="bg-[#5A3E2B] h-full" style={{ width: '45%' }} />
-                <div className="bg-[#C88A58] h-full" style={{ width: '35%' }} />
-                <div className="bg-blue-600 h-full" style={{ width: '20%' }} />
-              </div>
-            </div>
-          </div>
-
-          {/* Card 2: Cảnh báo kho nguyên liệu Actionable Toasts (Direct Shortcut Alerts) */}
-          <div className="bg-white rounded-xl border border-stone-200/80 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] p-5 space-y-3.5">
-            <div className="flex items-center justify-between">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500 flex items-center gap-1.5">
-                <AlertTriangle className="size-3.5 text-rose-600" />
-                Cảnh báo kho nguyên liệu <DemoNotice compact />
-              </h4>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-900">
-                3 mục
-              </span>
-            </div>
-
-            <div className="space-y-2.5">
-              {/* Alert 1: Đã hết hạn */}
-              <div className="rounded-lg p-3 bg-rose-50/70 border border-rose-200/70 space-y-2">
-                <div className="flex items-start gap-2.5">
-                  <PackageX className="size-4 text-rose-700 shrink-0 mt-0.5" />
-                  <div className="min-w-0 text-xs">
-                    <strong className="text-rose-900 font-bold block text-xs">
-                      Thịt bò tươi - Đã hết hạn
-                    </strong>
-                    <p className="text-rose-800 text-[11px] mt-0.5 leading-snug">
-                      Lô ngày 05/10 đã quá hạn hôm qua. Cần lập biên bản tiêu hủy.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex justify-end">
-                  <Button
-                    onClick={() => toast.success('Đã xuất biên bản tiêu hủy lô Thịt bò tươi #EXP-0510!')}
-                    size="sm"
-                    variant="outline"
-                    className="h-7 rounded-md text-[11px] font-semibold text-rose-800 bg-white hover:bg-rose-100 border-rose-200 cursor-pointer"
-                  >
-                    Xuất hủy & Ghi biên bản
-                  </Button>
-                </div>
-              </div>
-
-              {/* Alert 2: Gần hết hạn */}
-              <div className="rounded-lg p-3 bg-amber-500/10 border border-amber-300/60 space-y-2">
-                <div className="flex items-start gap-2.5">
-                  <AlertTriangle className="size-4 text-amber-700 shrink-0 mt-0.5" />
-                  <div className="min-w-0 text-xs">
-                    <strong className="text-amber-950 font-bold block text-xs">
-                      Cam tươi sành - Hạn còn 2 ngày
-                    </strong>
-                    <p className="text-amber-900 text-[11px] mt-0.5 leading-snug">
-                      Còn 12.5 kg. Khuyến nghị ưu tiên đề xuất món Nước cam ép hôm nay.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex justify-end">
-                  <Button
-                    onClick={() => toast.success('Đã bật huy hiệu ưu tiên món Nước cam tươi trên màn hình POS!')}
-                    size="sm"
-                    variant="outline"
-                    className="h-7 rounded-md text-[11px] font-semibold text-amber-900 bg-white hover:bg-amber-100 border-amber-300 cursor-pointer"
-                  >
-                    Đẩy menu gợi ý
-                  </Button>
-                </div>
-              </div>
-
-              {/* Alert 3: Tồn kho dưới định mức */}
-              <div className="rounded-lg p-3 bg-stone-100/90 border border-stone-200/80 space-y-2">
-                <div className="flex items-start gap-2.5">
-                  <Package className="size-4 text-[#5A3E2B] shrink-0 mt-0.5" />
-                  <div className="min-w-0 text-xs">
-                    <strong className="text-stone-900 font-bold block text-xs">
-                      Bơ lạt Anchor - Sắp hết kho
-                    </strong>
-                    <p className="text-stone-600 text-[11px] mt-0.5 leading-snug">
-                      Còn 5.0 kg (chạm ngưỡng báo động). Cần nhập bổ sung ca chiều.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex justify-end">
-                  <Button
-                    onClick={() => toast.success('Đã gửi đề xuất nhập kho 20kg Bơ lạt Anchor tới nhà cung cấp!')}
-                    size="sm"
-                    className="h-7 rounded-md text-[11px] font-semibold bg-[#5A3E2B] text-white hover:bg-[#684732] cursor-pointer"
-                  >
-                    Nhập hàng ngay
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Card 3: Top món bán chạy ca trực (Shift Top Performers) */}
-          <div className="bg-white rounded-xl border border-stone-200/80 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] p-5 space-y-3.5">
-            <div className="flex items-center justify-between">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500 flex items-center gap-1.5">
-                <Flame className="size-3.5 text-[#C88A58]" />
-                Top món bán chạy ca trực <DemoNotice compact />
-              </h4>
-              <span className="text-[10px] text-stone-400 font-semibold">Theo số lượng</span>
-            </div>
-
-            <div className="space-y-3">
-              {topSellers.map((item, idx) => (
-                <div key={item.name} className="space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-stone-800 flex items-center gap-1.5 truncate max-w-[170px]">
-                      <span className="size-4 rounded-md bg-stone-100 text-[#5A3E2B] flex items-center justify-center text-[10px] font-black">
-                        {idx + 1}
-                      </span>
-                      <span className="truncate">{item.name}</span>
-                    </span>
-                    <span className="text-[11px] font-bold text-stone-900 tabular-nums">
-                      {item.sold} ly
-                    </span>
-                  </div>
-                  <div className="w-full h-1.5 rounded-full bg-stone-100 overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-[#C88A58] to-[#5A3E2B]"
-                      style={{ width: `${item.percent}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Card 4: Lịch đặt bàn tiếp theo (Upcoming Reservations) */}
-          <div className="bg-white rounded-xl border border-stone-200/80 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500 flex items-center gap-1.5">
-                Lịch khách đặt sắp tới <DemoNotice compact />
-              </h4>
-              <Link href="/admin/reservations" className="text-[11px] font-semibold text-[#5A3E2B] hover:underline">
-                Xem tất cả
-              </Link>
-            </div>
-
-            <div className="space-y-2.5">
-              <div className="rounded-lg p-2.5 bg-stone-50 border border-stone-200/60 flex items-center justify-between text-xs">
-                <div>
-                  <div className="font-bold text-stone-900">Nguyễn Hoàng Nam · 4 khách</div>
-                  <span className="text-[11px] text-stone-500 block">15:06 - 17:07 · Bàn 04 (Phòng lạnh)</span>
-                </div>
-                <Button
-                  onClick={() => toast.success('Đã xác nhận sẵn sàng đón khách Nguyễn Hoàng Nam!')}
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-[10px] font-semibold text-[#5A3E2B] bg-white border-stone-200 rounded-md"
-                >
-                  Đón khách
-                </Button>
-              </div>
-
-              <div className="rounded-lg p-2.5 bg-stone-50 border border-stone-200/60 flex items-center justify-between text-xs">
-                <div>
-                  <div className="font-bold text-stone-900">Trần Thu Hà · 2 khách</div>
-                  <span className="text-[11px] text-stone-500 block">18:00 - 20:00 · Bàn 07 (Sân vườn)</span>
-                </div>
-                <Button
-                  onClick={() => toast.success('Đã xác nhận sẵn sàng đón khách Trần Thu Hà!')}
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-[10px] font-semibold text-[#5A3E2B] bg-white border-stone-200 rounded-md"
-                >
-                  Đón khách
-                </Button>
-              </div>
-            </div>
-          </div>
+          <section className="rounded-xl border border-stone-200 bg-white p-5 space-y-3">
+            <h4 className="font-bold text-stone-700">Doanh thu 7 ngày gần nhất</h4>
+            <p className="text-2xl font-black">{money(reportTotal)}</p>
+            <p className="text-sm text-stone-500">{paidOrders.length} đơn đã thanh toán</p>
+            <p className="text-xs text-stone-500">Tiền mặt: {money(cashTotal)} · QR / thẻ: {money(reportTotal - cashTotal)}</p>
+            <Link href="/admin/analytics" className="text-sm font-semibold text-[#5A3E2B] underline">Xem báo cáo chi tiết</Link>
+          </section>
+          <section className="rounded-xl border border-stone-200 bg-white p-5 space-y-3">
+            <h4 className="font-bold text-stone-700">Cảnh báo tồn kho · {lowStock.length} mục</h4>
+            {lowStock.length === 0 ? <p className="text-sm text-stone-500">Không có món hoặc nguyên liệu dưới định mức.</p> : lowStock.slice(0, 4).map(item => <div key={item.id} className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm"><strong>{item.name}</strong><p>Còn {item.stockQty} {item.unit} · Ngưỡng {item.lowStockThreshold}</p></div>)}
+            <Link href="/admin/inventory" className="text-sm font-semibold text-[#5A3E2B] underline">Kiểm tra và điều chỉnh kho</Link>
+          </section>
+          <section className="rounded-xl border border-stone-200 bg-white p-5 space-y-3">
+            <h4 className="font-bold text-stone-700">Món bán chạy · 7 ngày</h4>
+            {bestSellers.length === 0 ? <p className="text-sm text-stone-500">Chưa có đơn đã thanh toán.</p> : bestSellers.map(([name, quantity]) => <p key={name} className="flex justify-between gap-2 text-sm"><span>{name}</span><strong>{quantity} phần</strong></p>)}
+          </section>
+          <section className="rounded-xl border border-stone-200 bg-white p-5 space-y-3">
+            <h4 className="font-bold text-stone-700">Phiếu đặt bàn đang chờ</h4>
+            {pendingReservations.length === 0 ? <p className="text-sm text-stone-500">Không có phiếu đang chờ.</p> : pendingReservations.map(reservation => <div key={`${reservation.source}-${reservation.id}`} className="rounded-lg border border-stone-200 p-3 text-sm"><strong>{reservation.customer} · {reservation.guests} khách</strong><p>{reservation.dateTime} · {reservation.table}</p></div>)}
+            <Link href="/admin/reservations" className="text-sm font-semibold text-[#5A3E2B] underline">Quản lý và đón khách</Link>
+          </section>
         </div>
       </div>
 
@@ -906,35 +692,35 @@ export function DashboardOperationalView({
           <DialogContent className="max-w-md rounded-xl bg-white p-6 shadow-2xl">
             <DialogHeader className="space-y-1">
               <DialogTitle className="text-lg font-bold text-stone-900">
-                Chốt ca làm việc & In báo cáo Z-Report <DemoNotice compact />
+                Báo cáo doanh thu 7 ngày
               </DialogTitle>
               <DialogDescription className="text-xs text-stone-500">
-                Ca sáng: 06:30 - 14:30 · Quản lý: Nguyễn Hoàng Nam
+                Tổng hợp các đơn đã thanh toán trong 7 ngày gần nhất.
               </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-3 py-3 text-xs">
               <div className="p-3.5 rounded-lg bg-stone-50 space-y-2 border border-stone-200/60">
                 <div className="flex justify-between">
-                  <span className="text-stone-600">Tổng doanh thu ca:</span>
-                  <strong className="text-stone-900 font-bold tabular-nums">775.000 đ</strong>
+                  <span className="text-stone-600">Tổng doanh thu:</span>
+                  <strong className="text-stone-900 font-bold tabular-nums">{money(reportTotal)}</strong>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-stone-600">Tổng số đơn phục vụ:</span>
-                  <strong className="text-stone-900 font-bold tabular-nums">28 đơn</strong>
+                  <span className="text-stone-600">Số đơn đã thanh toán:</span>
+                  <strong className="text-stone-900 font-bold tabular-nums">{paidOrders.length} đơn</strong>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-stone-600">Tiền mặt tại két:</span>
-                  <strong className="text-stone-900 font-bold tabular-nums">348.750 đ</strong>
+                  <span className="text-stone-600">Doanh thu tiền mặt:</span>
+                  <strong className="text-stone-900 font-bold tabular-nums">{money(cashTotal)}</strong>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-stone-600">Chuyển khoản & Thẻ POS:</span>
-                  <strong className="text-stone-900 font-bold tabular-nums">426.250 đ</strong>
+                  <strong className="text-stone-900 font-bold tabular-nums">{money(reportTotal - cashTotal)}</strong>
                 </div>
               </div>
 
               <p className="text-[11px] text-stone-500 italic">
-                * Sau khi nhấn xác nhận, hệ thống sẽ chốt sổ ca sáng, đồng bộ kho nguyên liệu và kích hoạt lệnh in phiếu Z-Report tại máy in quầy thu ngân.
+                Mở hộp thoại in của trình duyệt. Báo cáo này không chốt sổ ca hoặc tự thay đổi số liệu kho.
               </p>
             </div>
 
@@ -948,13 +734,12 @@ export function DashboardOperationalView({
               </Button>
               <Button
                 onClick={() => {
-                  setIsShiftModalOpen(false)
-                  toast.success('Đã hoàn tất chốt ca sáng! Báo cáo Z-Report #SHIFT-041 đã gửi tới máy in nhiệt quầy thu ngân.')
+                  window.print()
                 }}
                 className="h-9 text-xs rounded-lg bg-[#5A3E2B] text-white hover:bg-[#684732] font-semibold cursor-pointer gap-1.5 px-4"
               >
                 <Printer className="size-3.5" />
-                <span>Xác nhận & In báo cáo</span>
+                <span>In báo cáo</span>
               </Button>
             </DialogFooter>
           </DialogContent>

@@ -315,6 +315,10 @@ public class JdbcDatabase {
             );
 
             -- List-valued fields (added after the first release, so ALTER keeps old databases working).
+            ALTER TABLE tables ADD COLUMN IF NOT EXISTS image_url TEXT;
+            ALTER TABLE tables ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+            ALTER TABLE reservations ADD COLUMN IF NOT EXISTS table_ids JSONB NOT NULL DEFAULT '[]'::jsonb;
+            ALTER TABLE orders ADD COLUMN IF NOT EXISTS table_ids JSONB NOT NULL DEFAULT '[]'::jsonb;
             ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS variations JSONB NOT NULL DEFAULT '[]'::jsonb;
             ALTER TABLE orders ADD COLUMN IF NOT EXISTS items JSONB NOT NULL DEFAULT '[]'::jsonb;
             ALTER TABLE reservations ADD COLUMN IF NOT EXISTS pre_orders JSONB NOT NULL DEFAULT '[]'::jsonb;

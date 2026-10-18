@@ -35,26 +35,6 @@ export function OrderStatusBadge({ status }: { status: OrderStatus }) {
   )
 }
 
-// Marks a screen or widget that only demonstrates the interface: its data is sample data and its
-// actions are not saved anywhere, so nobody mistakes it for a working feature.
-export function DemoNotice({ children, compact = false }: { children?: React.ReactNode; compact?: boolean }) {
-  if (compact) {
-    return (
-      <span className="inline-flex items-center rounded-full border border-amber-300/80 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-900">
-        Bản demo
-      </span>
-    )
-  }
-  return (
-    <div role="note" className="flex items-start gap-3 rounded-xl border border-amber-300/70 bg-amber-50/80 px-4 py-3 text-sm text-amber-950">
-      <span className="mt-0.5 shrink-0 rounded-full bg-amber-200/80 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">Bản demo</span>
-      <p className="leading-relaxed">
-        {children ?? 'Màn hình này dùng dữ liệu minh hoạ. Các thao tác chỉ hiển thị trong trình duyệt và không được lưu vào hệ thống.'}
-      </p>
-    </div>
-  )
-}
-
 export function PageHeading({ title, description, children }: { title: React.ReactNode; description: React.ReactNode; children?: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between py-1">

@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState, useTransition } from 'react'
-import { DemoNotice } from '@/components/admin/shared'
+import { useEffect, useRef, useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
+import { saveTableDetails, deleteTable } from '@/app/admin/table-actions'
 import {
   Armchair,
   CheckCircle2,
@@ -56,7 +57,8 @@ function areasOf(tables: FloorTable[]): AreaType[] {
   return [...zones].map(([name, count], index) => ({ id: index + 1, name, sub: `${count.seats} chỗ ngồi`, tableCount: count.tables }))
 }
 
-export function FloorPlan({ tables: initialTables, openOrders }: { tables: FloorTable[]; openOrders: Order[] }) {
+export function FloorPlan({ tables: initialTables, openOrders, canManage = false }: { tables: FloorTable[]; openOrders: Order[]; canManage?: boolean }) {
+  const router = useRouter()
   const [tables, setTables] = useState<FloorTable[]>(initialTables)
   const [areas, setAreas] = useState<AreaType[]>(() => areasOf(initialTables))
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards')
@@ -69,8 +71,57 @@ export function FloorPlan({ tables: initialTables, openOrders }: { tables: Floor
   const [newTableName, setNewTableName] = useState('Bàn 13')
   const [newTableSeats, setNewTableSeats] = useState('4')
   const [newTableZone, setNewTableZone] = useState(initialTables[0]?.zone ?? '')
+  const [editingId, setEditingId] = useState<number | undefined>()
+  const [imageUrl, setImageUrl] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [draggingImage, setDraggingImage] = useState(false)
+  const [formError, setFormError] = useState('')
+  const uploadController = useRef<AbortController | null>(null)
+  const [deleting, setDeleting] = useState<FloorTable | null>(null)
+  const [deleteError, setDeleteError] = useState('')
   const [newAreaName, setNewAreaName] = useState('')
   const [newAreaSub, setNewAreaSub] = useState('')
+
+  useEffect(() => { setTables(initialTables); setAreas(areasOf(initialTables)) }, [initialTables])
+
+  const editTable = (table?: FloorTable) => {
+    uploadController.current?.abort()
+    setUploading(false)
+    setDraggingImage(false)
+    setFormError('')
+    setEditingId(table?.id)
+    setNewTableName(table?.name ?? '')
+    setNewTableSeats(String(table?.seats ?? 4))
+    setNewTableZone(table?.zone ?? areas[0]?.name ?? '')
+    setImageUrl(table?.imageUrl ?? '')
+    setIsAddTableOpen(true)
+  }
+
+  useEffect(() => () => uploadController.current?.abort(), [])
+
+  const uploadImage = async (files: File[]) => {
+    if (pending || uploading) return
+    setFormError('')
+    if (files.length !== 1) { setFormError('Vui lòng chọn một ảnh bàn.'); return }
+    const file = files[0]
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size === 0 || file.size > 2 * 1024 * 1024) {
+      setFormError('Chọn ảnh JPG, PNG hoặc WebP tối đa 2 MB.'); return
+    }
+    const controller = new AbortController()
+    uploadController.current = controller
+    setUploading(true)
+    try {
+      const form = new FormData(); form.set('image', file)
+      const response = await fetch('/api/table-images', { method: 'POST', body: form, signal: controller.signal })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error ?? 'Không thể tải ảnh')
+      setImageUrl(new URL(result.url, window.location.origin).href)
+    } catch (error) {
+      if (!controller.signal.aborted) setFormError(error instanceof Error ? error.message : 'Không thể tải ảnh')
+    } finally {
+      if (uploadController.current === controller) setUploading(false)
+    }
+  }
 
   const availableCount = tables.filter((t) => t.status === 'available').length
   const occupiedCount = tables.filter((t) => t.status === 'occupied').length
@@ -79,19 +130,18 @@ export function FloorPlan({ tables: initialTables, openOrders }: { tables: Floor
 
   const handleAddTable = (e: React.FormEvent) => {
     e.preventDefault()
-    const newT: FloorTable = {
-      id: Date.now(),
-      name: newTableName,
-      seats: Number(newTableSeats) || 4,
-      zone: newTableZone,
-      status: 'available',
-      guestCount: 0,
-      occupiedSince: null,
-      updatedAt: new Date(),
-    }
-    setTables([...tables, newT])
-    setIsAddTableOpen(false)
-    toast.success(`Đã thêm ${newTableName} vào khu vực ${newTableZone}`)
+    if (uploading || pending) return
+    setFormError('')
+    startTransition(async () => {
+      try {
+      const result = await saveTableDetails({ name: newTableName, seats: Number(newTableSeats), zone: newTableZone, imageUrl: imageUrl || null }, editingId)
+      if (!result.ok) { setFormError(result.error); return }
+      setTables(current => editingId === undefined ? [...current, result.data] : current.map(t => t.id === editingId ? result.data : t))
+      setIsAddTableOpen(false)
+      toast.success(editingId === undefined ? 'Đã thêm bàn' : 'Đã cập nhật bàn')
+      router.refresh()
+      } catch { setFormError('Không thể kết nối để lưu bàn. Vui lòng thử lại.') }
+    })
   }
 
   const handleAddArea = (e: React.FormEvent) => {
@@ -107,25 +157,23 @@ export function FloorPlan({ tables: initialTables, openOrders }: { tables: Floor
     setIsAddAreaOpen(false)
     setNewAreaName('')
     setNewAreaSub('')
-    toast.success(`Đã thêm khu vực "${a.name}"`)
+    setEditingId(undefined)
+    setNewTableName('')
+    setNewTableSeats('4')
+    setNewTableZone(a.name)
+    setImageUrl('')
+    setFormError('')
+    setIsAddTableOpen(true)
+    toast.info('Thêm bàn đầu tiên để lưu khu vực mới vào hệ thống.')
   }
 
   const handleStatusChange = (tableId: number, nextStatus: TableStatus) => {
-    setTables((curr) =>
-      curr.map((t) => {
-        if (t.id === tableId) {
-          return {
-            ...t,
-            status: nextStatus,
-            occupiedSince: nextStatus === 'occupied' ? new Date() : null,
-          }
-        }
-        return t
-      })
-    )
     startTransition(async () => {
       try {
-        await updateTableStatus(tableId, nextStatus)
+        const result = await updateTableStatus(tableId, nextStatus)
+        if (!result.ok) { toast.error(result.error); return }
+        setTables(current => current.map(t => t.id === tableId ? { ...t, status: nextStatus, occupiedSince: nextStatus === 'occupied' ? (t.occupiedSince ?? new Date()) : null } : t))
+        router.refresh()
         toast.success(`Đã cập nhật trạng thái bàn sang: ${tableStatusLabels[nextStatus]}`)
       } catch (err: any) {
         toast.error(err.message || 'Lỗi cập nhật trạng thái')
@@ -175,14 +223,14 @@ export function FloorPlan({ tables: initialTables, openOrders }: { tables: Floor
             <h3 className="font-bold text-base text-stone-900 flex items-center gap-2">
               <MapPin className="size-4.5 text-[#5A3E2B]" />
               <span>Quản lý sơ đồ khu vực quán</span>
-              <DemoNotice compact />
             </h3>
             <p className="text-xs text-stone-500">
-              Danh sách phân vùng sảnh, phòng VIP và không gian ngoài trời. Thêm, sửa, xoá khu vực chưa được lưu.
+              Các khu vực được lưu theo bàn. Tạo khu vực mới bằng cách thêm bàn đầu tiên vào khu vực đó.
             </p>
           </div>
           <Button
             onClick={() => setIsAddAreaOpen(true)}
+            disabled={!canManage || pending}
             className="h-10 rounded-lg px-4 bg-[#5A3E2B] hover:bg-[#684732] text-white font-bold text-xs gap-1.5 self-start sm:self-auto shadow-xs"
           >
             <Plus className="size-4 stroke-[2.5]" />
@@ -244,26 +292,28 @@ export function FloorPlan({ tables: initialTables, openOrders }: { tables: Floor
           </div>
 
           <Button
-            onClick={() => setIsAddTableOpen(true)}
+            onClick={() => editTable()}
+            disabled={!canManage || pending}
             className="h-10 rounded-lg px-4 bg-[#5A3E2B] hover:bg-[#684732] text-white font-bold text-xs gap-1.5 shadow-xs"
           >
             <Plus className="size-4 stroke-[2.5]" />
             <span>+ Thêm bàn mới</span>
-            <DemoNotice compact />
           </Button>
         </div>
 
         {/* View Mode: Cards */}
         {viewMode === 'cards' ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3.5">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
             {tables.map((t) => (
               <div
                 key={t.id}
+                data-table-id={t.id}
                 className={cn(
-                  'rounded-lg border p-4 transition-all duration-200 flex flex-col justify-between gap-3 min-h-[145px] shadow-2xs',
+                  'relative isolate overflow-hidden rounded-xl border p-4 transition-all duration-200 flex flex-col justify-between gap-3 min-h-[210px] shadow-2xs',
                   tone[t.status]
                 )}
               >
+                {t.imageUrl && <><img src={t.imageUrl} alt="" className="absolute inset-0 -z-20 h-full w-full object-cover" loading="lazy" /><div className="absolute inset-0 -z-10 bg-white/65" /></>}
                 <div className="flex items-start justify-between">
                   <span className="font-black text-lg text-stone-900 tracking-tight">{t.name.replace('Table', 'Bàn')}</span>
                   <Badge className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full border', statusBadgeColor[t.status])}>
@@ -290,6 +340,7 @@ export function FloorPlan({ tables: initialTables, openOrders }: { tables: Floor
                   <option value="reserved">Đã đặt trước</option>
                   <option value="cleaning">Dọn dẹp</option>
                 </select>
+                {canManage && <div className="flex gap-2"><Button variant="outline" size="sm" disabled={pending} onClick={() => editTable(t)}>Sửa</Button><Button variant="outline" size="sm" disabled={pending} onClick={() => { setDeleteError(''); setDeleting(t) }}>Xóa</Button></div>}
               </div>
             ))}
           </div>
@@ -309,7 +360,7 @@ export function FloorPlan({ tables: initialTables, openOrders }: { tables: Floor
               <tbody className="divide-y divide-stone-100">
                 {tables.map((t) => (
                   <tr key={t.id} className="hover:bg-stone-50/60 transition-colors">
-                    <td className="py-3 px-3 font-bold text-stone-900">{t.name.replace('Table', 'Bàn')}</td>
+                    <td className="py-3 px-3 font-bold text-stone-900">{t.imageUrl && <img src={t.imageUrl} alt={t.name} className="mb-2 h-12 w-20 rounded object-cover" loading="lazy" />}{t.name.replace('Table', 'Bàn')}{canManage && <div className="mt-2 flex gap-2"><Button variant="outline" size="sm" disabled={pending} onClick={() => editTable(t)}>Sửa</Button><Button variant="outline" size="sm" disabled={pending} onClick={() => { setDeleteError(''); setDeleting(t) }}>Xóa</Button></div>}</td>
                     <td className="py-3 px-3 text-stone-600">{t.zone}</td>
                     <td className="py-3 px-3 text-stone-600">{t.seats} chỗ</td>
                     <td className="py-3 px-3">
@@ -338,10 +389,10 @@ export function FloorPlan({ tables: initialTables, openOrders }: { tables: Floor
       </div>
 
       {/* Modal: Thêm bàn mới */}
-      <Dialog open={isAddTableOpen} onOpenChange={setIsAddTableOpen}>
-        <DialogContent className="max-w-md rounded-xl border-stone-200 bg-white text-stone-900 p-6 font-sans shadow-2xl">
+      <Dialog open={isAddTableOpen} onOpenChange={open => { if (pending) return; if (!open) { uploadController.current?.abort(); setUploading(false) }; setIsAddTableOpen(open) }}>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg rounded-xl border-stone-200 bg-white text-stone-900 p-6 font-sans shadow-2xl">
           <DialogHeader>
-            <DialogTitle className="text-xl font-bold text-stone-900">Thêm bàn ăn mới</DialogTitle>
+            <DialogTitle className="text-xl font-bold text-stone-900">{editingId === undefined ? 'Thêm bàn ăn mới' : 'Sửa thông tin bàn'}</DialogTitle>
             <DialogDescription className="text-xs text-stone-500">
               Nhập mã bàn và số lượng chỗ ngồi để mở rộng phục vụ.
             </DialogDescription>
@@ -349,8 +400,10 @@ export function FloorPlan({ tables: initialTables, openOrders }: { tables: Floor
 
           <form onSubmit={handleAddTable} className="space-y-4 pt-2 text-xs">
             <div>
-              <label className="block text-stone-700 font-semibold mb-1">Tên / Mã bàn *</label>
+              <label htmlFor="table-name" className="block text-stone-700 font-semibold mb-1">Tên / Mã bàn *</label>
               <input
+                id="table-name"
+                maxLength={100}
                 required
                 value={newTableName}
                 onChange={(e) => setNewTableName(e.target.value)}
@@ -362,6 +415,9 @@ export function FloorPlan({ tables: initialTables, openOrders }: { tables: Floor
               <input
                 required
                 type="number"
+                min={1}
+                max={100}
+                step={1}
                 value={newTableSeats}
                 onChange={(e) => setNewTableSeats(e.target.value)}
                 className="w-full h-10 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-900 focus:outline-none focus:border-[#5A3E2B]"
@@ -369,27 +425,63 @@ export function FloorPlan({ tables: initialTables, openOrders }: { tables: Floor
             </div>
             <div>
               <label className="block text-stone-700 font-semibold mb-1">Khu vực bố trí *</label>
-              <select
+              <input list="table-zones" required maxLength={50}
                 value={newTableZone}
                 onChange={(e) => setNewTableZone(e.target.value)}
                 className="w-full h-10 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-800 focus:outline-none focus:border-[#5A3E2B]"
-              >
+              />
+              <datalist id="table-zones">
                 {areas.map((a) => (
                   <option key={a.id} value={a.name}>
                     {a.name}
                   </option>
                 ))}
-              </select>
+              </datalist>
             </div>
+            <div>
+              <label htmlFor="table-image" className="mb-1 block font-semibold">Hình ảnh bàn</label>
+              <input id="table-image" type="url" value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="https://... hoặc tải ảnh bên dưới" className="w-full rounded-lg border p-2" />
+              <div data-testid="table-image-dropzone" onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = uploading || pending ? 'none' : 'copy'; setDraggingImage(true) }} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDraggingImage(false) }} onDrop={event => { event.preventDefault(); setDraggingImage(false); void uploadImage(Array.from(event.dataTransfer.files)) }}
+                className={cn('relative mt-2 rounded-xl border-2 border-dashed p-5 text-center', draggingImage ? 'border-amber-700 bg-amber-50' : 'border-stone-300 bg-stone-50')}>
+                <label htmlFor="table-image-file" className="block cursor-pointer font-semibold">{uploading ? 'Đang tải ảnh…' : 'Kéo thả ảnh vào đây hoặc bấm để chọn ảnh'}</label>
+                <input id="table-image-file" type="file" aria-label="Tải ảnh bàn" accept="image/jpeg,image/png,image/webp" disabled={uploading || pending} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ''; if (files.length) void uploadImage(files) }} />
+              </div>
+              <p className="mt-1 text-stone-500">JPG, PNG hoặc WebP, tối đa 2 MB. {uploading ? 'Đang tải ảnh…' : ''}</p>
+              {imageUrl && <div className="mt-2"><img src={imageUrl} alt="Xem trước ảnh bàn" className="h-32 w-full rounded-lg object-cover" /><Button type="button" variant="ghost" onClick={() => setImageUrl('')}>Gỡ ảnh</Button></div>}
+            </div>
+            {formError && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{formError}</p>}
             <DialogFooter className="pt-2">
               <Button type="button" variant="ghost" onClick={() => setIsAddTableOpen(false)} className="rounded-lg text-stone-500 hover:text-stone-800">
                 Hủy
               </Button>
-              <Button type="submit" className="rounded-lg bg-[#5A3E2B] hover:bg-[#684732] text-white font-bold">
-                Thêm bàn
+              <Button type="submit" disabled={pending || uploading} className="rounded-lg bg-[#5A3E2B] hover:bg-[#684732] text-white font-bold">
+                {pending ? 'Đang lưu…' : editingId === undefined ? 'Thêm bàn' : 'Lưu thay đổi'}
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleting !== null} onOpenChange={open => { if (!open && !pending) { setDeleting(null); setDeleteError('') } }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Xóa {deleting?.name}?</DialogTitle><DialogDescription>Bàn sẽ được gỡ khỏi sơ đồ và danh sách đặt bàn. Lịch sử hóa đơn, đặt bàn được giữ nguyên. Cần kết thúc và thanh toán đơn, xử lý lịch đặt đang chờ trước khi xóa.</DialogDescription></DialogHeader>
+          {deleteError && <p role="alert" className="text-sm text-rose-800">{deleteError}</p>}
+          <DialogFooter>
+            <Button variant="outline" disabled={pending} onClick={() => { setDeleting(null); setDeleteError('') }}>Hủy</Button>
+            <Button disabled={pending} onClick={() => {
+              if (!deleting) return
+              const id = deleting.id
+              setDeleteError('')
+              startTransition(async () => {
+                try {
+                  const result = await deleteTable(id)
+                  if (!result.ok) { setDeleteError(result.error); return }
+                  setTables(current => current.filter(table => table.id !== id))
+                  setDeleting(null); toast.success('Đã xóa bàn'); router.refresh()
+                } catch { setDeleteError('Không thể kết nối để xóa bàn. Vui lòng thử lại.') }
+              })
+            }}>{pending ? 'Đang xóa…' : 'Xóa bàn'}</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

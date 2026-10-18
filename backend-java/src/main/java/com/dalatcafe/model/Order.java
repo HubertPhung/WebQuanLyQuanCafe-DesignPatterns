@@ -14,11 +14,22 @@ public class Order implements Serializable {
     private static final long serialVersionUID = 1L;
 
     public static final double DEFAULT_VAT_RATE = 0.08; // 8% VAT
+    public static final double DELIVERY_FEE = 10_000;
 
     private Integer id;
     private String orderCode;
     private String customer;
     private Integer tableId;
+    private List<Integer> tableIds = List.of();
+
+    public List<Integer> getTableIds() {
+        return tableIds.isEmpty() ? (tableId == null ? List.of() : List.of(tableId)) : List.copyOf(tableIds);
+    }
+
+    public void setTableIds(List<Integer> ids) {
+        tableIds = ids == null ? List.of() : ids.stream().distinct().toList();
+        if (!tableIds.isEmpty()) tableId = tableIds.get(0);
+    }
     private OrderType orderType;
     private List<OrderItem> items;
     private double subtotal;
@@ -60,7 +71,11 @@ public class Order implements Serializable {
         this.subtotal = items.stream().mapToDouble(OrderItem::getLineTotal).sum();
         double afterDiscount = Math.max(0, this.subtotal - this.discountAmount);
         this.vatAmount = Math.round(afterDiscount * this.vatRate * 100.0) / 100.0;
-        this.total = Math.round((afterDiscount + this.vatAmount) * 100.0) / 100.0;
+        this.total = Math.round((afterDiscount + this.vatAmount + getShippingFee()) * 100.0) / 100.0;
+    }
+
+    public double getShippingFee() {
+        return orderType == OrderType.DELIVERY ? DELIVERY_FEE : 0;
     }
 
     public Integer getId() {

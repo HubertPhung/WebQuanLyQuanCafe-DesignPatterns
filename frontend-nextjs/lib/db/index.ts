@@ -20,3 +20,19 @@ if (db && process.env.NODE_ENV !== 'production') {
   globalForDb.drizzleDb = db
 }
 
+let groupColumnsReady: Promise<void> | undefined
+let tableImagesReady: Promise<void> | undefined
+export async function ensureTableImages(): Promise<void> {
+  if (!pool) return
+  tableImagesReady ??= pool.query('ALTER TABLE admin_tables ADD COLUMN IF NOT EXISTS image_url text, ADD COLUMN IF NOT EXISTS deleted_at timestamptz')
+    .then(() => {}).catch(error => { tableImagesReady = undefined; throw error })
+  await tableImagesReady
+}
+
+export async function ensureOrderTableGroups(): Promise<void> {
+  if (!pool) return
+  groupColumnsReady ??= pool.query("ALTER TABLE admin_orders ADD COLUMN IF NOT EXISTS table_ids jsonb NOT NULL DEFAULT '[]'::jsonb")
+    .then(() => {}).catch(error => { groupColumnsReady = undefined; throw error })
+  await groupColumnsReady
+}
+

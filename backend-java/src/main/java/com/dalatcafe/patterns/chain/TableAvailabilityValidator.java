@@ -38,7 +38,7 @@ public final class TableAvailabilityValidator extends ReservationValidatorHandle
             return ValidationResult.invalid("Thời gian kết thúc đặt bàn không hợp lệ.");
         }
         for (Reservation existing : reservationDao.findAll()) {
-            if (!Objects.equals(reservation.getTableId(), existing.getTableId())
+            if (reservation.getTableIds().stream().noneMatch(existing.getTableIds()::contains)
                     || existing.getStatus() == ReservationStatus.CANCELLED
                     || (reservation.getId() != null && reservation.getId().equals(existing.getId()))) {
                 continue;

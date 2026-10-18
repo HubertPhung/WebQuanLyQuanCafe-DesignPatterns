@@ -1,4 +1,4 @@
-import { DemoNotice, PageHeading } from '@/components/admin/shared'
+import { PageHeading } from '@/components/admin/shared'
 import { StaffManagement } from '@/components/admin/staff-management'
 import { requirePageRole } from '@/lib/auth/session'
 
@@ -12,10 +12,10 @@ export default async function StaffPage() {
         title="Nhân viên & Người dùng"
         description="Quản lý hồ sơ nhân sự, tài khoản thành viên khách hàng, phân quyền vai trò và mức lương/điểm tích lũy."
       />
-      <DemoNotice>
+      <p className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm text-stone-600">
         Hồ sơ nhân sự và mức lương trên trang này là dữ liệu minh hoạ và không được lưu. Tài khoản đăng nhập thật của nhân viên
         được cấp và phân quyền ở trang Tài khoản & phân quyền.
-      </DemoNotice>
+      </p>
       <StaffManagement />
     </>
   )

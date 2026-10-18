@@ -3,7 +3,7 @@
 import { eq, inArray, sql } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { cookies } from 'next/headers'
-import { db, isDbConfigured } from '@/lib/db'
+import { db, isDbConfigured, ensureOrderTableGroups } from '@/lib/db'
 import {
   adminMenuItems,
   adminOrders,
@@ -22,6 +22,9 @@ import {
 import { assertAdminAccess } from '@/lib/admin/access'
 import { getSession } from '@/lib/auth/session'
 import { TAX_RATE } from '@/lib/admin/format'
+import { isDaLatAddress, shippingFee } from '@/lib/storefront/delivery'
+import { withFirstOnlineOrder } from '@/lib/orders/first-online-order'
+import { voucherDiscount } from '@/lib/storefront/vouchers'
 import {
   customizationSurcharge,
   describeCustomizations,
@@ -89,14 +92,15 @@ function fail(error: unknown): ActionResult {
   return { ok: false, error: error instanceof Error ? error.message : 'Something went wrong.' }
 }
 
-type LocalOrderRef = Pick<Order, 'orderCode' | 'tableId' | 'paymentMethod'>
+type LocalOrderRef = Pick<Order, 'orderCode' | 'tableId' | 'tableIds' | 'paymentMethod'>
 
 // Code and table of a frontend order: the database first, then the mock store.
 async function findLocalOrder(orderId: number): Promise<LocalOrderRef | null> {
+  await ensureOrderTableGroups()
   if (isDbConfigured && db) {
     try {
       const [row] = await db
-        .select({ orderCode: adminOrders.orderCode, tableId: adminOrders.tableId, paymentMethod: adminOrders.paymentMethod })
+        .select({ orderCode: adminOrders.orderCode, tableId: adminOrders.tableId, tableIds: adminOrders.tableIds, paymentMethod: adminOrders.paymentMethod })
         .from(adminOrders)
         .where(eq(adminOrders.id, orderId))
       if (row) return row
@@ -105,7 +109,7 @@ async function findLocalOrder(orderId: number): Promise<LocalOrderRef | null> {
     }
   }
   const mock = getMockOrder(orderId)
-  return mock ? { orderCode: mock.orderCode, tableId: mock.tableId, paymentMethod: mock.paymentMethod } : null
+  return mock ? { orderCode: mock.orderCode, tableId: mock.tableId, tableIds: mock.tableIds, paymentMethod: mock.paymentMethod } : null
 }
 
 // Java only knows the orders it priced or opened, and for those its answer is final.
@@ -137,10 +141,14 @@ export async function updateOrderStatus(orderId: number, status: OrderStatus): P
           .where(eq(adminOrders.id, orderId))
         // Mirrors the Java TableStatusSyncObserver: a finished dine-in order frees its table for cleaning.
         if (status === 'completed' && local?.tableId) {
+          for (const tableId of local.tableIds?.length ? local.tableIds : [local.tableId]) {
+            const rows = await tx.execute<{ remaining: boolean }>(sql`select exists(select 1 from admin_orders where id <> ${orderId} and status not in ('completed', 'cancelled') and (table_id = ${tableId} or table_ids @> ${JSON.stringify([tableId])}::jsonb)) as remaining`)
+            if (rows.rows[0]?.remaining) continue
           await tx
             .update(adminTables)
             .set({ status: 'cleaning', guestCount: 0, occupiedSince: null, updatedAt: new Date() })
-            .where(eq(adminTables.id, local.tableId))
+            .where(eq(adminTables.id, tableId))
+          }
         }
       })
     } catch {
@@ -310,6 +318,7 @@ function newLocalOrderCode() {
 class ShortStock extends Error {}
 
 async function recordOrderLocally(input: LocalOrderInput, quantities: Map<number, number>): Promise<ActionResult> {
+  await ensureOrderTableGroups()
   if (!isDbConfigured || !db) {
     const res = createMockOrder(input)
     return res.ok ? { ok: true, message: res.message } : { ok: false, error: res.error ?? 'Failed' }
@@ -335,7 +344,7 @@ async function recordOrderLocally(input: LocalOrderInput, quantities: Map<number
 
     // Java's receipt wins when it priced the order (member discount, redeemed points).
     const subtotal = input.totals?.subtotal ?? Math.round(items.reduce((sum, item) => sum + item.price * item.qty, 0) * 100) / 100
-    const total = input.totals?.total ?? Math.round(subtotal * (1 + TAX_RATE) * 100) / 100
+    const total = input.totals?.total ?? Math.round(subtotal * (1 + TAX_RATE) * 100) / 100 + shippingFee(input.orderType)
     const tenderError = cashTenderError(input, total)
     // Returned, not thrown: a throw here falls back to the in-memory store.
     if (tenderError) return { ok: false, error: tenderError }
@@ -514,6 +523,8 @@ async function cashOnDeliveryTotals(lines: LocalOrderInput['lines'], localMenu: 
   if (voucherCode) {
     const verdict = await validateVoucher(voucherCode, subtotal)
     if (verdict.ok && verdict.data.valid) discount = verdict.data.discountAmount
+    else if (!verdict.ok && verdict.unreachable) discount = voucherDiscount(subtotal, voucherCode)
+    else throw new Error('Mã giảm giá không hợp lệ.')
   }
   return { subtotal, total: Math.round((subtotal - discount) * (1 + TAX_RATE) * 100) / 100 }
 }
@@ -536,6 +547,9 @@ export async function placeOnlineOrder(input: OnlineOrderInput): Promise<OnlineO
     if (!fulfilment) throw new Error('Chọn giao hàng tận nơi hoặc tự đến lấy.')
     const address = String(input.address ?? '').trim().slice(0, 200)
     if (fulfilment === 'delivery' && address.length < 8) throw new Error('Nhập địa chỉ giao hàng.')
+    if (fulfilment === 'delivery' && !isDaLatAddress(address)) {
+      throw new Error('Quán chỉ giao hàng trong Đà Lạt. Địa chỉ cần có Đà Lạt, Da Lat, Dalat hoặc ĐL; ngoài khu vực vui lòng chọn tự đến lấy.')
+    }
     if (!Object.hasOwn(onlinePayments, input.payment)) throw new Error('Chọn phương thức thanh toán.')
     const paymentMethod = onlinePayments[input.payment]
     const note = String(input.note ?? '').trim().slice(0, 300)
@@ -570,42 +584,49 @@ export async function placeOnlineOrder(input: OnlineOrderInput): Promise<OnlineO
     const short = localMenu.find((item) => (quantities.get(item.id) ?? 0) > item.stockQty)
     if (short) throw new Error(`Chỉ còn ${Math.max(0, short.stockQty)} ${short.unit} ${short.name}, hãy giảm số lượng trong giỏ.`)
 
-    const paid = input.payment !== 'cod'
-    const order: LocalOrderInput = { lines, customer: name, tableId: null, orderType: fulfilment, paymentMethod, paid }
-    const voucherCode = cart?.discountCodes?.find((code) => code.applicable)?.code
-    const javaNote = ['Đơn online', fulfilment === 'delivery' ? `Giao tới: ${address}` : 'Khách tự đến lấy', `SĐT ${phone}`, note, ...lineNotes]
-      .filter(Boolean)
-      .join(' · ')
-      .slice(0, 1000)
-
-    let receipt: CheckoutReceipt | undefined
-    let totals: { subtotal: number; total: number }
-    if (paid) {
-      // Only money taken now earns points (cash on delivery does not): the buyer's phone becomes a member.
-      const member: MemberCheckout = { customerPhone: phone, enrollMember: true, customerEmail: email ?? session.email }
-      const outcome = await forwardCheckout(order, localMenu, member, { voucherCode, note: javaNote }, true)
-      if (outcome.kind === 'rejected') return { ok: false, error: outcome.error }
-      // Online payment is taken by Java; without it nothing may be charged or promised.
-      if (outcome.kind === 'local') {
-        return { ok: false, error: 'Chưa thể thanh toán trực tuyến lúc này. Hãy thử lại sau ít phút hoặc chọn thanh toán khi nhận hàng.' }
+    return await withFirstOnlineOrder<OnlineOrderResult>(session.userId, async ({ isFirstOrder, markPlaced }) => {
+      const paid = input.payment !== 'cod'
+      const order: LocalOrderInput = { lines, customer: name, tableId: null, orderType: fulfilment, paymentMethod, paid }
+      const voucherCode = cart?.discountCodes?.find((code) => code.applicable)?.code?.trim().toUpperCase()
+      if (voucherCode === 'WELCOME10' && !isFirstOrder) {
+        throw new Error('WELCOME10 chỉ áp dụng cho đơn online đầu tiên của tài khoản mới.')
       }
-      receipt = outcome.receipt
-      totals = { subtotal: receipt.subtotal, total: receipt.finalTotal }
-    } else {
-      totals = await cashOnDeliveryTotals(lines, localMenu, voucherCode)
-    }
+      const javaNote = ['Đơn online', fulfilment === 'delivery' ? `Giao tới: ${address}` : 'Khách tự đến lấy', `SĐT ${phone}`, note, ...lineNotes]
+        .filter(Boolean)
+        .join(' · ')
+        .slice(0, 1000)
 
-    const orderCode = receipt?.orderCode ?? newLocalOrderCode()
-    const recorded = await recordOrderLocally({ ...order, orderCode, totals, javaSold: Boolean(receipt) }, quantities)
-    if (!recorded.ok) return recorded
-    await saveOrderContact({
-      orderCode,
-      userId: session.userId,
-      phone,
-      email,
-      address: fulfilment === 'delivery' ? address : null,
-      fulfilment,
-      note: [note, ...lineNotes].filter(Boolean).join(' · ') || null,
+      let receipt: CheckoutReceipt | undefined
+      let totals: { subtotal: number; total: number }
+      if (paid) {
+        // Only money taken now earns points (cash on delivery does not): the buyer's phone becomes a member.
+        const member: MemberCheckout = { customerPhone: phone, enrollMember: true, customerEmail: email ?? session.email }
+        const outcome = await forwardCheckout(order, localMenu, member, { voucherCode, note: javaNote }, true)
+        if (outcome.kind === 'rejected') return { ok: false, error: outcome.error }
+        // Online payment is taken by Java; without it nothing may be charged or promised.
+        if (outcome.kind === 'local') {
+          return { ok: false, error: 'Chưa thể thanh toán trực tuyến lúc này. Hãy thử lại sau ít phút hoặc chọn thanh toán khi nhận hàng.' }
+        }
+        receipt = outcome.receipt
+        markPlaced()
+        totals = { subtotal: receipt.subtotal, total: receipt.finalTotal }
+      } else {
+        totals = await cashOnDeliveryTotals(lines, localMenu, voucherCode)
+        totals.total += shippingFee(fulfilment)
+      }
+
+      const orderCode = receipt?.orderCode ?? newLocalOrderCode()
+      const recorded = await recordOrderLocally({ ...order, orderCode, totals, javaSold: Boolean(receipt) }, quantities)
+      if (!recorded.ok) return recorded
+      markPlaced()
+      await saveOrderContact({
+        orderCode,
+        userId: session.userId,
+        phone,
+        email,
+        address: fulfilment === 'delivery' ? address : null,
+        fulfilment,
+        note: [note, ...lineNotes].filter(Boolean).join(' · ') || null,
     })
     if (!receipt) {
       await enqueueSync(orderCode)
@@ -614,6 +635,7 @@ export async function placeOnlineOrder(input: OnlineOrderInput): Promise<OnlineO
     jar.delete(CART_COOKIE)
     refresh()
     return { ok: true, orderCode, total: totals.total, paid }
+    })
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : 'Không thể đặt hàng lúc này.' }
   }
@@ -715,6 +737,7 @@ export async function createReservation(input: NewReservationInput): Promise<Act
 
 // Mirrors an order opened elsewhere (Java Adapter) into the frontend store so KDS and the floor plan show it.
 async function recordExternalOrder(input: ExternalOrderInput): Promise<ActionResult> {
+  await ensureOrderTableGroups()
   if (!isDbConfigured || !db) {
     const res = createMockOrderFromItems(input)
     return res.ok ? { ok: true, message: res.message } : { ok: false, error: res.error ?? 'Failed' }
@@ -726,6 +749,7 @@ async function recordExternalOrder(input: ExternalOrderInput): Promise<ActionRes
         orderCode: input.orderCode,
         customer: input.customer.trim().slice(0, 60) || 'Walk-in',
         tableId: input.tableId,
+        tableIds: input.tableIds ?? (input.tableId ? [input.tableId] : []),
         orderType: 'dine-in',
         items: input.items,
         subtotal,
@@ -776,6 +800,7 @@ export async function transferReservationToPos(code: string, source: 'java' | 'l
       orderCode: order.orderCode,
       customer: order.customer,
       tableId: order.tableId,
+      tableIds: order.tableIds,
       items: order.items.map((item) => ({ name: item.name, qty: item.qty, price: item.price })),
       guests: Math.min(Math.max(Math.trunc(guests), 1), 20),
     })
@@ -981,6 +1006,7 @@ export async function createMenuItem(input: NewItemInput): Promise<ActionResult>
 // Local copies of the given orders: the database first, then the mock store for the rest
 // (an order lands in the mock store when a database write failed).
 async function loadOrdersByCode(codes: string[]): Promise<Order[]> {
+  await ensureOrderTableGroups()
   let found: Order[] = []
   if (isDbConfigured && db) {
     try {
@@ -1024,6 +1050,7 @@ async function pushQueuedOrders(codes: string[], asService = false): Promise<Pus
     orderCode: order.orderCode,
     customer: order.customer,
     tableId: order.tableId,
+    tableIds: order.tableIds,
     orderType: order.orderType,
     paymentMethod: order.paymentMethod,
     paid: order.paymentStatus === 'paid',

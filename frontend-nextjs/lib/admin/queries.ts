@@ -1,6 +1,6 @@
 import 'server-only'
-import { asc, desc, gte, inArray, ne } from 'drizzle-orm'
-import { db, isDbConfigured } from '@/lib/db'
+import { asc, desc, gte, inArray, ne, isNull } from 'drizzle-orm'
+import { db, isDbConfigured, ensureOrderTableGroups, ensureTableImages } from '@/lib/db'
 import { adminMenuItems, adminOrders, adminTables, type Order, type MenuItem, type FloorTable } from '@/lib/db/schema'
 import { assertAdminAccess } from './access'
 import {
@@ -12,7 +12,7 @@ import {
   getMockOrdersByCode,
   type ReservationStatusLabel,
 } from '@/lib/db/mock-store'
-import { fetchAnalytics, fetchCustomers, fetchReservations } from '@/lib/api-client'
+import { fetchAnalytics, fetchCustomers, fetchReservations, fetchTables } from '@/lib/api-client'
 import { listSyncQueue } from './local-links'
 import { listOrderContacts, type OrderContact } from '@/lib/orders/online-contacts'
 
@@ -39,11 +39,14 @@ export async function getMenuItems(): Promise<MenuItem[]> {
 
 export async function getTables(): Promise<FloorTable[]> {
   await assertAdminAccess()
+  const remote = await fetchTables()
+  if (remote.ok) return remote.data.map(t => ({ ...t, occupiedSince: t.occupiedSince ? new Date(t.occupiedSince) : null, updatedAt: new Date() }))
   if (!isDbConfigured || !db) {
     return getMockTables()
   }
   try {
-    return await db.select().from(adminTables).orderBy(asc(adminTables.id))
+    await ensureTableImages()
+    return await db.select().from(adminTables).where(isNull(adminTables.deletedAt)).orderBy(asc(adminTables.id))
   } catch (error) {
     console.warn('Database query failed, using fallback mock store:', error)
     return getMockTables()
@@ -52,6 +55,7 @@ export async function getTables(): Promise<FloorTable[]> {
 
 export async function getActiveOrders(): Promise<Order[]> {
   await assertAdminAccess()
+  await ensureOrderTableGroups()
   if (!isDbConfigured || !db) {
     return getMockActiveOrders()
   }
@@ -65,6 +69,7 @@ export async function getActiveOrders(): Promise<Order[]> {
 
 export async function getOrdersSince(days: number): Promise<Order[]> {
   await assertAdminAccess()
+  await ensureOrderTableGroups()
   if (!isDbConfigured || !db) {
     return getMockOrdersSince(days)
   }
@@ -240,6 +245,7 @@ export async function getPendingSyncCount(): Promise<number> {
 }
 
 export type ReservationView = {
+  tableIds?: number[]
   id: string
   // Where the booking lives decides how "Chuyển sang POS" converts it (Java Adapter or local mirror).
   source: 'java' | 'local'
@@ -285,6 +291,7 @@ export async function getReservations(): Promise<{ reservations: ReservationView
     dateTime: formatSlot(r.dateTime),
     table: r.tableName.replace('Table', 'Bàn'),
     tableId: r.tableId,
+    tableIds: r.tableIds,
     guests: r.guests,
     status: r.status,
     note: r.note ?? '',
@@ -302,6 +309,7 @@ export async function getReservations(): Promise<{ reservations: ReservationView
     dateTime: formatSlot(new Date(r.dateTime)),
     table: r.table ?? (r.tableId ? `Bàn ${String(r.tableId).padStart(2, '0')}` : '—'),
     tableId: r.tableId,
+    tableIds: r.tableIds,
     guests: r.guests,
     status: javaStatusLabels[r.status] ?? 'Chờ xác nhận',
     note: r.note ?? '',
@@ -322,6 +330,7 @@ export async function getOnlineOrders(): Promise<OnlineOrderView[]> {
 // The order rows behind the given contacts, in the contacts' order. The caller has already
 // scoped the contacts (all of them for staff, one account's own for /account).
 export async function joinContactOrders(contacts: OrderContact[]): Promise<OnlineOrderView[]> {
+  await ensureOrderTableGroups()
   if (contacts.length === 0) return []
   const codes = contacts.map((contact) => contact.orderCode)
   let orders: Order[] = getMockOrdersByCode(codes)

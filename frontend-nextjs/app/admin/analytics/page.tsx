@@ -17,7 +17,7 @@ export default async function AnalyticsPage() {
             Báo cáo phân tích <span className="sr-only">Analytics</span>
           </>
         }
-        description={`Hiệu suất bán hàng tuần này của Chi nhánh 1 · Trung tâm. Nguồn: ${
+        description={`Hiệu suất bán hàng tuần này của chi nhánh 123 Phan Đình Phùng. Nguồn: ${
           source === 'java' ? 'máy chủ Java (GET /api/analytics/overview)' : 'dữ liệu cục bộ (máy chủ Java không phản hồi)'
         }.`}
       />

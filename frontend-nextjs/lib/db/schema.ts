@@ -18,6 +18,8 @@ export const adminTables = pgTable('admin_tables', {
   name: text('name').notNull(),
   seats: integer('seats').notNull().default(2),
   zone: text('zone').notNull().default('Main'),
+  imageUrl: text('image_url'),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
   status: text('status').$type<TableStatus>().notNull().default('available'),
   guestCount: integer('guest_count').notNull().default(0),
   occupiedSince: timestamp('occupied_since', { withTimezone: true }),
@@ -46,6 +48,7 @@ export const adminOrders = pgTable('admin_orders', {
   orderCode: text('order_code').notNull().unique(),
   customer: text('customer').notNull().default('Walk-in'),
   tableId: integer('table_id'),
+  tableIds: jsonb('table_ids').$type<number[]>().notNull().default([]),
   orderType: text('order_type').$type<OrderType>().notNull().default('dine-in'),
   items: jsonb('items').$type<OrderItem[]>().notNull().default([]),
   subtotal: numeric('subtotal', { precision: 10, scale: 2, mode: 'number' }).notNull().default(0),
@@ -57,6 +60,6 @@ export const adminOrders = pgTable('admin_orders', {
   completedAt: timestamp('completed_at', { withTimezone: true }),
 })
 
-export type FloorTable = typeof adminTables.$inferSelect
+export type FloorTable = Omit<typeof adminTables.$inferSelect, 'imageUrl' | 'deletedAt'> & { imageUrl?: string | null; deletedAt?: Date | null }
 export type MenuItem = typeof adminMenuItems.$inferSelect
-export type Order = typeof adminOrders.$inferSelect
+export type Order = Omit<typeof adminOrders.$inferSelect, 'tableIds'> & { tableIds?: number[] }

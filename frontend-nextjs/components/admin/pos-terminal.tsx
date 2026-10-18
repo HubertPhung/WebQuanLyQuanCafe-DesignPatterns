@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { createOrder, lookupMember, type Member } from '@/app/admin/actions'
 import { TAX_RATE, formatCurrency, paymentLabels, tableStatusLabels } from '@/lib/admin/format'
+import { shippingFee } from '@/lib/storefront/delivery'
 import {
   customizationSurcharge,
   normalizeCustomizations,
@@ -98,7 +99,8 @@ export function PosTerminal({
   const pointsDiscount = redeemablePoints * pointValue
   const afterDiscount = subtotal - tierDiscount - pointsDiscount
   const tax = Math.round(afterDiscount * TAX_RATE)
-  const total = afterDiscount + tax
+  const deliveryFee = shippingFee(orderType)
+  const total = afterDiscount + tax + deliveryFee
   const change = Number(tendered || 0) - total
   // The cash field is optional; once filled in, a paid cash sale must be covered.
   const countsCash = payment === 'cash' && tendered !== ''
@@ -433,6 +435,7 @@ export function PosTerminal({
             <span>Thuế VAT (8%)</span>
             <span className="font-mono text-stone-800 tabular-nums">{tax.toLocaleString('vi-VN')} đ</span>
           </div>
+          {deliveryFee > 0 && <div className="flex items-center justify-between text-sm"><span>Phí giao hàng</span><span>{deliveryFee.toLocaleString('vi-VN')} đ</span></div>}
 
           {/* Big Total Price Highlight */}
           <div className="flex items-baseline justify-between pt-2 border-t border-stone-100">
