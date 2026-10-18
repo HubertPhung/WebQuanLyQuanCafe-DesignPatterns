@@ -39,7 +39,7 @@ export const overviewNav = [
 export const storeNav = [
   { href: '/admin/menu', labelVi: 'Menu', subVi: 'Món & danh mục', icon: UtensilsCrossed },
   { href: '/admin/tables', labelVi: 'Bàn ăn', subVi: 'Quản lý bàn & khu vực', icon: Armchair },
-  { href: '/admin/reservations', labelVi: 'Đặt bàn', subVi: 'Quản lý đặt chỗ', icon: CalendarCheck },
+  { href: '/admin/reservations', labelVi: 'Đặt bàn', subVi: 'Quản lý đặt chỗ', icon: CalendarCheck, badgeKey: 'reservations' as const },
 ]
 
 export const businessNav = [
@@ -51,7 +51,8 @@ export const staffNav = [
   { href: '/admin/users', labelVi: 'Tài khoản & phân quyền', subVi: 'Đăng nhập, vai trò', icon: ShieldCheck },
 ]
 
-type Badges = { orders?: number }
+type BadgeKey = 'orders' | 'reservations'
+type Badges = Partial<Record<BadgeKey, number>>
 
 function NavGroup({
   label,
@@ -59,7 +60,7 @@ function NavGroup({
   badges = {},
 }: {
   label: string
-  items: Array<{ href: string; labelVi: string; subVi: string; icon: any; badgeKey?: 'orders' }>
+  items: Array<{ href: string; labelVi: string; subVi: string; icon: any; badgeKey?: BadgeKey }>
   badges?: Badges
 }) {
   const pathname = usePathname()
