@@ -23,6 +23,7 @@ const statusStyles: Record<OrderStatus, { badge: string; dot: string }> = {
   brewing: { badge: 'border-blue-300/80 bg-blue-50/90 text-blue-950 font-bold', dot: 'bg-blue-600' },
   ready: { badge: 'border-emerald-300/80 bg-emerald-50/90 text-emerald-900 font-bold', dot: 'bg-emerald-600' },
   completed: { badge: 'border-stone-300/80 bg-stone-100/90 text-stone-900 font-bold', dot: 'bg-stone-500' },
+  cancelled: { badge: 'border-rose-300 bg-rose-50 text-rose-900 font-bold', dot: 'bg-rose-500' },
 }
 
 export function OrderStatusBadge({ status }: { status: OrderStatus }) {

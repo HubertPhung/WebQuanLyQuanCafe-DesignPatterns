@@ -183,15 +183,6 @@ export function FloorPlan({ tables: initialTables, openOrders, canManage = false
 
   return (
     <div className="space-y-6 font-sans text-stone-900">
-      {/* Test Runner Keywords Invariant */}
-      <div className="sr-only">
-        <span>Floor plan</span>
-        <span>Main Floor</span>
-        <span>Patio</span>
-        <span>Coffee Bar</span>
-        <span>Table 1</span>
-      </div>
-
       {/* 1. Thống kê bàn KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3.5">
         <div className="rounded-xl border border-stone-200/90 bg-white p-4 text-center shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
@@ -313,7 +304,12 @@ export function FloorPlan({ tables: initialTables, openOrders, canManage = false
                   tone[t.status]
                 )}
               >
-                {t.imageUrl && <><img src={t.imageUrl} alt="" className="absolute inset-0 -z-20 h-full w-full object-cover" loading="lazy" /><div className="absolute inset-0 -z-10 bg-white/65" /></>}
+                {t.imageUrl && (
+                  <>
+                    <img src={t.imageUrl} alt="" className="absolute inset-0 -z-20 h-full w-full object-cover transition-transform duration-500 hover:scale-105" loading="lazy" />
+                    <div className="absolute inset-0 -z-10 bg-gradient-to-t from-white/95 via-white/85 to-white/70 backdrop-blur-[0.5px]" />
+                  </>
+                )}
                 <div className="flex items-start justify-between">
                   <span className="font-black text-lg text-stone-900 tracking-tight">{t.name.replace('Table', 'Bàn')}</span>
                   <Badge className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full border', statusBadgeColor[t.status])}>

@@ -75,7 +75,7 @@ class ServerTest {
     }
 
     private static String checkoutBody(int qty, String extra) {
-        return "{\"tableId\":2,\"paymentMethod\":\"cash\",\"tenderedAmount\":200000,"
+        return "{\"paymentMethod\":\"cash\",\"tenderedAmount\":200000,"
                 + "\"lines\":[{\"menuItemId\":" + DRINK_ID + ",\"qty\":" + qty + ",\"size\":\"L\"}]" + extra + "}";
     }
 
@@ -141,6 +141,7 @@ class ServerTest {
         assertEquals(400, call("PUT", "/api/tables/98001/details", "MANAGER", edit.replace("\"seats\":4", "\"seats\":1")).statusCode());
         assertEquals(409, call("DELETE", "/api/tables/98002", "MANAGER", null).statusCode(), "An active reservation on a secondary table must block archiving");
         String code = (String) data(created).get("id");
+        makeReservationDue(code);
         HttpResponse<String> transferred = call("POST", "/api/reservations/" + code + "/transfer-pos", "STAFF", null);
         assertEquals(200, transferred.statusCode(), transferred.body());
         assertEquals(List.of(98001.0, 98002.0), data(transferred).get("tableIds"));
@@ -300,6 +301,61 @@ class ServerTest {
         assertEquals(200, call("GET", "/api/reservations", "STAFF", null).statusCode());
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void publicAvailabilityBlocksAllGroupedTablesButAllowsOtherTablesAndAdjacentSlots() throws Exception {
+        var slot = LocalDate.now().plusDays(2).atTime(10, 0).toInstant(ZoneOffset.ofHours(7));
+        String body = "{\"customer\":\"Schedule guest\",\"contact\":\"0912345678\",\"dateTime\":\"" + slot
+                + "\",\"tableIds\":[3,4],\"guests\":2}";
+        var created = call("POST", "/api/reservations", null, body);
+        assertEquals(201, created.statusCode(), created.body());
+        String code = (String) data(created).get("id");
+        String catalog = "/api/tables/catalog?dateTime=" + java.net.URLEncoder.encode(slot.toString(), StandardCharsets.UTF_8);
+        var response = call("GET", catalog, null, null);
+        assertEquals(200, response.statusCode(), response.body());
+        var tables = (List<Map<String, Object>>) json(response).get("data");
+        for (int id : List.of(3, 4, 5)) {
+            var table = tables.stream().filter(row -> ((Number) row.get("id")).intValue() == id).findFirst().orElseThrow();
+            assertEquals(id == 5, table.get("available"));
+        }
+        assertFalse(response.body().contains("0912345678"));
+        assertFalse(response.body().contains("Schedule guest"));
+        assertEquals(400, call("POST", "/api/reservations", null, body.replace("[3,4]", "[4,5]")).statusCode());
+        assertEquals(201, call("POST", "/api/reservations", null, body.replace("[3,4]", "[5]")).statusCode());
+        String adjacent = body.replace(slot.toString(), slot.plus(com.dalatcafe.patterns.chain.TableAvailabilityValidator.DEFAULT_DURATION).toString());
+        assertEquals(201, call("POST", "/api/reservations", null, adjacent).statusCode());
+        assertEquals(200, call("PATCH", "/api/reservations/" + code + "/status", "STAFF", "{\"status\":\"cancelled\"}").statusCode());
+        tables = (List<Map<String, Object>>) json(call("GET", catalog, null, null)).get("data");
+        assertTrue(tables.stream().filter(row -> List.of(3, 4).contains(((Number) row.get("id")).intValue()))
+                .allMatch(row -> Boolean.TRUE.equals(row.get("available"))));
+        assertEquals(400, call("GET", "/api/tables/catalog?dateTime=invalid", null, null).statusCode());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void arrivalGraceExpiresUnseatedBookingsButKeepsSeatedTablesUnavailable() throws Exception {
+        var reservations = DaoFactory.getInstance().getReservationDao();
+        String waiting = createReservation(3, 2);
+        var waitingBooking = reservations.findByReservationCode(waiting).orElseThrow();
+        String seated = createReservation(4, 2);
+        assertEquals(200, call("POST", "/api/reservations/" + seated + "/transfer-pos", "STAFF", null).statusCode());
+        var seatedBooking = reservations.findByReservationCode(seated).orElseThrow();
+        waitingBooking.setDateTime(java.time.Instant.now().minusSeconds(16 * 60));
+        seatedBooking.setDateTime(java.time.Instant.now().minusSeconds(16 * 60));
+        var slot = java.net.URLEncoder.encode(java.time.Instant.now().toString(), StandardCharsets.UTF_8);
+        var response = call("GET", "/api/tables/catalog?dateTime=" + slot, null, null);
+        assertEquals(200, response.statusCode(), response.body());
+        var tables = (List<Map<String, Object>>) json(response).get("data");
+        assertEquals(true, tables.stream().filter(row -> ((Number) row.get("id")).intValue() == 3).findFirst().orElseThrow().get("available"));
+        assertEquals(false, tables.stream().filter(row -> ((Number) row.get("id")).intValue() == 4).findFirst().orElseThrow().get("available"));
+        assertEquals(ReservationStatus.SEATED, seatedBooking.getStatus());
+        assertFalse(seatedBooking.isNoShowAt(java.time.Instant.now(), 15));
+        var arrival = java.time.Instant.now().plusSeconds(3600);
+        waitingBooking.setDateTime(arrival);
+        assertFalse(waitingBooking.isNoShowAt(arrival.plusSeconds(15 * 60).minusMillis(1), 15));
+        assertTrue(waitingBooking.isNoShowAt(arrival.plusSeconds(15 * 60), 15));
+    }
+
     private String createReservation(int tableId, int guests) throws Exception {
         String when = LocalDate.now().plusDays(2).atTime(LocalTime.of(10, 0)).toInstant(ZoneOffset.ofHours(7)).toString();
         String body = "{\"customer\":\"Binh\",\"contact\":\"0911222333\",\"dateTime\":\"" + when + "\",\"tableId\":" + tableId
@@ -308,7 +364,14 @@ class ServerTest {
         assertEquals(201, created.statusCode(), created.body());
         @SuppressWarnings("unchecked")
         Map<String, Object> data = (Map<String, Object>) json(created).get("data");
-        return (String) data.get("id");
+        String code = (String) data.get("id");
+        makeReservationDue(code);
+        return code;
+    }
+
+    private void makeReservationDue(String code) {
+        DaoFactory.getInstance().getReservationDao().findByReservationCode(code).orElseThrow()
+                .setDateTime(java.time.Instant.now());
     }
 
     @Test
@@ -343,6 +406,7 @@ class ServerTest {
         @SuppressWarnings("unchecked")
         String code = (String) ((Map<String, Object>) json(created).get("data")).get("id");
 
+        makeReservationDue(code);
         HttpResponse<String> transfer = call("POST", "/api/reservations/" + code + "/transfer-pos", "STAFF", null);
         assertEquals(200, transfer.statusCode(), transfer.body());
         @SuppressWarnings("unchecked")
@@ -457,6 +521,53 @@ class ServerTest {
         return (String) data(response).get("orderCode");
     }
 
+    // Legacy/imported bills may share a table; new POS bills must choose an unused table.
+    private String historicalPaidOrderAtTable(int tableId, String code) {
+        Order order = new Order(null, code, "Existing guest", tableId, com.dalatcafe.model.OrderType.DINE_IN);
+        order.addItem(new com.dalatcafe.model.OrderItem("Coffee", 1, 45000));
+        order.setPaymentStatus(PaymentStatus.PAID);
+        assertTrue(DaoFactory.getInstance().getOrderDao().save(order));
+        return code;
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void unpaidImportedOrderOccupiesEveryTableAndBlocksAnotherCheckout() throws Exception {
+        DaoFactory daos = DaoFactory.getInstance();
+        String batch = "{\"orders\":[" + offlineOrder("UNPAID-GROUP", ",\"tableId\":3,\"tableIds\":[3,6],\"paid\":false,"
+                + "\"lines\":[{\"name\":\"Coffee\",\"qty\":1,\"price\":45000}]") + "]}";
+        HttpResponse<String> imported = call("POST", "/api/orders/sync", "STAFF", batch);
+        assertEquals(200, imported.statusCode(), imported.body());
+        assertEquals(1, ((Number) data(imported).get("created")).intValue());
+        assertEquals(TableStatus.OCCUPIED, daos.getTableDao().findById(3).orElseThrow().getStatus());
+        assertEquals(TableStatus.OCCUPIED, daos.getTableDao().findById(6).orElseThrow().getStatus());
+        assertEquals(PaymentStatus.UNPAID, daos.getOrderDao().findByOrderCode("UNPAID-GROUP").orElseThrow().getPaymentStatus());
+        // A stale/manual table flag must not hide the active order.
+        daos.getTableDao().updateStatus(3, TableStatus.AVAILABLE, 0);
+        List<Map<String, Object>> tables = (List<Map<String, Object>>) json(call("GET", "/api/tables", "STAFF", null)).get("data");
+        assertEquals("occupied", tables.stream().filter(table -> ((Number) table.get("id")).intValue() == 3).findFirst().orElseThrow().get("status"));
+        int before = daos.getOrderDao().findAll().size();
+        HttpResponse<String> rejected = call("POST", "/api/checkout", "STAFF", checkoutBody(1, ",\"tableId\":3"));
+        assertEquals(409, rejected.statusCode(), rejected.body());
+        assertEquals("TABLE_UNAVAILABLE", json(rejected).get("code"));
+        assertEquals(before, daos.getOrderDao().findAll().size(), "No second order or payment is created");
+        assertEquals(409, call("POST", "/api/checkout", "STAFF", checkoutBody(1, ",\"tableId\":6")).statusCode());
+    }
+
+    @Test
+    void concurrentNewCheckoutsAtOneTableOnlyCreateOneOrder() throws Exception {
+        String body = checkoutBody(1, ",\"tableId\":3");
+        var first = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+            try { return call("POST", "/api/checkout", "STAFF", body).statusCode(); }
+            catch (Exception error) { throw new RuntimeException(error); }
+        });
+        var second = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+            try { return call("POST", "/api/checkout", "STAFF", body).statusCode(); }
+            catch (Exception error) { throw new RuntimeException(error); }
+        });
+        assertEquals(List.of(200, 409), java.util.stream.Stream.of(first.join(), second.join()).sorted().toList());
+    }
+
     private HttpResponse<String> setOrderStatus(String code, String status) throws Exception {
         return call("PATCH", "/api/orders/" + code + "/status", "STAFF", "{\"status\":\"" + status + "\"}");
     }
@@ -519,8 +630,8 @@ class ServerTest {
     void completingOneOrderKeepsTheTableSeatedWhileAnotherOrderIsOpen() throws Exception {
         DaoFactory daos = DaoFactory.getInstance();
         String first = checkoutAtTable(3, "");
-        String second = checkoutAtTable(3, "");
-        String cancelled = checkoutAtTable(3, "");
+        String second = historicalPaidOrderAtTable(3, "HISTORY-SECOND");
+        String cancelled = historicalPaidOrderAtTable(3, "HISTORY-CANCELLED");
         assertEquals(200, setOrderStatus(cancelled, "cancelled").statusCode());
 
         assertEquals(200, setOrderStatus(first, "completed").statusCode());
@@ -536,7 +647,7 @@ class ServerTest {
     void anUnpaidOpenTabKeepsTheTableSeated() throws Exception {
         // Seed: table 7 is occupied by guests whose tab AC-0052-C3D is still unpaid.
         DaoFactory daos = DaoFactory.getInstance();
-        String extra = checkoutAtTable(7, "");
+        String extra = historicalPaidOrderAtTable(7, "HISTORY-EXTRA");
         assertEquals(200, setOrderStatus(extra, "completed").statusCode());
         assertEquals(TableStatus.OCCUPIED, daos.getTableDao().findById(7).orElseThrow().getStatus());
 
@@ -576,6 +687,18 @@ class ServerTest {
         assertEquals(409, call("POST", pay, "STAFF", "{\"paymentMethod\":\"cash\"}").statusCode());
         assertEquals(404, call("POST", "/api/orders/AC-NOPE/pay", "STAFF", "{\"paymentMethod\":\"cash\"}").statusCode());
         assertEquals(200, setOrderStatus(code, "completed").statusCode());
+        assertEquals(TableStatus.CLEANING, DaoFactory.getInstance().getTableDao().findById(10).orElseThrow().getStatus());
+    }
+
+    @Test
+    void cancellingKitchenTicketAlsoCancelsItsSeatedReservation() throws Exception {
+        String code = createReservation(10, 2);
+        assertEquals(200, call("POST", "/api/reservations/" + code + "/transfer-pos", "STAFF", null).statusCode());
+        assertEquals(200, setOrderStatus(code, "ready").statusCode());
+        HttpResponse<String> cancelled = setOrderStatus(code, "cancelled");
+        assertEquals(200, cancelled.statusCode(), cancelled.body());
+        assertEquals("unpaid", data(cancelled).get("paymentStatus"));
+        assertEquals(ReservationStatus.CANCELLED, DaoFactory.getInstance().getReservationDao().findByReservationCode(code).orElseThrow().getStatus());
         assertEquals(TableStatus.CLEANING, DaoFactory.getInstance().getTableDao().findById(10).orElseThrow().getStatus());
     }
 

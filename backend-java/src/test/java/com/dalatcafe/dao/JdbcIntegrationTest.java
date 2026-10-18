@@ -1,5 +1,6 @@
 package com.dalatcafe.dao;
 
+import com.dalatcafe.model.Branches;
 import com.dalatcafe.model.Customer;
 import com.dalatcafe.model.CustomerRank;
 import com.dalatcafe.model.MenuItem;
@@ -11,6 +12,7 @@ import com.dalatcafe.model.PaymentMethod;
 import com.dalatcafe.model.PaymentStatus;
 import com.dalatcafe.model.Reservation;
 import com.dalatcafe.model.ReservationStatus;
+import com.dalatcafe.model.Table;
 import com.dalatcafe.model.TableStatus;
 import com.dalatcafe.model.UserAccount;
 import com.dalatcafe.model.UserRole;
@@ -79,6 +81,68 @@ class JdbcIntegrationTest {
             }
         }
         assertTrue(JdbcDatabase.isAvailable());
+    }
+
+    @Test
+    void unreadableReservationScheduleMustNotBeReportedAsAnEmptySchedule() {
+        JdbcDatabase.setCustomConnection("jdbc:postgresql://127.0.0.1:1/postgres?connectTimeout=1", "postgres", "postgres");
+        try {
+            assertThrows(IllegalStateException.class, reservations::findAll);
+            assertThrows(IllegalStateException.class, orders::findAll);
+        } finally {
+            JdbcDatabase.setCustomConnection(postgres.getJdbcUrl("postgres", "postgres"), "postgres", "postgres");
+        }
+    }
+
+    @Test
+    void branchIsStoredOnTablesOrdersAndBookings() {
+        Table table = new Table(tables.nextId(), "Ban chi nhanh", 4, "San vuon");
+        table.setBranch(Branches.BUI_THI_XUAN);
+        assertTrue(tables.save(table));
+        assertEquals(Branches.BUI_THI_XUAN, tables.findById(table.getId()).orElseThrow().getBranch());
+
+        Order order = new Order(null, null, "Khach", null, OrderType.PICKUP);
+        order.setBranch(Branches.BUI_THI_XUAN);
+        order.addItem(new OrderItem(null, "Tra", 1, 20_000, null, null));
+        order.recalculateTotals();
+        assertTrue(orders.save(order));
+        assertEquals(Branches.BUI_THI_XUAN, orders.findByOrderCode(order.getOrderCode()).orElseThrow().getBranch());
+
+        Reservation booking = new Reservation(null, null, "Khach", "0911000888", Instant.now().plusSeconds(86_400), 2);
+        booking.setTableId(table.getId());
+        booking.setBranch(Branches.BUI_THI_XUAN);
+        assertTrue(reservations.save(booking));
+        assertEquals(Branches.BUI_THI_XUAN, reservations.findByReservationCode(booking.getReservationCode()).orElseThrow().getBranch());
+
+        // Other tests count the seeded floor.
+        reservations.deleteById(booking.getId());
+        orders.deleteById(order.getId());
+        tables.deleteById(table.getId());
+    }
+
+    @Test
+    void floorFromBeforeBranchesGetsTablesForTheSecondBranch() throws Exception {
+        List<Integer> secondBranch = new ArrayList<>();
+        tables.findAll().stream().filter(t -> Branches.BUI_THI_XUAN.equals(t.getBranch())).forEach(t -> secondBranch.add(t.getId()));
+        int before = tables.findAll().size();
+        try (Connection conn = JdbcDatabase.getConnection(); Statement st = conn.createStatement()) {
+            st.executeUpdate("UPDATE tables SET branch = 'phan-dinh-phung'");
+        }
+        try {
+            assertTrue(DaoFactory.prepareJdbcStore(tables, menu));
+            List<Table> added = tables.findAll().stream().filter(t -> Branches.BUI_THI_XUAN.equals(t.getBranch())).toList();
+            assertEquals(8, added.size());
+            assertEquals(before + 8, tables.findAll().size(), "existing tables are kept, new ids are appended");
+            for (Table table : added) {
+                tables.deleteById(table.getId());
+            }
+        } finally {
+            try (Connection conn = JdbcDatabase.getConnection(); Statement st = conn.createStatement()) {
+                for (int id : secondBranch) {
+                    st.executeUpdate("UPDATE tables SET branch = 'bui-thi-xuan' WHERE id = " + id);
+                }
+            }
+        }
     }
 
     @Test
@@ -215,6 +279,32 @@ class JdbcIntegrationTest {
         assertEquals(2, loaded.getPreOrders().get(0).getQty());
         assertTrue(reservations.updateStatus(loaded.getId(), ReservationStatus.CONFIRMED));
         assertEquals(ReservationStatus.CONFIRMED, reservations.findById(loaded.getId()).orElseThrow().getStatus());
+    }
+
+    @Test
+    void reservationHistoryPersistsAccountOwnershipAndKeepsLegacyEmailScope() {
+        JdbcUserDao users = new JdbcUserDao();
+        UserAccount owner = new UserAccount(null, "booking-owner@example.com", "Owner", UserRole.CUSTOMER);
+        UserAccount other = new UserAccount(null, "booking-other@example.com", "Other", UserRole.CUSTOMER);
+        assertTrue(users.save(owner));
+        assertTrue(users.save(other));
+        Reservation owned = new Reservation(null, null, "Guest", "0901234567", Instant.now().plusSeconds(3600), 2);
+        owned.setUserId(owner.getId());
+        owned.setEmail(other.getEmail());
+        owned.setStatus(ReservationStatus.CANCELLED);
+        assertTrue(reservations.save(owned));
+        assertEquals(owner.getId(), reservations.findById(owned.getId()).orElseThrow().getUserId());
+        owned.setNote("Updated booking");
+        assertTrue(reservations.save(owned));
+        assertEquals(owner.getId(), reservations.findByReservationCode(owned.getReservationCode()).orElseThrow().getUserId());
+
+        Reservation legacy = new Reservation(null, null, "Legacy", "0901234567", Instant.now().plusSeconds(7200), 2);
+        legacy.setEmail(" BOOKING-OWNER@EXAMPLE.COM ");
+        legacy.setStatus(ReservationStatus.SEATED);
+        assertTrue(reservations.save(legacy));
+        assertEquals(List.of(legacy.getReservationCode(), owned.getReservationCode()),
+                reservations.findForAccount(owner.getId(), owner.getEmail()).stream().map(Reservation::getReservationCode).toList());
+        assertTrue(reservations.findForAccount(other.getId(), other.getEmail()).isEmpty());
     }
 
     @Test

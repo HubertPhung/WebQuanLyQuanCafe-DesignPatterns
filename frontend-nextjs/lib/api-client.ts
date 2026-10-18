@@ -6,6 +6,7 @@ const DEFAULT_BACKEND_URL = 'http://localhost:8080'
 const REQUEST_TIMEOUT_MS = 2500
 // The Java SimpleAuthFilter identifies the caller by the Bearer access token of the signed-in
 // user (API_SPEC 1.3) and re-reads the role from the account, so no role is sent from here.
+import type { BranchId } from '@/lib/branches'
 import { SESSION_COOKIE } from '@/lib/auth/token'
 // 5xx codes the backend uses to refuse on purpose rather than crash (API_SPEC 1.2).
 const FAIL_CLOSED_CODES = new Set(['DATABASE_UNAVAILABLE'])
@@ -85,19 +86,32 @@ async function request<T>(path: string, init: CallOptions): Promise<JavaResult<T
   return { ok: false, unreachable: false, status: response.status, code, error }
 }
 
-export type JavaMenuItem = { id: number; name: string; kind: string; sellPrice: number; inStock: boolean }
+export type JavaMenuItem = {
+  id: number; name: string; category: string; kind: string; unit: string
+  sellPrice: number; costPrice: number; inStock: boolean
+  recipe: string | null; imageUrl: string | null; variations: { name: string; price: number }[]
+}
 
 export function fetchMenu(): Promise<JavaResult<JavaMenuItem[]>> {
   return request<JavaMenuItem[]>('/api/menu', { method: 'GET' })
 }
 
 export type JavaTable = {
-  id: number; name: string; seats: number; zone: string; imageUrl?: string | null
+  id: number; name: string; seats: number; zone: string; branch: BranchId; imageUrl?: string | null
   status: 'available' | 'occupied' | 'reserved' | 'cleaning'; guestCount: number; occupiedSince: string | null
 }
-export function fetchTables() { return request<JavaTable[]>('/api/tables', { method: 'GET' }) }
-export function fetchReservationTables() { return request<Pick<JavaTable, 'id' | 'name' | 'seats' | 'zone'>[]>('/api/tables/catalog', { method: 'GET', auth: false }) }
-export function saveJavaTable(input: { name: string; seats: number; zone: string; imageUrl: string | null }, id?: number) {
+// ?branch= limits a list to one branch; without it Java answers for the whole shop.
+const branchQuery = (branch?: BranchId) => (branch ? `branch=${encodeURIComponent(branch)}` : '')
+export function fetchTables(branch?: BranchId) { return request<JavaTable[]>(`/api/tables${branch ? `?${branchQuery(branch)}` : ''}`, { method: 'GET' }) }
+export type ReservationTableOption = Pick<JavaTable, 'id' | 'name' | 'seats' | 'zone' | 'branch'> & { available?: boolean }
+export function fetchReservationTables(dateTime?: string, branch?: BranchId) {
+  const query = new URLSearchParams()
+  if (dateTime) query.set('dateTime', dateTime)
+  if (branch) query.set('branch', branch)
+  return request<ReservationTableOption[]>(`/api/tables/catalog${query.size ? `?${query}` : ''}`, { method: 'GET', auth: false })
+}
+// A new table joins `branch`; an edited one keeps the branch it has.
+export function saveJavaTable(input: { name: string; seats: number; zone: string; imageUrl: string | null; branch?: BranchId }, id?: number) {
   return request<JavaTable>(id === undefined ? '/api/tables' : `/api/tables/${id}/details`, { method: id === undefined ? 'POST' : 'PUT', body: input })
 }
 export function deleteJavaTable(id: number) { return request<null>(`/api/tables/${id}`, { method: 'DELETE' }) }
@@ -120,6 +134,8 @@ export type CheckoutPayload = {
   // VoucherCatalog code (Strategy) and a free-text note stored on the Java order.
   voucherCode?: string
   note?: string
+  // Pickup and delivery orders name their branch; a table already decides it.
+  branch?: BranchId
 }
 
 export type CheckoutReceipt = {
@@ -170,6 +186,8 @@ export type ReservationPayload = {
   dateTime: string
   guests: number
   tableId: number
+  // Java takes the branch from the tables; when sent, the tables must belong to it.
+  branch?: BranchId
 }
 
 export type ReservationReceipt = { id: string; status: string }
@@ -187,17 +205,28 @@ export type JavaReservation = {
   dateTime: string
   table: string | null
   tableId: number | null
+  branch: BranchId
   guests: number
   status: string
   note: string | null
   preOrders: { name: string; qty: number; price: number }[]
 }
 
-export function fetchReservations(): Promise<JavaResult<JavaReservation[]>> {
-  return request<JavaReservation[]>('/api/reservations', { method: 'GET' })
+export function fetchReservations(branch?: BranchId): Promise<JavaResult<JavaReservation[]>> {
+  return request<JavaReservation[]>(`/api/reservations${branch ? `?${branchQuery(branch)}` : ''}`, { method: 'GET' })
+}
+
+/** Customer history is scoped by the authenticated Java account, never by a client-supplied id. */
+export function fetchMyReservations(token: string): Promise<JavaResult<JavaReservation[]>> {
+  return request<JavaReservation[]>('/api/reservations/mine', { method: 'GET', auth: token })
 }
 
 // PATCH /api/reservations/{code}/status: confirm or cancel (seating goes through transfer-pos).
+// PUT /api/reservations/{code} (STAFF+): edits a pending or confirmed booking; the chain runs again.
+export function updateJavaReservation(code: string, payload: ReservationPayload): Promise<JavaResult<JavaReservation>> {
+  return request<JavaReservation>(`/api/reservations/${encodeURIComponent(code)}`, { method: 'PUT', body: payload })
+}
+
 export function updateJavaReservationStatus(code: string, status: 'pending' | 'confirmed' | 'cancelled'): Promise<JavaResult<JavaReservation>> {
   return request<JavaReservation>(`/api/reservations/${encodeURIComponent(code)}/status`, { method: 'PATCH', body: { status } })
 }
@@ -208,6 +237,7 @@ export type TransferredOrder = {
   customer: string
   tableId: number | null
   items: { name: string; qty: number; price: number }[]
+  branch?: BranchId
   subtotal: number
   total: number
 }
@@ -278,6 +308,16 @@ export function createJavaMenuItem(payload: NewJavaMenuItem): Promise<JavaResult
   return request<JavaMenuItem>('/api/menu', { method: 'POST', body: payload })
 }
 
+// PUT /api/menu/{id} (MANAGER+): replaces the editable fields; 409 when the name is taken.
+export function updateJavaMenuItem(id: number, payload: NewJavaMenuItem): Promise<JavaResult<JavaMenuItem>> {
+  return request<JavaMenuItem>(`/api/menu/${id}`, { method: 'PUT', body: payload })
+}
+
+// DELETE /api/menu/{id} (MANAGER+). Past orders keep the name and price they were sold at.
+export function deleteJavaMenuItem(id: number): Promise<JavaResult<null>> {
+  return request<null>(`/api/menu/${id}`, { method: 'DELETE' })
+}
+
 export type SyncOrderPayload = {
   tableIds?: number[]
   orderCode: string
@@ -291,6 +331,7 @@ export type SyncOrderPayload = {
   completedAt: string | null
   total: number
   lines: { menuItemId?: number; name: string; qty: number; price: number; variation?: string }[]
+  branch?: BranchId
 }
 
 export type SyncResult = {
@@ -321,8 +362,8 @@ export type JavaAnalytics = {
 }
 
 // GET /api/analytics/overview (MANAGER)
-export function fetchAnalytics(days: number): Promise<JavaResult<JavaAnalytics>> {
-  return request<JavaAnalytics>(`/api/analytics/overview?days=${days}`, { method: 'GET' })
+export function fetchAnalytics(days: number, branch?: BranchId): Promise<JavaResult<JavaAnalytics>> {
+  return request<JavaAnalytics>(`/api/analytics/overview?days=${days}${branch ? `&${branchQuery(branch)}` : ''}`, { method: 'GET' })
 }
 
 export type JavaCustomerSummary = JavaCustomer & { lastVisit: string | null }

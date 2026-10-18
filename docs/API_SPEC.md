@@ -53,6 +53,14 @@ Ngoại lệ: một đường dẫn nằm ngoài các nhóm đã đăng ký (`/a
 - Thiếu token hoặc token sai trả 401 `UNAUTHORIZED`; vai trò không đủ trả 403 `FORBIDDEN`. Header `X-User-Role` tự khai **chỉ** được chấp nhận khi server chạy với `AUTH_ALLOW_ROLE_HEADER=true` (dành cho phát triển và bộ test REST cũ); khi có Bearer token thì token luôn thắng.
 - **CORS:** `Access-Control-Allow-Origin: *`. Cho phép các phương thức GET, POST, PUT, PATCH, DELETE và OPTIONS. Preflight `OPTIONS` trả 204, không cần token.
 
+### 1.4. Chi nhánh
+Quán có hai chi nhánh, id cố định ở `com.dalatcafe.model.Branches` và `frontend-nextjs/lib/branches.ts`: `phan-dinh-phung` (123 Phan Đình Phùng, chi nhánh mặc định) và `bui-thi-xuan` (456 Bùi Thị Xuân).
+- **Thuộc về một chi nhánh:** bàn, đơn hàng, phiếu đặt bàn (trường `branch` trong JSON). **Dùng chung:** thực đơn, khách hàng thành viên, tài khoản, cài đặt quán.
+- **Lọc danh sách:** `GET /api/tables`, `/api/tables/catalog`, `/api/orders`, `/api/reservations`, `/api/analytics/overview` nhận `?branch=<id>`. Không gửi thì trả cả quán; id lạ trả 400.
+- **Kiểm tra lịch bàn:** `GET /api/tables/catalog?dateTime=<ISO-8601>&branch=<id>` thêm `available` cho từng bàn, không trả thông tin khách. Bàn thuộc bất kỳ phiếu chưa hủy nào có thời gian sử dụng chồng nhau đều không chọn được, kể cả bàn phụ trong phiếu ghép. Máy chủ kiểm tra lại khi lưu; các bàn khác vẫn đặt cùng giờ được. Khách chưa nhận bàn quá thời gian chờ (mặc định 15 phút) không còn giữ chỗ; khách đã nhận bàn không bị tự nhả bàn. Khi không đọc được lịch hoặc mất kết nối, frontend không ghi nhận phiếu bằng dữ liệu độc lập; chế độ demo chỉ dùng khi `JAVA_BACKEND_URL=off`.
+- **Chi nhánh của bản ghi mới:** bàn mới vào chi nhánh trong `branch` của body (mặc định chi nhánh đầu), sửa bàn không đổi chi nhánh. Đơn tại bàn và phiếu đặt lấy chi nhánh của bàn; đơn mang đi / giao hàng lấy `branch` trong body. Gửi `branch` khác chi nhánh của bàn, hoặc ghép bàn của hai chi nhánh vào một phiếu, đều trả 400 trước khi thu tiền hay lưu.
+- Tên bàn chỉ cần không trùng **trong cùng chi nhánh** (cả hai chi nhánh đều có `Bàn 01`).
+
 ---
 
 ## 2. Danh mục endpoint
@@ -63,11 +71,14 @@ Ngoại lệ: một đường dẫn nằm ngoài các nhóm đã đăng ký (`/a
 | `/api/tables` | GET | STAFF+ | — | 🟢 Đã triển khai |
 | `/api/tables/{id}` hoặc `/api/tables/{id}/status` | PUT, PATCH | STAFF+ | — | 🟢 Đã triển khai |
 | `/api/reservations` | GET | STAFF+ | — | 🟢 Đã triển khai |
+| `/api/reservations/mine` | GET | Đăng nhập | Lịch sử đặt bàn của tài khoản hiện tại | 🟢 Đã triển khai |
 | `/api/reservations` | POST | Công khai | **Chain of Responsibility** | 🟢 Đã triển khai |
 | `/api/checkout` | POST | STAFF+ | **Facade** (+ Decorator, Builder, Strategy, Factory, Observer) | 🟢 Đã triển khai |
 | `/api/reservations/{code}/transfer-pos` | POST | STAFF+ | **Adapter** | 🟢 Đã triển khai |
 | `/api/menu` | POST | MANAGER+ | — | 🟢 Đã triển khai |
+| `/api/menu/{id}` | PUT, PATCH, DELETE | MANAGER+ | — | 🟢 Đã triển khai |
 | `/api/menu/{id}/stock` | PATCH, PUT | STAFF+ | — | 🟢 Đã triển khai |
+| `/api/reservations/{code}` | PUT, PATCH | STAFF+ | **Chain of Responsibility** | 🟢 Đã triển khai |
 | `/api/reservations/{code}/status` | PATCH, PUT | STAFF+ | — | 🟢 Đã triển khai |
 | `/api/orders` | GET | STAFF+ | — | 🟢 Đã triển khai |
 | `/api/orders/{code}/status` | PATCH, PUT | STAFF+ | **Observer** (đơn hoàn tất) | 🟢 Đã triển khai |
@@ -109,7 +120,7 @@ Trả về toàn bộ món bán và nguyên liệu.
 ```
 
 ### 3.2. `GET /api/tables`
-Trả về 15 bàn: `id`, `name` (`"Bàn 01"`…), `seats`, `zone` (`Main Floor`, `Patio`, `Coffee Bar`), `status` (chữ thường), `guestCount`, `occupiedSince`.
+Trả về bàn của cả quán, hoặc một chi nhánh với `?branch=` (dữ liệu mẫu: 15 bàn ở `phan-dinh-phung` với khu `Main Floor`, `Patio`, `Coffee Bar`; 8 bàn ở `bui-thi-xuan` với khu `Sân vườn`, `Góc làm việc`, `Tầng 2`). Mỗi bàn: `id`, `name` (`"Bàn 01"`…), `seats`, `zone`, `branch`, `status` (chữ thường), `guestCount`, `occupiedSince`.
 
 ### 3.3. `PUT|PATCH /api/tables/{id}` (hoặc `/api/tables/{id}/status`)
 ```json
@@ -120,7 +131,7 @@ Trả về 15 bàn: `id`, `name` (`"Bàn 01"`…), `seats`, `zone` (`Main Floor`
 - Phản hồi 200: `{ "ok": true, "message": "Table #3 status changed to 'occupied'" }`. Sai đầu vào trả 400, không có bàn trả 404.
 
 ### 3.4. `GET /api/reservations`
-Danh sách phiếu: `id` (mã `RES-xxxx`), `customer`, `contact`, `email`, `dateTime`, `table`, `tableId`, `guests`, `status` (nhãn tiếng Việt), `note`, `preOrders[]`.
+Danh sách phiếu (lọc bằng `?branch=`): `id` (mã `RES-xxxx`), `customer`, `contact`, `email`, `dateTime`, `table`, `tableId`, `tableIds`, `branch`, `guests`, `status` (nhãn tiếng Việt), `note`, `preOrders[]`.
 
 ### 3.5. `POST /api/reservations`
 ```json
@@ -174,6 +185,11 @@ Danh sách phiếu: `id` (mã `RES-xxxx`), `customer`, `contact`, `email`, `date
   - 400: thanh toán bị từ chối, voucher sai, hoặc đổi điểm không hợp lệ.
   - 503 `DATABASE_UNAVAILABLE`: chế độ JDBC mất kết nối. Không thu tiền, không ghi đơn.
 
+#### `GET /api/reservations/mine`
+Tài khoản đăng nhập xem tối đa 50 phiếu đặt bàn của mình, sắp xếp giờ hẹn mới nhất trước, gồm mọi trạng thái và chi nhánh. Dữ liệu phiếu có cùng định dạng với danh sách đặt bàn của nhân viên. Không nhận tài khoản hoặc email từ query string.
+
+Khi đặt bàn với Bearer token hợp lệ, backend tự lưu tài khoản đặt phiếu; `userId` gửi trong body không được sử dụng. Phiếu cũ chưa gắn tài khoản được đối chiếu email liên hệ với email tài khoản. Phiếu đã gắn tài khoản chỉ hiển thị cho chính tài khoản đó, dù email liên hệ trùng tài khoản khác. Phiếu cũ không có email hoặc tài khoản chưa đủ thông tin để tự liên kết.
+
 ### 3.7. `POST /api/reservations/{code}/transfer-pos`
 Khách đặt trước đến quán: `ReservationToOrderAdapter` chuyển phiếu thành đơn POS. Không cần body.
 - **Đơn tạo ra:**
@@ -201,7 +217,7 @@ Khách đặt trước đến quán: `ReservationToOrderAdapter` chuyển phiế
   - 401 / 403: thiếu quyền.
 
 ### 3.8. `GET /api/orders`
-Danh sách đơn, mới nhất trước. Lọc bằng `?status=pending|brewing|ready|completed|cancelled` (sai giá trị: 400). Mỗi đơn gồm `orderCode`, `customer`, `tableId`, `orderType`, `status`, `paymentStatus`, `paymentMethod`, `items[]` (`menuItemId`, `name`, `qty`, `price`, `variation`), `subtotal`, `discountAmount`, `vatAmount`, `total`, `note`, `createdAt`, `completedAt`.
+Danh sách đơn, mới nhất trước. Lọc bằng `?status=pending|brewing|ready|completed|cancelled` (sai giá trị: 400) và `?branch=`. Mỗi đơn gồm `orderCode`, `customer`, `tableId`, `branch`, `orderType`, `status`, `paymentStatus`, `paymentMethod`, `items[]` (`menuItemId`, `name`, `qty`, `price`, `variation`), `subtotal`, `discountAmount`, `vatAmount`, `total`, `note`, `createdAt`, `completedAt`.
 
 ### 3.9. `PATCH /api/orders/{code}/status`
 ```json
@@ -229,11 +245,22 @@ Thanh toán một đơn chưa thu tiền (ví dụ đơn chuyển từ đặt b�
 ```
 Bắt buộc `name`, `category`, `sellPrice`; số tiền không được âm. `inStock` mặc định là `true`. Hệ thống không theo dõi số lượng tồn kho. Trả **201** với món vừa tạo (định dạng như mục 3.1). Trùng tên (không phân biệt hoa thường) trả 409.
 
+### 3.11b. `PUT /api/menu/{id}` và `DELETE /api/menu/{id}` (MANAGER+)
+- **Sửa:** body như mục 3.11 (`name`, `category`, `sellPrice` bắt buộc; `costPrice`, `unit`, `kind`, `recipe`, `imageUrl`, `inStock`, `variations` tuỳ chọn; gửi `variations` là thay cả danh sách). Tên trùng món khác (không phân biệt hoa thường) trả 409; giữ tên của chính món thì không tính là trùng. Giá âm trả 400, không có món trả 404. Trả 200 kèm món sau khi sửa.
+- **Xoá:** trả 200, không có món trả 404. Đơn và phiếu đặt đã có giữ nguyên tên và giá lúc bán (dòng đơn lưu JSONB, không có khoá ngoại tới `menu_items`). Muốn tạm ngưng bán thì dùng mục 3.12.
+- Frontend (`updateMenuItem`, `deleteMenuItem`) gọi Java trước, rồi mới sửa `admin_menu_items` và cặp liên kết trong `admin_menu_links`. Khi đã cấu hình Java mà Java không phản hồi thì từ chối, để giá ở POS không lệch giữa hai phía.
+
 ### 3.12. `PATCH /api/menu/{id}/stock`
 ```json
 { "inStock": false }
 ```
 Bật / tắt bán một món. Hệ thống không theo dõi số lượng tồn kho, nên `inStock` (boolean) là trường duy nhất và bắt buộc; thiếu hoặc sai kiểu trả 400 (các trường cũ `change`, `stockQty` không còn được nhận). Không có món trả 404. Trả về món sau khi cập nhật. Món đang tắt thì checkout trả 409 `OUT_OF_STOCK`.
+
+### 3.12b. `PUT /api/reservations/{code}` (STAFF+)
+```json
+{ "customer": "An", "contact": "0911000111", "email": null, "note": "Sinh nhật", "dateTime": "2026-10-20T08:00:00Z", "tableIds": [5, 6], "guests": 8 }
+```
+Sửa phiếu đang `pending` hoặc `confirmed` (trạng thái khác trả 409, không có phiếu trả 404). Bàn chọn như mục 3.5 (`tableIds`, `tableId` hoặc `table`). Mã phiếu, trạng thái và món đặt trước được giữ nguyên. Cả chuỗi Chain of Responsibility chạy lại; phiếu đang sửa không bị tính là trùng lịch với chính nó. Bị từ chối thì trả 400 `CHAIN_VALIDATION_FAILED` và phiếu không đổi. Bàn cũ không còn dùng được trả về `available` nếu không còn phiếu hay đơn nào giữ.
 
 ### 3.13. `PATCH /api/reservations/{code}/status`
 ```json
@@ -245,6 +272,7 @@ Bật / tắt bán một món. Hệ thống không theo dõi số lượng tồn
 Danh sách thành viên, chi tiêu nhiều nhất trước: `id`, `name`, `phone`, `email`, `totalOrders`, `totalSpent`, `loyaltyPoints`, `rank` (`bronze`, `silver`, `gold`, `vip`), `lastVisit`. `?phone=0901234567` trả mảng 0 hoặc 1 phần tử (POS dùng để tra cứu thành viên).
 
 ### 3.15. `GET /api/analytics/overview?days=7` (MANAGER+)
+Thêm `&branch=<id>` để chỉ tính đơn và bàn của một chi nhánh (dashboard admin luôn gửi chi nhánh đang chọn).
 Tính trực tiếp từ DAO mỗi lần gọi. Doanh thu chỉ tính đơn đã thanh toán và chưa huỷ; "hôm nay" theo giờ `Asia/Ho_Chi_Minh`. `days` (1–90, mặc định 7) là độ dài chuỗi `revenueByDay`; `paymentMix` và `topItems` tính trong cùng khoảng đó. Sai `days` trả 400. Dashboard và trang phân tích của frontend dùng endpoint này khi Java phản hồi.
 ```json
 {

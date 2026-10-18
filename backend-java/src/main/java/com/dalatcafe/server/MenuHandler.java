@@ -14,8 +14,9 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * GET /api/menu (public catalog), POST /api/menu (new item, MANAGER+) and
- * PATCH /api/menu/{id}/stock (stock quantity and the in-stock switch, STAFF+).
+ * GET /api/menu (public catalog), POST /api/menu (new item, MANAGER+), PUT /api/menu/{id}
+ * (edit, MANAGER+), DELETE /api/menu/{id} (remove, MANAGER+) and PATCH /api/menu/{id}/stock
+ * (the in-stock switch, STAFF+).
  */
 public class MenuHandler extends ApiHandler {
     private final IMenuDao menuDao;
@@ -33,6 +34,15 @@ public class MenuHandler extends ApiHandler {
                 throw methodNotAllowed(exchange);
             }
             updateStock(exchange, parseId(parts.get(2)));
+            return;
+        }
+        if (parts.size() == 3) {
+            int id = parseId(parts.get(2));
+            switch (method) {
+                case "PUT", "PATCH" -> update(exchange, id);
+                case "DELETE" -> delete(exchange, id);
+                default -> throw methodNotAllowed(exchange);
+            }
             return;
         }
         if (parts.size() != 2) {
@@ -82,6 +92,60 @@ public class MenuHandler extends ApiHandler {
             throw new ApiException(500, "INTERNAL_SERVER_ERROR", "Could not save menu item " + name);
         }
         sendOk(exchange, 201, toJson(item), "Menu item created");
+    }
+
+    /** Replaces the editable fields; the name stays unique (case-insensitive) across the menu. */
+    private void update(HttpExchange exchange, int id) throws IOException {
+        Map<String, Object> body = readJsonBody(exchange);
+        MenuItem item;
+        // Checking the name and saving are one step, or two edits could take the same name.
+        synchronized (menuDao) {
+            item = menuDao.findById(id).orElseThrow(() -> ApiException.notFound("Menu item not found: " + id));
+            String name = requireStr(body, "name");
+            boolean duplicate = menuDao.findAll().stream()
+                    .anyMatch(other -> !other.getId().equals(id) && name.equalsIgnoreCase(other.getName()));
+            if (duplicate) {
+                throw new ApiException(409, "RESOURCE_CONFLICT", "Menu item already exists: " + name);
+            }
+            item.setName(name);
+            item.setCategory(requireStr(body, "category"));
+            item.setSellPrice(nonNegative(body, "sellPrice", null));
+            item.setCostPrice(nonNegative(body, "costPrice", item.getCostPrice()));
+            String kind = str(body, "kind");
+            if (kind != null) {
+                item.setKind(kind);
+            }
+            String unit = str(body, "unit");
+            if (unit != null) {
+                item.setUnit(unit);
+            }
+            item.setRecipe(str(body, "recipe"));
+            item.setImageUrl(str(body, "imageUrl"));
+            if (body.get("inStock") != null) {
+                item.setInStock(bool(body, "inStock", item.isInStock()));
+            }
+            if (body.get("variations") != null) {
+                List<Variation> variations = new ArrayList<>();
+                for (Object raw : list(body, "variations")) {
+                    Map<String, Object> variation = asObject(raw, "variations entry");
+                    variations.add(new Variation(requireStr(variation, "name"), nonNegative(variation, "price", 0.0)));
+                }
+                item.setVariations(variations);
+            }
+            if (!menuDao.save(item)) {
+                throw new ApiException(503, "DATABASE_UNAVAILABLE", "Could not save menu item " + id);
+            }
+        }
+        sendOk(exchange, 200, toJson(item), "Menu item updated");
+    }
+
+    /** Past orders and bookings keep the name and price they were sold at, so removing is safe. */
+    private void delete(HttpExchange exchange, int id) throws IOException {
+        menuDao.findById(id).orElseThrow(() -> ApiException.notFound("Menu item not found: " + id));
+        if (!menuDao.deleteById(id)) {
+            throw new ApiException(503, "DATABASE_UNAVAILABLE", "Could not delete menu item " + id);
+        }
+        sendOk(exchange, 200, null, "Menu item deleted");
     }
 
     /**

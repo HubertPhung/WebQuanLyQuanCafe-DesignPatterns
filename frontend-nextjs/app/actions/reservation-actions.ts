@@ -1,15 +1,16 @@
 'use server'
 
-import { createReservation as createJavaReservation, fetchReservationTables } from '@/lib/api-client'
+import { createReservation as createJavaReservation, getJavaBackendUrl } from '@/lib/api-client'
 import { isWithinDefaultOperatingHours, hasReservationTimePassed, DEFAULT_OPENING_TIME, DEFAULT_CLOSING_TIME } from '@/lib/reservation-rules'
-import { createMockReservation, getMockTables, getMockMenuItems } from '@/lib/db/mock-store'
+import { createMockReservation, getMockMenuItems } from '@/lib/db/mock-store'
+import { getReservationTableOptions } from '@/lib/reservations/availability'
 import { isDbConfigured } from '@/lib/db'
+import { DEFAULT_BRANCH_ID, isBranchId, type BranchId } from '@/lib/branches'
+import { getSession } from '@/lib/auth/session'
+import { revalidatePath } from 'next/cache'
 
-export async function getCustomerReservationTables() {
-  const remote = await fetchReservationTables()
-  if (remote.ok) return { ok: true, tables: remote.data }
-  if (isDbConfigured || !remote.unreachable) return { ok: false, tables: [], error: 'Chưa tải được danh sách bàn. Vui lòng thử lại.' }
-  return { ok: true, tables: getMockTables().map(({ id, name, seats, zone }) => ({ id, name, seats, zone })) }
+export async function getCustomerReservationTables(dateTime?: string, branch?: BranchId) {
+  return getReservationTableOptions(dateTime, branch)
 }
 
 export interface CustomerReservationInput {
@@ -21,6 +22,8 @@ export interface CustomerReservationInput {
   guests: number
   tableId: number
   tableIds?: number[]
+  // The tables must all belong to this branch.
+  branch?: BranchId
   preOrders?: { menuItemId: number; qty: number }[]
 }
 
@@ -49,6 +52,11 @@ export async function bookCustomerTable(input: CustomerReservationInput): Promis
       return { ok: false, error: 'Vui lòng chọn vị trí bàn mong muốn.' }
     }
 
+    if (input.branch !== undefined && !isBranchId(input.branch)) {
+      return { ok: false, error: 'Vui lòng chọn chi nhánh.' }
+    }
+    const branch = input.branch ?? DEFAULT_BRANCH_ID
+
     const dateTime = new Date(input.dateTime)
     if (Number.isNaN(dateTime.getTime())) {
       return { ok: false, error: 'Thời gian đặt bàn không hợp lệ.' }
@@ -60,21 +68,24 @@ export async function bookCustomerTable(input: CustomerReservationInput): Promis
       return { ok: false, error: `Quán chỉ phục vụ đặt bàn trong khung giờ mở cửa (${DEFAULT_OPENING_TIME} - ${DEFAULT_CLOSING_TIME}).` }
     }
 
+    const session = await getSession()
     const booking = {
       customer,
       contact,
-      email: input.email?.trim() || undefined,
+      email: input.email?.trim() || session?.email || undefined,
       note: input.note?.trim().slice(0, 500) || undefined,
       dateTime: dateTime.toISOString(),
       guests: input.guests,
       tableId: tableIds[0],
       tableIds,
+      branch,
       preOrders: input.preOrders && input.preOrders.length > 0 ? input.preOrders : undefined,
     }
 
     // Call Java backend Chain of Responsibility validation & DAO persistence
     const remote = await createJavaReservation(booking)
     if (remote.ok) {
+      revalidatePath('/account/orders')
       return {
         ok: true,
         id: remote.data.id,
@@ -86,8 +97,8 @@ export async function bookCustomerTable(input: CustomerReservationInput): Promis
       return { ok: false, error: remote.error || 'Yêu cầu đặt bàn không thành công.' }
     }
 
-    // If Java is temporarily offline, use mock store fallback
-    if (isDbConfigured) return { ok: false, error: 'Dịch vụ đặt bàn đang gián đoạn. Chưa ghi nhận đặt bàn, vui lòng thử lại.' }
+    // Only an explicitly disabled backend uses demo data; a network failure must not split schedules.
+    if (isDbConfigured || getJavaBackendUrl()) return { ok: false, error: 'Chưa kiểm tra được lịch bàn do mất kết nối. Chưa ghi nhận đặt bàn, vui lòng thử lại.' }
     const menu = getMockMenuItems()
     const preOrders = (booking.preOrders ?? []).map(line => {
       const item = menu.find(item => item.id === line.menuItemId && item.kind === 'menu' && item.inStock)
@@ -95,6 +106,7 @@ export async function bookCustomerTable(input: CustomerReservationInput): Promis
       return { name: item.name, qty: line.qty, price: item.sellPrice }
     })
     const mockRes = createMockReservation({
+      userId: session?.userId ?? null,
       customer: booking.customer,
       contact: booking.contact,
       email: booking.email ?? null,
@@ -103,10 +115,12 @@ export async function bookCustomerTable(input: CustomerReservationInput): Promis
       guests: booking.guests,
       tableId: booking.tableId,
       tableIds,
+      branch,
       preOrders,
     })
 
     if (mockRes.ok && mockRes.code) {
+      revalidatePath('/account/orders')
       return {
         ok: true,
         id: mockRes.code,

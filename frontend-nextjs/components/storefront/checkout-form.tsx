@@ -34,10 +34,11 @@ import { TAX_RATE } from '@/lib/admin/format'
 import { formatMoneyVND, useCartStore } from '@/lib/store/cart-store'
 import { voucherDiscount } from '@/lib/storefront/vouchers'
 import { isDaLatAddress, shippingFee } from '@/lib/storefront/delivery'
+import { DEFAULT_BRANCH_ID, branchById, branches, type BranchId } from '@/lib/branches'
 
 type Payment = OnlineOrderInput['payment']
 type Fulfilment = OnlineOrderInput['fulfilment']
-type Placed = { orderCode: string; total: number; paid: boolean; name: string; payment: Payment; fulfilment: Fulfilment }
+type Placed = { orderCode: string; total: number; paid: boolean; name: string; payment: Payment; fulfilment: Fulfilment; branch: BranchId }
 
 const paymentLabels: Record<Payment, string> = {
   vietqr: 'VietQR chuyển khoản',
@@ -89,6 +90,7 @@ export function CheckoutForm({ account }: { account: { name: string; email: stri
   const [address, setAddress] = useState('')
   const [note, setNote] = useState('')
   const [fulfilment, setFulfilment] = useState<Fulfilment>('delivery')
+  const [branch, setBranch] = useState<BranchId>(DEFAULT_BRANCH_ID)
   const [payment, setPayment] = useState<Payment>('vietqr')
   const [placed, setPlaced] = useState<Placed | null>(null)
   const [pending, startTransition] = useTransition()
@@ -122,14 +124,14 @@ export function CheckoutForm({ account }: { account: { name: string; email: stri
 
   const executePlaceOrder = (chosenPayment: Payment) => {
     startTransition(async () => {
-      const result = await placeOnlineOrder({ name, phone, email, address, note, fulfilment, payment: chosenPayment })
+      const result = await placeOnlineOrder({ name, phone, email, address, note, fulfilment, branch, payment: chosenPayment })
       if (!result.ok) {
         toast.error(result.error)
         return
       }
       setIsQrModalOpen(false)
       setIsCardModalOpen(false)
-      setPlaced({ ...result, name, payment: chosenPayment, fulfilment })
+      setPlaced({ ...result, name, payment: chosenPayment, fulfilment, branch })
       await fetchCart()
       toast.success('Đơn hàng đã được xác nhận thành công!')
     })
@@ -181,7 +183,9 @@ export function CheckoutForm({ account }: { account: { name: string; email: stri
             </p>
             <p className="text-xs text-stone-600">
               Cảm ơn <strong className="text-stone-900">{placed.name}</strong>. Quầy pha chế đã nhận đơn của bạn
-              {placed.fulfilment === 'delivery' ? ' và sẽ giao tới địa chỉ bạn đã nhập.' : '; bạn có thể ghé quầy lấy khi đồ uống sẵn sàng.'}
+              {placed.fulfilment === 'delivery'
+                ? ` và chi nhánh ${branchById(placed.branch).street} sẽ giao tới địa chỉ bạn đã nhập.`
+                : `; bạn có thể ghé quầy ${branchById(placed.branch).street} lấy khi đồ uống sẵn sàng.`}
             </p>
           </div>
           <div className="space-y-2 rounded-2xl border border-amber-200/60 bg-amber-50/60 p-4 text-left text-xs">
@@ -269,6 +273,23 @@ export function CheckoutForm({ account }: { account: { name: string; email: stri
                   hint="Nhận tại chi nhánh khi đồ uống sẵn sàng"
                   aside={<Store className="size-4 text-stone-400" aria-hidden="true" />}
                 />
+              </div>
+              <div className="space-y-2 text-xs">
+                <span className="block font-medium text-stone-500">
+                  {fulfilment === 'delivery' ? 'Chi nhánh pha chế và giao hàng' : 'Chi nhánh đến lấy'}
+                </span>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {branches.map((option) => (
+                    <Choice
+                      key={option.id}
+                      name="branch"
+                      checked={branch === option.id}
+                      onSelect={() => setBranch(option.id)}
+                      title={option.street}
+                      hint={`${option.hours} · ${option.note}`}
+                    />
+                  ))}
+                </div>
               </div>
               {fulfilment === 'delivery' && (
                 <div className="text-xs">

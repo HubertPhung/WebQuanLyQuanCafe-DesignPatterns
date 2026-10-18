@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Bell, CalendarClock, Check, ChevronsUpDown, Coffee, LogOut, RefreshCw, Store, UserCheck } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -19,6 +19,8 @@ import { Separator } from '@/components/ui/separator'
 import { SidebarTrigger } from '@/components/ui/sidebar'
 import { toast } from 'sonner'
 import { signOut } from '@/app/auth/actions'
+import { selectAdminBranch } from '@/app/admin/actions'
+import { branches, branchById, type BranchId } from '@/lib/branches'
 import { roleLabels, type Role } from '@/lib/auth/roles'
 
 type HeaderProps = {
@@ -26,6 +28,7 @@ type HeaderProps = {
   pendingReservations?: { id: string; customer: string; dateTime: string; guests: number }[]
   pendingSync?: number
   activeCount?: number
+  branch: BranchId
   user: { name: string; email: string; role: Role }
 }
 
@@ -44,10 +47,28 @@ export function AdminHeader({
   pendingReservations = [],
   pendingSync = 0,
   activeCount = 0,
+  branch,
   user,
 }: HeaderProps) {
   const router = useRouter()
-  const [branch, setBranch] = useState('123 Phan Đình Phùng')
+  // Shown at once; the server re-renders every admin page for the new branch.
+  const [shownBranch, setShownBranch] = useState(branch)
+  const [switching, startSwitch] = useTransition()
+  const chooseBranch = (next: BranchId) => {
+    if (next === shownBranch) return
+    const previous = shownBranch
+    setShownBranch(next)
+    startSwitch(async () => {
+      const result = await selectAdminBranch(next)
+      if (!result.ok) {
+        setShownBranch(previous)
+        toast.error(result.error)
+        return
+      }
+      toast.success(result.message)
+      router.refresh()
+    })
+  }
   const notificationCount = readyOrders.length + pendingReservations.length + (pendingSync > 0 ? 1 : 0)
 
   return (
@@ -60,8 +81,8 @@ export function AdminHeader({
         <DropdownMenuTrigger
           className="hidden sm:flex h-10 rounded-lg px-3.5 text-xs md:text-sm font-semibold border border-stone-200/80 bg-white hover:bg-stone-50 gap-2 items-center cursor-pointer transition-colors shadow-2xs whitespace-nowrap min-w-fit flex-shrink-0"
         >
-          <Store className="size-4 text-[#5A3E2B]" />
-          <span className="font-semibold tracking-tight text-stone-800 whitespace-nowrap">{branch}</span>
+          <Store className={`size-4 text-[#5A3E2B] ${switching ? 'animate-pulse' : ''}`} />
+          <span className="font-semibold tracking-tight text-stone-800 whitespace-nowrap">{branchById(shownBranch).street}</span>
           <ChevronsUpDown className="size-3.5 text-stone-400" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-64 p-1.5 rounded-xl bg-white border-stone-200 text-stone-900 shadow-xl">
@@ -69,11 +90,16 @@ export function AdminHeader({
             <DropdownMenuLabel className="text-xs font-bold uppercase tracking-wider text-stone-500 px-3 py-2 whitespace-nowrap">
               Chi nhánh cửa hàng
             </DropdownMenuLabel>
-            {['123 Phan Đình Phùng', '456 Bùi Thị Xuân'].map((name) => (
-              <DropdownMenuItem key={name} onClick={() => setBranch(name)} className="h-10 rounded-lg px-3 text-sm font-medium hover:bg-stone-100 text-stone-900 cursor-pointer whitespace-nowrap">
+            {branches.map((option) => (
+              <DropdownMenuItem
+                key={option.id}
+                disabled={switching}
+                onClick={() => chooseBranch(option.id)}
+                className="h-10 rounded-lg px-3 text-sm font-medium hover:bg-stone-100 text-stone-900 cursor-pointer whitespace-nowrap"
+              >
                 <Store className="size-4 text-[#5A3E2B]" />
-                {name}
-                {branch === name && <Check className="ml-auto size-4 text-[#5A3E2B]" />}
+                {option.street}
+                {shownBranch === option.id && <Check className="ml-auto size-4 text-[#5A3E2B]" />}
               </DropdownMenuItem>
             ))}
           </DropdownMenuGroup>

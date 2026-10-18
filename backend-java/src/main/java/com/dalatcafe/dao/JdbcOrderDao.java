@@ -20,7 +20,7 @@ public class JdbcOrderDao implements IOrderDao {
     @Override
     public List<Order> findAll() {
         List<Order> list = new ArrayList<>();
-        String sql = "SELECT id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items, table_ids FROM orders ORDER BY created_at DESC";
+        String sql = "SELECT id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items, table_ids, branch FROM orders ORDER BY created_at DESC";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
@@ -29,13 +29,14 @@ public class JdbcOrderDao implements IOrderDao {
             }
         } catch (SQLException e) {
             LOGGER.log(Level.SEVERE, "Error findAll orders via JDBC: " + e.getMessage(), e);
+            throw new IllegalStateException("Không đọc được danh sách đơn hàng.", e);
         }
         return list;
     }
 
     @Override
     public Optional<Order> findById(int id) {
-        String sql = "SELECT id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items, table_ids FROM orders WHERE id = ?";
+        String sql = "SELECT id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items, table_ids, branch FROM orders WHERE id = ?";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, id);
@@ -53,7 +54,7 @@ public class JdbcOrderDao implements IOrderDao {
     @Override
     public Optional<Order> findByOrderCode(String orderCode) {
         if (orderCode == null) return Optional.empty();
-        String sql = "SELECT id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items, table_ids FROM orders WHERE LOWER(order_code) = LOWER(?)";
+        String sql = "SELECT id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items, table_ids, branch FROM orders WHERE LOWER(order_code) = LOWER(?)";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, orderCode);
@@ -72,7 +73,7 @@ public class JdbcOrderDao implements IOrderDao {
     public List<Order> findByStatus(OrderStatus status) {
         List<Order> list = new ArrayList<>();
         if (status == null) return list;
-        String sql = "SELECT id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items, table_ids FROM orders WHERE UPPER(status) = ? ORDER BY created_at DESC";
+        String sql = "SELECT id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items, table_ids, branch FROM orders WHERE UPPER(status) = ? ORDER BY created_at DESC";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, status.name());
@@ -90,7 +91,7 @@ public class JdbcOrderDao implements IOrderDao {
     @Override
     public List<Order> findByTableId(int tableId) {
         List<Order> list = new ArrayList<>();
-        String sql = "SELECT id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items, table_ids FROM orders WHERE (table_id = ? OR table_ids @> CAST(? AS JSONB)) ORDER BY created_at DESC";
+        String sql = "SELECT id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items, table_ids, branch FROM orders WHERE (table_id = ? OR table_ids @> CAST(? AS JSONB)) ORDER BY created_at DESC";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, tableId);
@@ -111,8 +112,8 @@ public class JdbcOrderDao implements IOrderDao {
         if (order == null) return false;
         if (order.getId() != null && order.getId() > 0) {
             String sql = """
-                INSERT INTO orders (id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items, table_ids)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB), CAST(? AS JSONB))
+                INSERT INTO orders (id, order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items, table_ids, branch)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB), CAST(? AS JSONB), ?)
                 ON CONFLICT (id) DO UPDATE SET
                     order_code = EXCLUDED.order_code,
                     customer = EXCLUDED.customer,
@@ -127,7 +128,7 @@ public class JdbcOrderDao implements IOrderDao {
                     status = EXCLUDED.status,
                     note = EXCLUDED.note,
                     completed_at = EXCLUDED.completed_at,
-                    items = EXCLUDED.items, table_ids = EXCLUDED.table_ids
+                    items = EXCLUDED.items, table_ids = EXCLUDED.table_ids, branch = EXCLUDED.branch
             """;
             try (Connection conn = JdbcDatabase.getConnection();
                  PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -139,8 +140,8 @@ public class JdbcOrderDao implements IOrderDao {
             }
         } else {
             String sql = """
-                INSERT INTO orders (order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items, table_ids)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB), CAST(? AS JSONB))
+                INSERT INTO orders (order_code, customer, table_id, order_type, subtotal, vat_amount, discount_amount, total, payment_method, payment_status, status, note, created_at, completed_at, items, table_ids, branch)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB), CAST(? AS JSONB), ?)
             """;
             try (Connection conn = JdbcDatabase.getConnection();
                  PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
@@ -167,6 +168,7 @@ public class JdbcOrderDao implements IOrderDao {
                 ps.setTimestamp(14, order.getCompletedAt() != null ? Timestamp.from(order.getCompletedAt()) : null);
                 ps.setString(15, JsonColumns.fromItems(order.getItems()));
                 ps.setString(16, JsonColumns.fromIds(order.getTableIds()));
+                ps.setString(17, order.getBranch());
 
                 int rows = ps.executeUpdate();
                 if (rows > 0) {
@@ -216,6 +218,7 @@ public class JdbcOrderDao implements IOrderDao {
         ps.setTimestamp(15, order.getCompletedAt() != null ? Timestamp.from(order.getCompletedAt()) : null);
         ps.setString(16, JsonColumns.fromItems(order.getItems()));
         ps.setString(17, JsonColumns.fromIds(order.getTableIds()));
+        ps.setString(18, order.getBranch());
     }
 
     @Override
@@ -264,6 +267,7 @@ public class JdbcOrderDao implements IOrderDao {
     private Order mapResultSetToOrder(ResultSet rs) throws SQLException {
         Order order = new Order();
         order.setTableIds(JsonColumns.toIds(rs.getString("table_ids")));
+        order.setBranch(rs.getString("branch"));
         order.setId(rs.getInt("id"));
         order.setOrderCode(rs.getString("order_code"));
         order.setCustomer(rs.getString("customer"));

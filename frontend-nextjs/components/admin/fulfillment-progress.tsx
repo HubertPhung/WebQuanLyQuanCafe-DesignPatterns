@@ -14,30 +14,31 @@ export const fulfillmentConfig: Record<
     step: number
   }
 > = {
+  cancelled: { percent: 0, label: 'Đã hủy', dotColor: 'bg-rose-500', gradient: 'from-rose-500 to-rose-400', step: 0 },
   pending: {
     percent: 25,
-    label: 'Order Placed',
+    label: 'Chờ pha chế',
     dotColor: 'bg-amber-500',
     gradient: 'from-amber-500 to-amber-400',
     step: 1,
   },
   brewing: {
     percent: 60,
-    label: 'Brewing',
+    label: 'Đang pha chế',
     dotColor: 'bg-blue-500',
     gradient: 'from-blue-600 via-indigo-500 to-cyan-400',
     step: 2,
   },
   ready: {
     percent: 88,
-    label: 'Ready for Pickup',
+    label: 'Sẵn sàng phục vụ',
     dotColor: 'bg-emerald-500',
     gradient: 'from-emerald-500 to-teal-400',
     step: 3,
   },
   completed: {
     percent: 100,
-    label: 'Completed',
+    label: 'Đã hoàn thành',
     dotColor: 'bg-emerald-600',
     gradient: 'from-emerald-600 to-green-500',
     step: 4,
@@ -103,10 +104,10 @@ export function OrderFulfillmentBar({
       </div>
       {showSteps && (
         <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-0.5">
-          <span className={cn(config.step >= 1 ? 'text-foreground font-semibold' : 'opacity-60')}>Queued</span>
-          <span className={cn(config.step >= 2 ? 'text-foreground font-semibold' : 'opacity-60')}>Brewing</span>
-          <span className={cn(config.step >= 3 ? 'text-foreground font-semibold' : 'opacity-60')}>Ready</span>
-          <span className={cn(config.step >= 4 ? 'text-foreground font-semibold' : 'opacity-60')}>Served</span>
+          <span className={cn(config.step >= 1 ? 'text-foreground font-semibold' : 'opacity-60')}>Chờ pha</span>
+          <span className={cn(config.step >= 2 ? 'text-foreground font-semibold' : 'opacity-60')}>Đang pha</span>
+          <span className={cn(config.step >= 3 ? 'text-foreground font-semibold' : 'opacity-60')}>Sẵn sàng</span>
+          <span className={cn(config.step >= 4 ? 'text-foreground font-semibold' : 'opacity-60')}>Đã phục vụ</span>
         </div>
       )}
     </div>
@@ -125,9 +126,9 @@ export function MetricProgressBar({
   return (
     <div className={cn('pt-3 flex flex-col gap-2 w-full', className)}>
       <div className="flex items-center justify-between text-xs md:text-sm">
-        <span className="text-muted-foreground font-semibold">{label ?? 'Target: < 5.0 min SLA'}</span>
+        <span className="text-muted-foreground font-semibold">{label ?? 'Mục tiêu: dưới 5 phút'}</span>
         <span className="font-bold tabular-nums text-emerald-700 dark:text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 rounded-full text-xs md:text-sm">
-          {value}% SLA Met
+          {value}% đạt mục tiêu
         </span>
       </div>
       <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-muted/80 dark:bg-muted/50 border border-border/40">

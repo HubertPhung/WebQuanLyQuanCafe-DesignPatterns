@@ -10,7 +10,7 @@ import com.dalatcafe.model.TableStatus;
 import java.util.Objects;
 
 /**
- * Keeps the floor plan in step with dine-in orders: a paid order seats its table (OCCUPIED),
+ * Keeps the floor plan in step with dine-in orders: an open order seats its table (OCCUPIED),
  * and the table goes to CLEANING once the kitchen completes the order. When built with an
  * order DAO, the table stays seated while another order on it is still open.
  */
@@ -29,7 +29,16 @@ public class TableStatusSyncObserver implements IOrderObserver {
     }
 
     @Override
+    public void onOrderOpened(Order order) {
+        seatTables(order);
+    }
+
+    @Override
     public void onOrderPaid(Order order) {
+        seatTables(order);
+    }
+
+    private void seatTables(Order order) {
         Objects.requireNonNull(order, "Order must not be null");
         if (order.getTableId() == null) {
             return;
@@ -43,6 +52,15 @@ public class TableStatusSyncObserver implements IOrderObserver {
 
     @Override
     public void onOrderCompleted(Order order) {
+        releaseTables(order);
+    }
+
+    @Override
+    public void onOrderCancelled(Order order) {
+        releaseTables(order);
+    }
+
+    private void releaseTables(Order order) {
         Objects.requireNonNull(order, "Order must not be null");
         for (int tableId : order.getTableIds()) {
             if (hasOtherOpenOrder(order, tableId)) continue;

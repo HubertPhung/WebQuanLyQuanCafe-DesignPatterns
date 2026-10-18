@@ -103,9 +103,11 @@ public class OrderHandler extends ApiHandler {
 
     private void list(HttpExchange exchange) throws IOException {
         String status = queryParam(exchange, "status");
+        String branch = branchFilter(exchange);
         List<Order> orders = status == null ? orderDao.findAll() : orderDao.findByStatus(parseStatus(status));
         List<Object> data = new ArrayList<>();
         orders.stream()
+                .filter(order -> branch == null || branch.equals(order.getBranch()))
                 .sorted(Comparator.comparing(Order::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
                 .forEach(order -> data.add(toJson(order)));
         sendOk(exchange, 200, data, null);
@@ -183,9 +185,10 @@ public class OrderHandler extends ApiHandler {
         }
 
         List<String> warnings = new ArrayList<>();
-        if (target == OrderStatus.COMPLETED) {
+        if (target == OrderStatus.COMPLETED || target == OrderStatus.CANCELLED) {
             try {
-                eventSubject.notifyOrderCompleted(order);
+                if (target == OrderStatus.CANCELLED) eventSubject.notifyOrderCancelled(order);
+                else eventSubject.notifyOrderCompleted(order);
             } catch (RuntimeException e) {
                 LOGGER.log(Level.WARNING, "Order completed observer failed: " + e.getMessage(), e);
                 warnings.add("Order event observer failed: " + e.getMessage());
@@ -347,6 +350,10 @@ public class OrderHandler extends ApiHandler {
         }
         order.setPaymentMethod(paymentMethod(Objects.requireNonNullElse(str(input, "paymentMethod"), "cash")));
         order.setNote(str(input, "note"));
+        // A table decides the branch; a pickup or delivery order brings its own.
+        order.setBranch(order.getTableId() != null
+                ? tableDao.findById(order.getTableId()).map(com.dalatcafe.model.Table::getBranch).orElse(null)
+                : branchField(input));
         Instant createdAt = instant(input, "createdAt");
         if (createdAt != null) {
             order.setCreatedAt(createdAt);
@@ -396,6 +403,9 @@ public class OrderHandler extends ApiHandler {
         if (order.getStatus() == OrderStatus.COMPLETED && order.getPaymentStatus() != PaymentStatus.PAID) {
             throw ApiException.badRequest("Order " + code + " is completed but not paid");
         }
+        if (target == OrderStatus.CANCELLED && order.getPaymentStatus() == PaymentStatus.PAID) {
+            order.setPaymentStatus(PaymentStatus.REFUNDED);
+        }
         return order;
     }
 
@@ -414,11 +424,12 @@ public class OrderHandler extends ApiHandler {
     /** An imported order that is paid and still open seats its table and reaches the KDS. */
     private void notifyImported(Order order, List<String> warnings) {
         boolean open = order.getStatus() != OrderStatus.COMPLETED && order.getStatus() != OrderStatus.CANCELLED;
-        if (order.getPaymentStatus() != PaymentStatus.PAID || !open) {
+        if (!open) {
             return;
         }
         try {
-            eventSubject.notifyOrderPaid(order);
+            if (order.getPaymentStatus() == PaymentStatus.PAID) eventSubject.notifyOrderPaid(order);
+            else eventSubject.notifyOrderOpened(order);
         } catch (RuntimeException e) {
             LOGGER.log(Level.WARNING, "Imported order observer failed: " + e.getMessage(), e);
             warnings.add("Order event observer failed: " + e.getMessage());
@@ -486,6 +497,7 @@ public class OrderHandler extends ApiHandler {
         json.put("customer", order.getCustomer());
         json.put("tableId", order.getTableId());
         json.put("tableIds", order.getTableIds());
+        json.put("branch", order.getBranch());
         json.put("orderType", order.getOrderType() == null ? null
                 : order.getOrderType().name().toLowerCase(Locale.ROOT).replace('_', '-'));
         json.put("status", order.getStatus() == null ? null : label(order.getStatus()));

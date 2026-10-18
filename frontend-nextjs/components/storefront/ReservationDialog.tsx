@@ -30,12 +30,15 @@ import { useReservationStore } from '@/lib/store/reservation-store'
 import { bookCustomerTable, getCustomerReservationTables } from '@/app/actions/reservation-actions'
 import { RESERVATION_TIME_SLOTS } from '@/lib/reservation-rules'
 import { formatMoneyVND } from '@/lib/store/cart-store'
+import { DEFAULT_BRANCH_ID, branchById, branches, type BranchId } from '@/lib/branches'
 
 interface TableOption {
   id: number
   name: string
   seats: number
   zone: string
+  branch?: BranchId
+  available?: boolean
 }
 
 export function ReservationDialog() {
@@ -47,9 +50,12 @@ export function ReservationDialog() {
   const [contact, setContact] = useState('')
   const [email, setEmail] = useState('')
   const [guests, setGuests] = useState(2)
+  const [branchId, setBranchId] = useState<BranchId>(DEFAULT_BRANCH_ID)
   const [selectedZone, setSelectedZone] = useState<string>('all')
   const [tables, setTables] = useState<TableOption[]>([])
-  const [tablesLoading, setTablesLoading] = useState(false)
+  const [loadingRequest, setLoadingRequest] = useState(false)
+  const [loadedFor, setLoadedFor] = useState('')
+  const [availabilityVersion, setAvailabilityVersion] = useState(0)
   const [selectedTableIds, setSelectedTableIds] = useState<number[]>([])
   const [selectedTimeSlot, setSelectedTimeSlot] = useState('09:30')
   const [selectedDateOption, setSelectedDateOption] = useState<'today' | 'tomorrow' | 'custom'>('today')
@@ -66,21 +72,16 @@ export function ReservationDialog() {
     guests: number
   } | null>(null)
 
-  useEffect(() => {
-    if (!isOpen) return
-    let active = true
-    setTablesLoading(true)
-    getCustomerReservationTables().then(result => {
-      if (!active) return
-      setTables(result.tables)
-      setSelectedTableIds(ids => ids.filter(id => result.tables.some(table => table.id === id)))
-      if (!result.ok) toast.error(result.error)
-    }).catch(() => { if (active) toast.error('Không tải được danh sách bàn.') }).finally(() => { if (active) setTablesLoading(false) })
-    return () => { active = false }
-  }, [isOpen])
-  const zones = ['all', ...new Set(tables.map(table => table.zone))]
+  // Each branch has its own floor; a booking uses the tables of one branch.
+  const branchTables = tables.filter(table => (table.branch ?? DEFAULT_BRANCH_ID) === branchId)
+  const zones = ['all', ...new Set(branchTables.map(table => table.zone))]
+  const chooseBranch = (next: BranchId) => {
+    setBranchId(next)
+    setSelectedZone('all')
+    setSelectedTableIds([])
+  }
 
-  const filteredTables = tables.filter((t) => {
+  const filteredTables = branchTables.filter((t) => {
     if (selectedZone !== 'all' && t.zone !== selectedZone) return false
     return true
   })
@@ -101,8 +102,32 @@ export function ReservationDialog() {
     return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(d)
   }
 
+  const requestedTime = `${getDateString()}T${selectedTimeSlot}:00+07:00`
+  const availabilityKey = `${branchId}/${requestedTime}/${availabilityVersion}`
+  const tablesLoading = loadingRequest || loadedFor !== availabilityKey
+  useEffect(() => {
+    if (!isOpen) return
+    let active = true
+    setLoadingRequest(true)
+    getCustomerReservationTables(requestedTime, branchId).then(result => {
+      if (!active) return
+      setTables(result.tables)
+      setSelectedTableIds(ids => ids.filter(id => result.tables.some(table => table.id === id && table.available === true)))
+      if (!result.ok) toast.error(result.error)
+    }).catch(() => {
+      if (active) { setTables([]); setSelectedTableIds([]); toast.error('Không kiểm tra được lịch bàn.') }
+    }).finally(() => {
+      if (active) { setLoadingRequest(false); setLoadedFor(availabilityKey) }
+    })
+    return () => { active = false }
+  }, [isOpen, requestedTime, branchId, availabilityKey])
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    if (tablesLoading || selectedTables.some(table => table.available !== true)) {
+      toast.error('Vui lòng chọn bàn còn trống trong khung giờ này.')
+      return
+    }
     if (!customer.trim()) {
       toast.error('Vui lòng nhập họ tên của bạn.')
       return
@@ -126,6 +151,7 @@ export function ReservationDialog() {
         guests,
         tableId: selectedTableIds[0],
         tableIds: selectedTableIds,
+        branch: branchId,
         preOrders: preOrders.length > 0
           ? preOrders.map((p) => ({ menuItemId: p.id, qty: p.quantity }))
           : undefined,
@@ -138,12 +164,13 @@ export function ReservationDialog() {
           customer,
           contact,
           time: `${selectedTimeSlot} ngày ${dateStr}`,
-          tableName: selectedTables.map(table => `${table.name} (${table.zone})`).join(', '),
+          tableName: `${selectedTables.map(table => `${table.name} (${table.zone})`).join(', ')} · ${branchById(branchId).street}`,
           guests,
         })
         toast.success('Đặt bàn thành công! Quán đã ghi nhận lịch hẹn.')
       } else {
         toast.error(res.error || 'Đặt bàn chưa thành công, vui lòng thử lại.')
+        setAvailabilityVersion(version => version + 1)
       }
     })
   }
@@ -365,6 +392,30 @@ export function ReservationDialog() {
                 </div>
               </div>
 
+              {/* Branch pills: the floor below belongs to the chosen branch */}
+              <div className="space-y-1.5">
+                <span className="text-[11px] font-medium text-stone-500 block">Chi nhánh:</span>
+                <div className="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Chi nhánh đặt bàn">
+                  {branches.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={branchId === option.id}
+                      onClick={() => chooseBranch(option.id)}
+                      className={`rounded-lg px-2.5 py-2 text-left text-xs cursor-pointer transition-all ${
+                        branchId === option.id
+                          ? 'bg-amber-100 text-[#3E2723] font-bold border border-amber-300'
+                          : 'bg-stone-50 text-stone-600 border border-stone-200 hover:bg-stone-100'
+                      }`}
+                    >
+                      {option.street}
+                      <span className="block text-[10px] font-normal text-stone-500">{option.note}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Zone Filter pills */}
               <div className="space-y-1.5">
                 <span className="text-[11px] font-medium text-stone-500 block">Khu vực bàn mong muốn:</span>
@@ -388,13 +439,14 @@ export function ReservationDialog() {
 
               {/* Table Selector Dropdown */}
               <div>
-                <p className="mb-2 text-xs text-stone-500">Chọn một hoặc nhiều bàn · Đã chọn {selectedTableIds.length} bàn, tổng {totalSeats} chỗ.</p>
+                <p className="mb-2 text-xs text-stone-500">Bàn đã có lịch chồng giờ sẽ không chọn được.</p>
+                <p className="mb-2 text-xs text-stone-500">Đã chọn {selectedTableIds.length} bàn, tổng {totalSeats} chỗ.</p>
                 {tablesLoading && <p className="text-xs text-stone-500" role="status">Đang tải danh sách bàn…</p>}
                 <div className="grid max-h-56 grid-cols-2 gap-2 overflow-y-auto rounded-xl border border-stone-200 p-2">
                   {filteredTables.map((t) => (
                     <label key={t.id} className={`flex cursor-pointer items-start gap-2 rounded-lg border p-3 text-xs ${selectedTableIds.includes(t.id) ? 'border-amber-700 bg-amber-50' : 'border-stone-200'}`}>
-                      <input type="checkbox" checked={selectedTableIds.includes(t.id)} disabled={!selectedTableIds.includes(t.id) && selectedTableIds.length >= 10} onChange={event => setSelectedTableIds(ids => event.target.checked ? [...ids, t.id] : ids.filter(id => id !== t.id))} />
-                      <span><strong>{t.name}</strong><span className="block text-stone-500">{t.zone} · {t.seats} chỗ</span></span>
+                      <input type="checkbox" checked={selectedTableIds.includes(t.id)} disabled={tablesLoading || t.available !== true || (!selectedTableIds.includes(t.id) && selectedTableIds.length >= 10)} onChange={event => setSelectedTableIds(ids => event.target.checked ? [...ids, t.id] : ids.filter(id => id !== t.id))} />
+                      <span><strong>{t.name.replace(/^Table\s*/i, 'Bàn ')}</strong><span className="block text-stone-500">{t.zone} · {t.seats} chỗ</span><span className="block text-stone-500">{tablesLoading ? 'Đang kiểm tra…' : t.available ? 'Còn trống' : 'Đã có lịch trong khung giờ này'}</span></span>
                     </label>
                   ))}
                   {!tablesLoading && filteredTables.length === 0 && <p className="col-span-2 p-2 text-xs text-stone-500">Không có bàn trong khu vực này.</p>}

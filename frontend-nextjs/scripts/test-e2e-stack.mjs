@@ -210,6 +210,10 @@ async function run() {
   r = await call('PATCH', `/api/reservations/${resCode}/status`, { status: 'confirmed' })
   check('RES-04', 'Staff confirms the booking', r.status === 200, brief(r))
   r = await call('POST', `/api/reservations/${resCode}/transfer-pos`)
+  check('RES-04A', 'Future booking cannot open a kitchen order', r.status === 409 && r.json?.code === 'RESERVATION_NOT_DUE', brief(r))
+  // Advance only this run's booking to arrival; do not depend on the wall clock or opening hours.
+  await db.query('UPDATE reservations SET date_time = NOW() WHERE reservation_code = $1 AND customer = $2', [resCode, guest])
+  r = await call('POST', `/api/reservations/${resCode}/transfer-pos`)
   const bookingOrder = r.data?.orderCode
   if (bookingOrder) created.orders.add(bookingOrder)
   check('RES-05', 'Arrived guest is transferred to POS', r.status === 200 && bookingOrder, brief(r))

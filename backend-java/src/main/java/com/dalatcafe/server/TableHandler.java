@@ -5,9 +5,16 @@ import com.dalatcafe.dao.IOrderDao;
 import com.dalatcafe.dao.IReservationDao;
 import com.dalatcafe.model.Table;
 import com.dalatcafe.model.TableStatus;
+import com.dalatcafe.model.ReservationStatus;
+import com.dalatcafe.patterns.chain.TableAvailabilityValidator;
+import com.dalatcafe.patterns.singleton.SystemConfigManager;
 import com.sun.net.httpserver.HttpExchange;
 
 import java.io.IOException;
+import java.time.Instant;
+import java.time.DateTimeException;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -38,11 +45,15 @@ public class TableHandler extends ApiHandler {
         String method = exchange.getRequestMethod().toUpperCase(Locale.ROOT);
         List<String> parts = segments(exchange);
         if (parts.size() == 3 && parts.get(2).equals("catalog") && method.equals("GET")) {
+            String requestedTime = queryParam(exchange, "dateTime");
+            Set<Integer> bookedTables = requestedTime == null ? Set.of() : bookedTablesAt(requestedTime);
             List<Object> data = new ArrayList<>();
-            for (Table table : tableDao.findAll()) {
+            for (Table table : tablesOf(branchFilter(exchange))) {
                 Map<String, Object> item = new LinkedHashMap<>();
                 item.put("id", table.getId()); item.put("name", table.getName());
                 item.put("seats", table.getSeats()); item.put("zone", table.getZone());
+                item.put("branch", table.getBranch());
+                if (requestedTime != null) item.put("available", !bookedTables.contains(table.getId()));
                 data.add(item);
             }
             sendOk(exchange, 200, data, null);
@@ -79,8 +90,15 @@ public class TableHandler extends ApiHandler {
 
         if (parts.size() == 2 && method.equals("GET")) {
             List<Object> data = new ArrayList<>();
-            for (Table table : tableDao.findAll()) {
-                data.add(toJson(table));
+            var orders = orderDao == null ? List.<com.dalatcafe.model.Order>of() : orderDao.findAll();
+            var reservations = reservationDao == null ? List.<com.dalatcafe.model.Reservation>of() : reservationDao.findAll();
+            Instant now = Instant.now();
+            for (Table table : tablesOf(branchFilter(exchange))) {
+                Map<String, Object> item = toJson(table);
+                TableStatus status = TableUsage.status(table, orders, reservations, now);
+                item.put("status", status == null ? null : status.name().toLowerCase(Locale.ROOT));
+                if (status == TableStatus.OCCUPIED) item.put("guestCount", Math.max(1, table.getGuestCount()));
+                data.add(item);
             }
             sendOk(exchange, 200, data, null);
             return;
@@ -96,8 +114,37 @@ public class TableHandler extends ApiHandler {
         throw methodNotAllowed(exchange);
     }
 
+    private List<Table> tablesOf(String branch) {
+        return tableDao.findAll().stream().filter(t -> branch == null || branch.equals(t.getBranch())).toList();
+    }
+
+    private Set<Integer> bookedTablesAt(String requestedTime) {
+        Instant slot;
+        try {
+            slot = Instant.parse(requestedTime);
+            slot.plus(TableAvailabilityValidator.DEFAULT_DURATION);
+        } catch (DateTimeException | ArithmeticException e) {
+            throw ApiException.badRequest("Thời gian đặt bàn không hợp lệ.");
+        }
+        if (reservationDao == null) throw new ApiException(503, "DATABASE_UNAVAILABLE", "Chưa kiểm tra được lịch đặt bàn.");
+        Set<Integer> booked = new HashSet<>();
+        Instant now = Instant.now();
+        int grace = SystemConfigManager.getInstance().getAutoCancelMinutes();
+        for (var reservation : reservationDao.findAll()) {
+            if (reservation.getStatus() == ReservationStatus.CANCELLED) continue;
+            if (reservation.getId() != null && reservation.isNoShowAt(now, grace)) continue;
+            // Incomplete persisted schedules must never advertise their tables as available.
+            if (reservation.getDateTime() == null || reservation.getStatus() == null
+                    || TableAvailabilityValidator.slotsOverlap(slot, reservation.getDateTime(), TableAvailabilityValidator.DEFAULT_DURATION)) {
+                booked.addAll(reservation.getTableIds());
+            }
+        }
+        return booked;
+    }
+
     private void saveDetails(HttpExchange exchange, Integer id) throws IOException {
         Map<String, Object> body = readJsonBody(exchange);
+        String requestedBranch = branchField(body);
         String name = requireStr(body, "name");
         String zone = requireStr(body, "zone");
         int seats = requireInt(body, "seats");
@@ -110,14 +157,20 @@ public class TableHandler extends ApiHandler {
         }
         Table table;
         synchronized (tableDao) {
-            if (tableDao.findAll().stream().anyMatch(t -> !Objects.equals(t.getId(), id) && name.equalsIgnoreCase(t.getName()))) {
+            // A new table joins the requested branch; an edited one stays where it is.
+            Table existing = id == null ? null : tableDao.findById(id).orElseThrow(() -> ApiException.notFound("Table not found"));
+            String branch = existing != null ? existing.getBranch() : com.dalatcafe.model.Branches.orDefault(requestedBranch);
+            // Names are unique within a branch: both branches can have a "Bàn 01".
+            if (tableDao.findAll().stream().anyMatch(t -> !Objects.equals(t.getId(), id) && branch.equals(t.getBranch())
+                    && name.equalsIgnoreCase(t.getName()))) {
                 throw new ApiException(409, "RESOURCE_CONFLICT", "Tên bàn đã tồn tại.");
             }
             if (id == null) {
                 int nextId = tableDao.nextId();
                 table = new Table(nextId, name, seats, zone);
+                table.setBranch(branch);
             } else {
-                table = tableDao.findById(id).orElseThrow(() -> ApiException.notFound("Table not found"));
+                table = existing;
                 if (seats < table.getGuestCount()) throw ApiException.badRequest("Số chỗ nhỏ hơn số khách đang ngồi.");
                 if (reservationDao != null && reservationDao.findAll().stream().anyMatch(r -> r.getTableIds().contains(id)
                         && (r.getStatus() == com.dalatcafe.model.ReservationStatus.PENDING
@@ -169,6 +222,7 @@ public class TableHandler extends ApiHandler {
         json.put("name", table.getName());
         json.put("seats", table.getSeats());
         json.put("zone", table.getZone());
+        json.put("branch", table.getBranch());
         json.put("imageUrl", table.getImageUrl());
         json.put("status", table.getStatus() == null ? null : table.getStatus().name().toLowerCase(Locale.ROOT));
         json.put("guestCount", table.getGuestCount());

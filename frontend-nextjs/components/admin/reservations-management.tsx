@@ -1,20 +1,18 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Calendar,
   CalendarCheck,
-  CheckCircle2,
   Clock,
   Download,
   Eye,
-  FileSpreadsheet,
+  Pencil,
   Filter,
   MonitorCheck,
   Phone,
   Search,
-  User,
   Users,
   UtensilsCrossed,
   XCircle,
@@ -23,16 +21,126 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from 'sonner'
-import { createReservation, transferReservationToPos, updateReservationStatus } from '@/app/admin/actions'
+import { createReservation, transferReservationToPos, updateReservation, updateReservationStatus } from '@/app/admin/actions'
 import type { ReservationView } from '@/lib/admin/queries'
 import type { FloorTable } from '@/lib/db/schema'
 import type { ReservationStatusLabel } from '@/lib/db/mock-store'
 import { cn } from '@/lib/utils'
+import { hasReservationStarted, reservationSlotsOverlap } from '@/lib/reservation-rules'
+import styles from './reservations-management.module.css'
 
 export type ReservationStatus = ReservationStatusLabel
 type Reservation = ReservationView
 
 const emptyForm = { customer: '', contact: '', email: '', date: '', time: '10:00', guests: '2', tableId: '', note: '' }
+// tableId value that keeps the tables a joined booking already has.
+const KEEP_GROUP = 'group'
+
+const formDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' })
+const formTime = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+
+function bookingTables(r: Reservation): number[] {
+  return r.tableIds?.length ? r.tableIds : r.tableId ? [r.tableId] : []
+}
+
+const slotTime = new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })
+const slotDate = new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric' })
+
+function ReservationCustomer({ reservation: r }: { reservation: Reservation }) {
+  return (
+    <div className={styles.customer}>
+      <span className={styles.code}>{r.id}</span>
+      <strong className={styles.customerName}>{r.customer}</strong>
+      <a href={`tel:${r.contact}`} className={styles.phone}><Phone aria-hidden="true" />{r.contact}</a>
+      {r.email && <span className={styles.email}>{r.email}</span>}
+      {r.preOrders.length > 0 && <span className={styles.preOrders}><UtensilsCrossed aria-hidden="true" />{r.preOrders.length} món đặt trước</span>}
+    </div>
+  )
+}
+
+function ReservationSchedule({ reservation: r }: { reservation: Reservation }) {
+  const date = new Date(r.scheduledAt)
+  if (Number.isNaN(date.getTime())) return <span>{r.dateTime}</span>
+  return (
+    <time className={styles.schedule} dateTime={r.scheduledAt}>
+      <strong><Clock aria-hidden="true" />{slotTime.format(date)}</strong>
+      <span>{slotDate.format(date)}</span>
+    </time>
+  )
+}
+
+function ReservationTables({ reservation: r }: { reservation: Reservation }) {
+  return (
+    <div className={styles.tableAssignment}>
+      <div className={styles.tableTags}>
+        {r.table.split(',').map((name, index) => <span key={`${name}-${index}`} className={styles.tableTag}>{name.trim()}</span>)}
+      </div>
+      <span className={styles.guests}><Users aria-hidden="true" />{r.guests} khách</span>
+    </div>
+  )
+}
+
+function ReservationStatusControl({ reservation: r, disabled, onChange }: {
+  reservation: Reservation
+  disabled: boolean
+  onChange: (reservation: Reservation, status: ReservationStatus) => void
+}) {
+  return (
+    <select
+      value={r.status}
+      onChange={event => onChange(r, event.target.value as ReservationStatus)}
+      disabled={disabled}
+      aria-label={`Trạng thái phiếu ${r.id}`}
+      className={cn(styles.statusSelect,
+        r.status === 'Chờ xác nhận' && styles.statusPending,
+        r.status === 'Đã đặt' && styles.statusConfirmed,
+        r.status === 'Hoàn thành' && styles.statusCompleted,
+        r.status === 'Đã hủy' && styles.statusCancelled,
+      )}
+    >
+      <option value="Chờ xác nhận" disabled={r.status !== 'Chờ xác nhận'}>Chờ xác nhận</option>
+      <option value="Đã đặt">Đã xác nhận</option>
+      <option value="Hoàn thành" disabled>Đã nhận bàn</option>
+      <option value="Đã hủy">Đã hủy</option>
+    </select>
+  )
+}
+
+function ReservationActions({ reservation: r, pending, canChange, canOpen, onView, onEdit, onCancel, onOpen }: {
+  reservation: Reservation
+  pending: boolean
+  canChange: boolean
+  canOpen: boolean
+  onView: (reservation: Reservation) => void
+  onEdit: (reservation: Reservation) => void
+  onCancel: (reservation: Reservation, status: ReservationStatus) => void
+  onOpen: (reservation: Reservation) => void
+}) {
+  return (
+    <div className={styles.actions}>
+      <div className={styles.primaryActions}>
+        <Button size="sm" variant="outline" onClick={() => onView(r)} aria-label={`Chi tiết phiếu ${r.id}`} className="h-9 px-2.5 rounded-lg text-xs border-stone-200 bg-white hover:bg-stone-50 text-stone-700 gap-1.5">
+          <Eye aria-hidden="true" />Chi tiết
+        </Button>
+        {canChange && (
+          <Button size="sm" disabled={pending || !canOpen} title={!canOpen ? `Chỉ mở POS từ ${r.dateTime}` : undefined} onClick={() => onOpen(r)} className="h-9 px-2.5 rounded-lg text-xs bg-[#5A3E2B] hover:bg-[#684732] text-white font-semibold gap-1.5">
+            <MonitorCheck aria-hidden="true" />Sang POS
+          </Button>
+        )}
+      </div>
+      {canChange && (
+        <Button size="sm" variant="ghost" disabled={pending} onClick={() => onEdit(r)} aria-label={`Sửa phiếu ${r.id}`} className="h-8 px-2 rounded-lg text-xs text-stone-700 hover:bg-stone-100 gap-1.5">
+          <Pencil aria-hidden="true" />Sửa phiếu
+        </Button>
+      )}
+      {canChange && (
+        <Button size="sm" variant="ghost" disabled={pending} onClick={() => onCancel(r, 'Đã hủy')} aria-label={`Hủy đặt bàn ${r.id}`} className="h-8 px-2 rounded-lg text-xs text-rose-700 hover:bg-rose-50 hover:text-rose-800 gap-1.5">
+          <XCircle aria-hidden="true" />Hủy đặt bàn
+        </Button>
+      )}
+    </div>
+  )
+}
 
 export function ReservationsManagement({
   reservations: initial,
@@ -51,8 +159,26 @@ export function ReservationsManagement({
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [selectedRes, setSelectedRes] = useState<Reservation | null>(null)
   const [creating, setCreating] = useState(false)
+  // The booking being edited; the create form is reused, filled with its values.
+  const [editing, setEditing] = useState<Reservation | null>(null)
   const [form, setForm] = useState(emptyForm)
   const [pending, startTransition] = useTransition()
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => { setReservations(initial) }, [initial])
+
+  const requestedTime = new Date(`${form.date}T${form.time}:00+07:00`)
+  const bookedTableIds = new Set(reservations
+    .filter(res => res.id !== editing?.id && res.status !== 'Đã hủy' && reservationSlotsOverlap(new Date(res.scheduledAt), requestedTime))
+    .flatMap(res => res.tableIds?.length ? res.tableIds : res.tableId ? [res.tableId] : []))
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  const canChangeStatus = (res: Reservation) => res.status === 'Chờ xác nhận' || res.status === 'Đã đặt'
+  const canOpenPos = (res: Reservation) => canChangeStatus(res) && hasReservationStarted(new Date(res.scheduledAt), now)
 
   // Status counters: Tổng (7), Chờ xác nhận (2), Đã xác nhận/đặt (2), Hoàn thành (2), Đã hủy (3)
   const totalCount = reservations.length
@@ -79,6 +205,7 @@ export function ReservationsManagement({
         return
       }
       setReservations((current) => current.map((r) => (r.id === res.id ? { ...r, status: newStatus } : r)))
+      setSelectedRes((current) => current?.id === res.id ? { ...current, status: newStatus } : current)
       toast.success(`Đã cập nhật trạng thái đặt bàn #${res.id} sang "${newStatus}"`)
     })
   }
@@ -99,31 +226,60 @@ export function ReservationsManagement({
     })
   }
 
-  const handleCreate = () => {
-    const tableId = Number(form.tableId)
+  const startEdit = (res: Reservation) => {
+    const at = new Date(res.scheduledAt)
+    const tableIds = bookingTables(res)
+    setForm({
+      customer: res.customer,
+      contact: res.contact,
+      email: res.email,
+      date: formDate.format(at),
+      time: formTime.format(at),
+      guests: String(res.guests),
+      tableId: tableIds.length > 1 ? KEEP_GROUP : String(tableIds[0] ?? ''),
+      note: res.note,
+    })
+    setSelectedRes(null)
+    setEditing(res)
+  }
+
+  const closeForm = () => {
+    setCreating(false)
+    setEditing(null)
+    setForm(emptyForm)
+  }
+
+  // Tables the form books: one chosen table, or the joined tables an edited booking keeps.
+  const chosenTables = form.tableId === KEEP_GROUP && editing ? bookingTables(editing) : form.tableId ? [Number(form.tableId)] : []
+  const chosenTaken = chosenTables.some(id => bookedTableIds.has(id))
+
+  const handleSave = () => {
     const guests = Number(form.guests)
-    if (!form.customer.trim() || !form.contact.trim() || !form.date || !form.time || !tableId) {
+    if (!form.customer.trim() || !form.contact.trim() || !form.date || !form.time || chosenTables.length === 0) {
       toast.error('Nhập đủ tên, số điện thoại, ngày giờ và bàn.')
       return
     }
+    if (chosenTaken) { toast.error('Bàn đã được đặt trong khung giờ này. Vui lòng chọn bàn hoặc giờ khác.'); return }
+    const input = {
+      customer: form.customer,
+      contact: form.contact,
+      email: form.email,
+      note: form.note,
+      // Local time at the café (UTC+7), as the Java OperatingHoursValidator expects.
+      dateTime: new Date(`${form.date}T${form.time}:00+07:00`).toISOString(),
+      guests,
+      tableId: chosenTables[0],
+      tableIds: chosenTables,
+    }
+    const target = editing
     startTransition(async () => {
-      const result = await createReservation({
-        customer: form.customer,
-        contact: form.contact,
-        email: form.email,
-        note: form.note,
-        // Local time at the café (UTC+7), as the Java OperatingHoursValidator expects.
-        dateTime: new Date(`${form.date}T${form.time}:00+07:00`).toISOString(),
-        guests,
-        tableId,
-      })
+      const result = target ? await updateReservation(target.id, target.source, input) : await createReservation(input)
       if (!result.ok) {
         toast.error(result.error)
         return
       }
-      toast.success('Đã tiếp nhận phiếu đặt bàn.', { description: result.message })
-      setCreating(false)
-      setForm(emptyForm)
+      toast.success(target ? `Đã lưu phiếu ${target.id}.` : 'Đã tiếp nhận phiếu đặt bàn.', { description: result.message })
+      closeForm()
       router.refresh()
     })
   }
@@ -165,7 +321,7 @@ export function ReservationsManagement({
           <span className="text-2xl font-bold text-blue-950 tabular-nums">{confirmedCount}</span>
         </div>
         <div className="rounded-xl border border-emerald-300/80 bg-emerald-50/90 p-4 text-center shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
-          <span className="text-sm font-medium text-emerald-800 block truncate">Hoàn thành</span>
+          <span className="text-sm font-medium text-emerald-800 block truncate">Đã nhận bàn</span>
           <span className="text-2xl font-bold text-emerald-900 tabular-nums">{completedCount}</span>
         </div>
         <div className="rounded-xl border border-rose-300/80 bg-rose-50/90 p-4 text-center col-span-2 sm:col-span-1 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
@@ -174,165 +330,125 @@ export function ReservationsManagement({
         </div>
       </div>
 
-      {/* 2. Thanh công cụ & Bộ lọc */}
-      <div className="rounded-xl border border-stone-200/90 bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.04)] space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="relative flex-1 max-w-md min-w-0">
-            <Search className="absolute left-3.5 top-3 size-4 text-stone-400 pointer-events-none" />
+      <section className={styles.list} aria-label="Danh sách đặt bàn">
+        <div className={styles.toolbar}>
+          <div className={styles.search}>
+            <Search aria-hidden="true" />
             <input
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Tìm tên khách, SĐT, email..."
-              className="w-full h-10 pl-10 pr-4 rounded-lg border border-stone-200/90 bg-white text-xs md:text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:border-[#5A3E2B] shadow-xs truncate"
+              onChange={event => setSearch(event.target.value)}
+              aria-label="Tìm kiếm đặt bàn"
+              placeholder="Tìm tên khách, số điện thoại, email..."
             />
           </div>
-
-          <div className="flex items-center gap-2 flex-wrap">
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="h-10 rounded-lg border border-stone-200/90 bg-white px-3 text-xs md:text-sm text-stone-800 focus:outline-none focus:border-[#5A3E2B] cursor-pointer shadow-xs"
-            >
-              <option value="all">Tất cả trạng thái</option>
-              <option value="Chờ xác nhận">Chờ xác nhận</option>
-              <option value="Đã đặt">Đã đặt</option>
-              <option value="Hoàn thành">Hoàn thành</option>
-              <option value="Đã hủy">Đã hủy</option>
-            </select>
-
-            <Button
-              onClick={handleExportCSV}
-              variant="outline"
-              className="h-10 rounded-lg px-4 border-stone-200/90 bg-white hover:bg-stone-50 text-stone-800 text-xs md:text-sm gap-2 shadow-xs"
-            >
-              <Download className="size-4 text-[#5A3E2B]" />
-              <span>Xuất CSV</span>
+          <div className={styles.toolbarActions}>
+            <div className={styles.filter}>
+              <Filter aria-hidden="true" />
+              <select aria-label="Lọc trạng thái đặt bàn" value={statusFilter} onChange={event => setStatusFilter(event.target.value)}>
+                <option value="all">Tất cả trạng thái</option>
+                <option value="Chờ xác nhận">Chờ xác nhận</option>
+                <option value="Đã đặt">Đã xác nhận</option>
+                <option value="Hoàn thành">Đã nhận bàn</option>
+                <option value="Đã hủy">Đã hủy</option>
+              </select>
+            </div>
+            <Button onClick={handleExportCSV} variant="outline" className="h-10 rounded-lg px-4 border-stone-200 bg-white hover:bg-stone-50 text-stone-700 text-sm gap-2">
+              <Download aria-hidden="true" />
+              Xuất CSV
             </Button>
-
-            <Button
-              onClick={() => setCreating(true)}
-              className="h-10 rounded-lg px-4 bg-[#5A3E2B] hover:bg-[#684732] text-white text-xs md:text-sm font-bold gap-2 shadow-xs"
-            >
-              <CalendarCheck className="size-4" />
-              <span>Tạo phiếu đặt bàn</span>
+            <Button onClick={() => setCreating(true)} className="h-10 rounded-lg px-4 bg-[#5A3E2B] hover:bg-[#684732] text-white text-sm font-semibold gap-2">
+              <CalendarCheck aria-hidden="true" />
+              Tạo đặt bàn
             </Button>
           </div>
         </div>
 
-        {!javaOnline && (
-          <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-            Không kết nối được Backend Java: đang hiển thị phiếu lưu cục bộ. Phiếu mới sẽ được lưu cục bộ.
-          </p>
-        )}
-
-        {/* 3. Bảng đặt bàn */}
-        <div className="overflow-x-auto rounded-lg border border-stone-200/90 bg-white">
-          <table className="w-full text-left text-xs md:text-sm">
-            <thead>
-              <tr className="border-b border-stone-200/90 bg-stone-50/60 text-stone-500 font-semibold uppercase tracking-wider text-xs">
-                <th className="py-3 px-3">Mã / Khách hàng</th>
-                <th className="py-3 px-3">Liên hệ</th>
-                <th className="py-3 px-3">Ngày & Giờ đặt</th>
-                <th className="py-3 px-3">Bàn & Khách</th>
-                <th className="py-3 px-3">Trạng thái</th>
-                <th className="py-3 px-3 text-right">Thao tác</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-stone-100">
-              {filtered.map((r) => (
-                <tr key={r.id} className="hover:bg-stone-50/60 transition-colors">
-                  <td className="py-3.5 px-3">
-                    <span className="font-mono text-[11px] text-stone-400 block">
-                      {r.id}
-                      <span className="ml-1.5 font-sans font-semibold text-[10px] text-stone-500">
-                        {r.source === 'java' ? '· Java' : '· Cục bộ'}
-                      </span>
-                    </span>
-                    <strong className="block font-bold text-stone-900 text-sm leading-snug">{r.customer}</strong>
-                    {r.preOrders.length > 0 && (
-                      <span className="flex items-center gap-1 text-[10px] text-amber-800 font-semibold mt-0.5">
-                        <UtensilsCrossed className="size-3" /> {r.preOrders.length} món đặt trước
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-3.5 px-3 font-mono text-stone-600">
-                    <div>{r.contact}</div>
-                    <div className="text-[11px] text-stone-400 font-sans">{r.email}</div>
-                  </td>
-                  <td className="py-3.5 px-3 text-stone-600 font-mono text-xs">
-                    {r.dateTime}
-                  </td>
-                  <td className="py-3.5 px-3">
-                    <span className="font-semibold text-[#5A3E2B] bg-stone-100/90 px-2 py-0.5 rounded text-xs border border-stone-200">
-                      {r.table}
-                    </span>
-                    <span className="text-stone-500 text-xs ml-2">({r.guests} người)</span>
-                  </td>
-                  <td className="py-3.5 px-3">
-                    <select
-                      value={r.status}
-                      onChange={(e) => handleStatusChange(r, e.target.value as ReservationStatus)}
-                      disabled={pending}
-                      aria-label={`Trạng thái phiếu ${r.id}`}
-                      className={cn(
-                        'h-8 rounded-lg px-2 text-xs font-bold border cursor-pointer focus:outline-none',
-                        r.status === 'Đã đặt' && 'bg-blue-50/90 border-blue-300 text-blue-950',
-                        r.status === 'Chờ xác nhận' && 'bg-amber-50/90 border-amber-300 text-amber-950',
-                        r.status === 'Hoàn thành' && 'bg-emerald-50/90 border-emerald-300 text-emerald-950',
-                        r.status === 'Đã hủy' && 'bg-rose-50/90 border-rose-300 text-rose-950'
-                      )}
-                    >
-                      <option value="Chờ xác nhận">Chờ xác nhận</option>
-                      <option value="Đã đặt">Đã đặt</option>
-                      <option value="Hoàn thành" disabled>Hoàn thành (qua "Sang POS")</option>
-                      <option value="Đã hủy">Đã hủy</option>
-                    </select>
-                  </td>
-                  <td className="py-3.5 px-3 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setSelectedRes(r)}
-                        className="h-8 px-2.5 rounded-md text-xs border-stone-200 bg-white hover:bg-stone-50 text-stone-700 gap-1.5 shadow-2xs"
-                      >
-                        <Eye className="size-3.5" />
-                        <span>Chi tiết</span>
-                      </Button>
-                      <Button
-                        size="sm"
-                        disabled={pending || r.status === 'Hoàn thành' || r.status === 'Đã hủy'}
-                        onClick={() => handleTransferToPOS(r)}
-                        className="h-8 px-2.5 rounded-md text-xs bg-[#5A3E2B] hover:bg-[#684732] text-white font-bold gap-1.5 shadow-xs"
-                      >
-                        <MonitorCheck className="size-3.5" />
-                        <span>Sang POS</span>
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {!javaOnline && <p className={styles.notice}>Chưa kết nối được máy chủ. Đang hiển thị các phiếu lưu cục bộ.</p>}
+        <div className={styles.results} aria-live="polite">
+          <span>Hiển thị <strong>{filtered.length}</strong> / {totalCount} phiếu đặt bàn</span>
+          {(search || statusFilter !== 'all') && <button type="button" onClick={() => { setSearch(''); setStatusFilter('all') }}>Xóa bộ lọc</button>}
         </div>
-      </div>
+
+        {filtered.length === 0 ? (
+          <div className={styles.empty}>
+            <Calendar aria-hidden="true" />
+            <h3>{totalCount === 0 ? 'Chưa có phiếu đặt bàn' : 'Không tìm thấy đặt bàn phù hợp'}</h3>
+            <p>{totalCount === 0 ? 'Tạo phiếu đặt bàn để bắt đầu tiếp nhận và sắp xếp chỗ cho khách.' : 'Thử tìm theo tên, số điện thoại hoặc chọn trạng thái khác.'}</p>
+          </div>
+        ) : (
+          <>
+            <table className={styles.table}>
+              <caption className="sr-only">Thông tin khách, thời gian nhận bàn và trạng thái đặt bàn</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Khách hàng</th>
+                  <th scope="col">Giờ nhận bàn</th>
+                  <th scope="col">Bàn & số khách</th>
+                  <th scope="col">Trạng thái</th>
+                  <th scope="col">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(r => (
+                  <tr key={r.source + ':' + r.id}>
+                    <td><ReservationCustomer reservation={r} /></td>
+                    <td><ReservationSchedule reservation={r} /></td>
+                    <td><ReservationTables reservation={r} /></td>
+                    <td>
+                      <ReservationStatusControl reservation={r} disabled={pending || !canChangeStatus(r)} onChange={handleStatusChange} />
+                      {canChangeStatus(r) && !canOpenPos(r) && <span className={styles.statusHint}>Chưa đến giờ nhận bàn</span>}
+                      {r.status === 'Hoàn thành' && <span className={styles.statusHint}>Đã chuyển sang đơn tại quầy</span>}
+                    </td>
+                    <td><ReservationActions reservation={r} pending={pending} canChange={canChangeStatus(r)} canOpen={canOpenPos(r)} onView={setSelectedRes} onEdit={startEdit} onCancel={handleStatusChange} onOpen={handleTransferToPOS} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className={styles.cards}>
+              {filtered.map(r => (
+                <article key={r.source + ':' + r.id} className={styles.reservationCard} aria-label={'Phiếu đặt bàn ' + r.id}>
+                  <div className={styles.cardHeader}>
+                    <ReservationCustomer reservation={r} />
+                    <ReservationStatusControl reservation={r} disabled={pending || !canChangeStatus(r)} onChange={handleStatusChange} />
+                  </div>
+                  <div className={styles.cardDetails}>
+                    <div>
+                      <h3>Giờ nhận bàn</h3>
+                      <ReservationSchedule reservation={r} />
+                    </div>
+                    <div>
+                      <h3>Bàn & số khách</h3>
+                      <ReservationTables reservation={r} />
+                    </div>
+                  </div>
+                  {canChangeStatus(r) && !canOpenPos(r) && <p className={styles.statusHint}>Chưa đến giờ nhận bàn</p>}
+                  {r.status === 'Hoàn thành' && <p className={styles.statusHint}>Đã chuyển sang đơn tại quầy</p>}
+                  <div className={styles.cardFooter}>
+                    <ReservationActions reservation={r} pending={pending} canChange={canChangeStatus(r)} canOpen={canOpenPos(r)} onView={setSelectedRes} onEdit={startEdit} onCancel={handleStatusChange} onOpen={handleTransferToPOS} />
+                  </div>
+                </article>
+              ))}
+            </div>
+          </>
+        )}
+      </section>
 
       {/* MODAL: XEM CHI TIẾT ĐẶT BÀN & MÓN ĐẶT TRƯỚC */}
       <Dialog open={!!selectedRes} onOpenChange={(open) => !open && setSelectedRes(null)}>
         {selectedRes && (
-          <DialogContent className="max-w-md rounded-xl border-stone-200 bg-white text-stone-900 p-6 font-sans shadow-2xl">
+          <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-xl rounded-xl border-stone-200 bg-white text-stone-900 p-5 sm:p-6 font-sans shadow-2xl">
             <DialogHeader>
-              <DialogTitle className="text-xl font-bold text-stone-900 flex items-center justify-between">
-                <span>Chi tiết phiếu đặt #{selectedRes.id}</span>
-                <Badge className="bg-[#5A3E2B] text-white font-bold text-xs rounded-full px-2.5 py-0.5">{selectedRes.status}</Badge>
+              <DialogTitle className="pr-6 text-xl font-bold leading-snug text-stone-900">
+                Phiếu đặt bàn {selectedRes.id}
               </DialogTitle>
-              <DialogDescription className="text-xs text-stone-500">
+              <DialogDescription className="text-sm text-stone-500">
                 Thông tin khách hàng và danh sách món được đặt trước.
               </DialogDescription>
+              <Badge className="bg-[#5A3E2B] text-white font-semibold text-xs rounded-full px-2.5 py-0.5">{selectedRes.status === 'Hoàn thành' ? 'Đã nhận bàn' : selectedRes.status === 'Đã đặt' ? 'Đã xác nhận' : selectedRes.status}</Badge>
             </DialogHeader>
 
-            <div className="space-y-4 pt-2 text-xs">
-              <div className="rounded-lg border border-stone-200/90 bg-[#F9F7F4] p-3.5 space-y-2">
+            <div className="space-y-4 pt-2 text-sm">
+              <div className={styles.detailSummary}>
                 <div className="flex justify-between">
                   <span className="text-stone-500">Khách hàng:</span>
                   <strong className="text-stone-900">{selectedRes.customer}</strong>
@@ -343,23 +459,18 @@ export function ReservationsManagement({
                 </div>
                 <div className="flex justify-between">
                   <span className="text-stone-500">Email:</span>
-                  <span className="text-stone-700">{selectedRes.email}</span>
+                  <span className="text-stone-700">{selectedRes.email || 'Chưa cung cấp'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-stone-500">Khung giờ:</span>
-                  <span className="font-mono text-[#5A3E2B] font-bold">{selectedRes.dateTime}</span>
+                  <ReservationSchedule reservation={selectedRes} />
                 </div>
                 <div className="flex justify-between">
                   <span className="text-stone-500">Bàn xếp:</span>
-                  <span className="font-bold text-stone-900">{selectedRes.table} ({selectedRes.guests} khách)</span>
+                  <ReservationTables reservation={selectedRes} />
                 </div>
-                {selectedRes.note && (
-                  <div className="pt-2 border-t border-stone-200 text-stone-700">
-                    <span className="text-stone-500 block mb-0.5">Ghi chú của khách:</span>
-                    <p className="italic bg-white p-2 rounded-lg border border-stone-200/90">{selectedRes.note}</p>
-                  </div>
-                )}
               </div>
+              {selectedRes.note && <div className="rounded-lg border border-stone-200 bg-stone-50 p-3.5 text-stone-700"><p className="mb-1 text-xs text-stone-500">Ghi chú của khách</p><p className="break-words">{selectedRes.note}</p></div>}
 
               {/* Pre-ordered items list */}
               <div>
@@ -395,8 +506,19 @@ export function ReservationsManagement({
               >
                 Đóng
               </Button>
+              {canChangeStatus(selectedRes) && (
+                <Button variant="outline" disabled={pending} onClick={() => startEdit(selectedRes)} className="h-10 rounded-lg text-xs text-stone-700 border-stone-200 gap-1.5">
+                  <Pencil className="size-3.5" />Sửa phiếu
+                </Button>
+              )}
+              {canChangeStatus(selectedRes) && (
+                <Button variant="outline" disabled={pending} onClick={() => handleStatusChange(selectedRes, 'Đã hủy')} className="h-10 rounded-lg text-xs text-rose-700 border-rose-200">
+                  Hủy đặt bàn
+                </Button>
+              )}
               <Button
-                disabled={pending || selectedRes.status === 'Hoàn thành' || selectedRes.status === 'Đã hủy'}
+                disabled={pending || !canOpenPos(selectedRes)}
+                title={canChangeStatus(selectedRes) && !canOpenPos(selectedRes) ? `Chỉ mở POS từ ${selectedRes.dateTime}` : undefined}
                 onClick={() => handleTransferToPOS(selectedRes)}
                 className="h-10 rounded-lg bg-[#5A3E2B] hover:bg-[#684732] text-white font-bold text-xs gap-1.5"
               >
@@ -409,10 +531,10 @@ export function ReservationsManagement({
       </Dialog>
 
       {/* MODAL: TẠO PHIẾU ĐẶT BÀN (POST /api/reservations, Chain of Responsibility) */}
-      <Dialog open={creating} onOpenChange={setCreating}>
-        <DialogContent className="max-w-md rounded-xl border-stone-200 bg-white text-stone-900 p-6 font-sans shadow-2xl">
+      <Dialog open={creating || editing !== null} onOpenChange={(open) => { if (!open) closeForm() }}>
+        <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-xl rounded-xl border-stone-200 bg-white text-stone-900 p-5 sm:p-6 font-sans shadow-2xl">
           <DialogHeader>
-            <DialogTitle className="text-xl font-bold text-stone-900">Tạo phiếu đặt bàn</DialogTitle>
+            <DialogTitle className="text-xl font-bold text-stone-900">{editing ? `Sửa phiếu ${editing.id}` : 'Tạo phiếu đặt bàn'}</DialogTitle>
             <DialogDescription className="text-xs text-stone-500">
               Phiếu được kiểm tra giờ mở cửa (07:00–22:00), sức chứa bàn và lịch trùng trước khi ghi nhận.
             </DialogDescription>
@@ -421,7 +543,7 @@ export function ReservationsManagement({
             className="grid grid-cols-2 gap-3 text-xs pt-1"
             onSubmit={(e) => {
               e.preventDefault()
-              handleCreate()
+              handleSave()
             }}
           >
             <label className="col-span-2 space-y-1">
@@ -448,9 +570,12 @@ export function ReservationsManagement({
               <span className="font-semibold text-stone-600">Bàn</span>
               <select required aria-label="Bàn" value={form.tableId} onChange={(e) => setForm({ ...form, tableId: e.target.value })} className="w-full h-9 rounded-lg border border-stone-200 bg-white px-2 focus:outline-none focus:border-[#5A3E2B]">
                 <option value="">Chọn bàn…</option>
+                {editing && bookingTables(editing).length > 1 && (
+                  <option value={KEEP_GROUP}>Giữ {bookingTables(editing).length} bàn đang ghép ({editing.table})</option>
+                )}
                 {tables.map((t) => (
-                  <option key={t.id} value={String(t.id)}>
-                    {t.name.replace('Table', 'Bàn')} ({t.seats} chỗ)
+                  <option key={t.id} value={String(t.id)} disabled={bookedTableIds.has(t.id)}>
+                    {t.name.replace('Table', 'Bàn')} ({t.seats} chỗ){bookedTableIds.has(t.id) ? ' · Đã có lịch' : ''}
                   </option>
                 ))}
               </select>
@@ -464,11 +589,11 @@ export function ReservationsManagement({
               <input aria-label="Ghi chú" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} className="w-full h-9 rounded-lg border border-stone-200 px-2.5 focus:outline-none focus:border-[#5A3E2B]" />
             </label>
             <DialogFooter className="col-span-2 pt-2 flex gap-2">
-              <Button type="button" variant="ghost" onClick={() => setCreating(false)} className="h-10 rounded-lg text-xs text-stone-500">
+              <Button type="button" variant="ghost" onClick={closeForm} className="h-10 rounded-lg text-xs text-stone-500">
                 Huỷ
               </Button>
-              <Button type="submit" disabled={pending} className="h-10 rounded-lg bg-[#5A3E2B] hover:bg-[#684732] text-white font-bold text-xs">
-                Lưu phiếu
+              <Button type="submit" disabled={pending || chosenTaken} className="h-10 rounded-lg bg-[#5A3E2B] hover:bg-[#684732] text-white font-bold text-xs">
+                {editing ? 'Lưu thay đổi' : 'Lưu phiếu'}
               </Button>
             </DialogFooter>
           </form>

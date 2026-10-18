@@ -20,7 +20,7 @@ public class JdbcTableDao implements ITableDao {
     @Override
     public List<Table> findAll() {
         List<Table> list = new ArrayList<>();
-        String sql = "SELECT id, name, seats, zone, status, guest_count, occupied_since, updated_at, image_url FROM tables WHERE deleted_at IS NULL ORDER BY id ASC";
+        String sql = "SELECT id, name, seats, zone, status, guest_count, occupied_since, updated_at, image_url, branch FROM tables WHERE deleted_at IS NULL ORDER BY id ASC";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
@@ -35,7 +35,7 @@ public class JdbcTableDao implements ITableDao {
 
     @Override
     public Optional<Table> findById(int id) {
-        String sql = "SELECT id, name, seats, zone, status, guest_count, occupied_since, updated_at, image_url FROM tables WHERE id = ? AND deleted_at IS NULL";
+        String sql = "SELECT id, name, seats, zone, status, guest_count, occupied_since, updated_at, image_url, branch FROM tables WHERE id = ? AND deleted_at IS NULL";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, id);
@@ -53,7 +53,7 @@ public class JdbcTableDao implements ITableDao {
     @Override
     public List<Table> findByZone(String zone) {
         List<Table> list = new ArrayList<>();
-        String sql = "SELECT id, name, seats, zone, status, guest_count, occupied_since, updated_at, image_url FROM tables WHERE LOWER(zone) = LOWER(?) AND deleted_at IS NULL ORDER BY id ASC";
+        String sql = "SELECT id, name, seats, zone, status, guest_count, occupied_since, updated_at, image_url, branch FROM tables WHERE LOWER(zone) = LOWER(?) AND deleted_at IS NULL ORDER BY id ASC";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, zone);
@@ -72,7 +72,7 @@ public class JdbcTableDao implements ITableDao {
     public List<Table> findByStatus(TableStatus status) {
         List<Table> list = new ArrayList<>();
         if (status == null) return list;
-        String sql = "SELECT id, name, seats, zone, status, guest_count, occupied_since, updated_at, image_url FROM tables WHERE UPPER(status) = ? AND deleted_at IS NULL ORDER BY id ASC";
+        String sql = "SELECT id, name, seats, zone, status, guest_count, occupied_since, updated_at, image_url, branch FROM tables WHERE UPPER(status) = ? AND deleted_at IS NULL ORDER BY id ASC";
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, status.name());
@@ -91,9 +91,10 @@ public class JdbcTableDao implements ITableDao {
     public boolean save(Table table) {
         if (table == null) return false;
         String sql = """
-            INSERT INTO tables (id, name, seats, zone, status, guest_count, occupied_since, updated_at, image_url)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO tables (id, name, seats, zone, status, guest_count, occupied_since, updated_at, image_url, branch)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (id) DO UPDATE SET
+                branch = EXCLUDED.branch,
                 image_url = EXCLUDED.image_url, name = EXCLUDED.name,
                 seats = EXCLUDED.seats,
                 zone = EXCLUDED.zone,
@@ -111,6 +112,7 @@ public class JdbcTableDao implements ITableDao {
             ps.setString(5, table.getStatus() != null ? table.getStatus().name() : TableStatus.AVAILABLE.name());
             ps.setInt(6, table.getGuestCount());
             ps.setString(9, table.getImageUrl());
+            ps.setString(10, table.getBranch());
             ps.setTimestamp(7, table.getOccupiedSince() != null ? Timestamp.from(table.getOccupiedSince()) : null);
             ps.setTimestamp(8, Timestamp.from(Instant.now()));
             return ps.executeUpdate() > 0;
@@ -189,6 +191,7 @@ public class JdbcTableDao implements ITableDao {
         table.setSeats(rs.getInt("seats"));
         table.setZone(rs.getString("zone"));
         table.setImageUrl(rs.getString("image_url"));
+        table.setBranch(rs.getString("branch"));
 
         String statusStr = rs.getString("status");
         if (statusStr != null) {

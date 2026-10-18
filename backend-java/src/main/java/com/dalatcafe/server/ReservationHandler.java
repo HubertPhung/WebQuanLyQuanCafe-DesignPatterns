@@ -57,6 +57,14 @@ public class ReservationHandler extends ApiHandler {
     protected void route(HttpExchange exchange) throws IOException {
         expireNoShows(Instant.now());
         List<String> parts = segments(exchange);
+        if (parts.size() == 3 && parts.get(2).equals("mine")) {
+            if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) throw methodNotAllowed(exchange);
+            com.dalatcafe.model.UserAccount user = AuthHandler.currentUser(exchange);
+            if (user.getId() == null) throw new ApiException(401, "UNAUTHORIZED", "Sign in to view your reservations");
+            sendOk(exchange, 200, reservationDao.findForAccount(user.getId(), user.getEmail()).stream()
+                    .map(ReservationHandler::toJson).toList(), null);
+            return;
+        }
         if (parts.size() == 4 && parts.get(3).equals(TRANSFER)) {
             if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
                 throw methodNotAllowed(exchange);
@@ -72,14 +80,25 @@ public class ReservationHandler extends ApiHandler {
             updateStatus(exchange, parts.get(2));
             return;
         }
+        if (parts.size() == 3) {
+            String method = exchange.getRequestMethod().toUpperCase(Locale.ROOT);
+            if (!method.equals("PUT") && !method.equals("PATCH")) {
+                throw methodNotAllowed(exchange);
+            }
+            update(exchange, parts.get(2));
+            return;
+        }
         if (parts.size() != 2) {
             throw ApiException.notFound("Unknown reservation resource");
         }
         switch (exchange.getRequestMethod().toUpperCase(Locale.ROOT)) {
             case "GET":
+                String branch = branchFilter(exchange);
                 List<Object> data = new ArrayList<>();
                 for (Reservation reservation : reservationDao.findAll()) {
-                    data.add(toJson(reservation));
+                    if (branch == null || branch.equals(reservation.getBranch())) {
+                        data.add(toJson(reservation));
+                    }
                 }
                 sendOk(exchange, 200, data, null);
                 break;
@@ -97,6 +116,10 @@ public class ReservationHandler extends ApiHandler {
         reservation.setCustomer(requireStr(body, "customer"));
         reservation.setContact(requireStr(body, "contact"));
         reservation.setEmail(str(body, "email"));
+        if (exchange.getAttribute(SimpleAuthFilter.USER_ATTRIBUTE) instanceof com.dalatcafe.model.UserAccount user) {
+            reservation.setUserId(user.getId());
+            if (reservation.getEmail() == null || reservation.getEmail().isBlank()) reservation.setEmail(user.getEmail());
+        }
         reservation.setNote(str(body, "note"));
         reservation.setDateTime(parseDateTime(requireStr(body, "dateTime")));
         reservation.setGuests(requireInt(body, "guests"));
@@ -133,6 +156,52 @@ public class ReservationHandler extends ApiHandler {
     }
 
     /**
+     * Edits a pending or confirmed booking: guest details, time, party size and tables. The code,
+     * status and pre-orders stay; the whole chain runs again, skipping the booking itself.
+     */
+    private void update(HttpExchange exchange, String code) throws IOException {
+        Map<String, Object> body = readJsonBody(exchange);
+        Reservation edited;
+        // Same lock as create() and transferToPos(): no other booking can take the slot meanwhile.
+        synchronized (this) {
+            expireNoShows(Instant.now());
+            Reservation current = reservationDao.findByReservationCode(code)
+                    .orElseThrow(() -> ApiException.notFound("Reservation not found: " + code));
+            if (current.getStatus() != ReservationStatus.PENDING && current.getStatus() != ReservationStatus.CONFIRMED) {
+                throw new ApiException(409, "RESOURCE_CONFLICT",
+                        "Chỉ sửa được phiếu đang chờ hoặc đã xác nhận (" + current.getStatus().getDescription() + ").");
+            }
+            List<Integer> previousTables = current.getTableIds();
+            // A copy: the in-memory DAO hands out the stored object, which a refused edit must not touch.
+            edited = new Reservation(current.getId(), current.getReservationCode(), current.getCustomer(),
+                    current.getContact(), current.getDateTime(), current.getGuests());
+            edited.setStatus(current.getStatus());
+            edited.setPreOrders(current.getPreOrders());
+            edited.setUserId(current.getUserId());
+            edited.setCreatedAt(current.getCreatedAt());
+            edited.setCustomer(requireStr(body, "customer"));
+            edited.setContact(requireStr(body, "contact"));
+            edited.setEmail(str(body, "email"));
+            edited.setNote(str(body, "note"));
+            edited.setDateTime(parseDateTime(requireStr(body, "dateTime")));
+            edited.setGuests(requireInt(body, "guests"));
+            resolveTable(body, edited);
+            ValidationResult result = validationChain.validate(edited);
+            if (!result.isValid()) {
+                throw new ApiException(400, "CHAIN_VALIDATION_FAILED", result.getErrorMessage());
+            }
+            if (!reservationDao.save(edited)) {
+                throw new ApiException(503, "DATABASE_UNAVAILABLE", "Could not save reservation " + code);
+            }
+            // Tables the booking no longer uses go back to the floor if nothing else holds them.
+            Reservation released = new Reservation();
+            released.setTableIds(previousTables.stream().filter(id -> !edited.getTableIds().contains(id)).toList());
+            releaseReservedTables(released, Instant.now());
+        }
+        sendOk(exchange, 200, toJson(edited), "Reservation " + code + " updated");
+    }
+
+    /**
      * Confirms or cancels a booking. SEATED is reached only through transfer-pos, so the
      * order and the table are always created together with it.
      */
@@ -157,6 +226,10 @@ public class ReservationHandler extends ApiHandler {
                     default -> false;
                 };
                 if (!allowed) {
+                    if (current == ReservationStatus.SEATED && target == ReservationStatus.CANCELLED) {
+                        throw new ApiException(409, "RESOURCE_CONFLICT",
+                                "Phiếu đã nhận bàn và mở đơn POS, không thể hủy phiếu đặt bàn.");
+                    }
                     throw new ApiException(409, "RESOURCE_CONFLICT", "Reservation " + code + " cannot go from "
                             + current.getDescription() + " to " + target.getDescription());
                 }
@@ -164,6 +237,7 @@ public class ReservationHandler extends ApiHandler {
                     throw new ApiException(500, "INTERNAL_SERVER_ERROR", "Could not update reservation " + code);
                 }
                 reservation.setStatus(target);
+                if (target == ReservationStatus.CANCELLED) releaseReservedTables(reservation, Instant.now());
             }
         }
         if (!changed) {
@@ -178,23 +252,25 @@ public class ReservationHandler extends ApiHandler {
         int expired = 0;
         int grace = SystemConfigManager.getInstance().getAutoCancelMinutes();
         for (Reservation reservation : reservationDao.findAll()) {
-            if (reservation.getDateTime() == null || reservation.getId() == null
-                    || (reservation.getStatus() != ReservationStatus.PENDING && reservation.getStatus() != ReservationStatus.CONFIRMED)
-                    || now.isBefore(reservation.getDateTime().plusSeconds(grace * 60L))) continue;
+            if (reservation.getId() == null || !reservation.isNoShowAt(now, grace)) continue;
             if (!reservationDao.updateStatus(reservation.getId(), ReservationStatus.CANCELLED)) continue;
             reservation.setStatus(ReservationStatus.CANCELLED);
             expired++;
-            for (int tableId : reservation.getTableIds()) {
-                boolean anotherBooking = reservationDao.findAll().stream().anyMatch(other -> other.getTableIds().contains(tableId)
-                        && (other.getStatus() == ReservationStatus.PENDING || other.getStatus() == ReservationStatus.CONFIRMED)
-                        && other.getDateTime() != null && other.getDateTime().isBefore(now.plusSeconds(7200)));
-                boolean openOrder = orderDao.findByTableId(tableId).stream().anyMatch(order -> order.getStatus() != com.dalatcafe.model.OrderStatus.COMPLETED
-                        && order.getStatus() != com.dalatcafe.model.OrderStatus.CANCELLED);
-                if (!anotherBooking && !openOrder) tableDao.findById(tableId).filter(table -> table.getStatus() == TableStatus.RESERVED)
-                        .ifPresent(table -> tableDao.updateStatus(tableId, TableStatus.AVAILABLE, 0));
-            }
+            releaseReservedTables(reservation, now);
         }
         return expired;
+    }
+
+    private void releaseReservedTables(Reservation reservation, Instant now) {
+        for (int tableId : reservation.getTableIds()) {
+            boolean anotherBooking = reservationDao.findAll().stream().anyMatch(other -> other.getTableIds().contains(tableId)
+                    && (other.getStatus() == ReservationStatus.PENDING || other.getStatus() == ReservationStatus.CONFIRMED)
+                    && other.getDateTime() != null && other.getDateTime().isBefore(now.plusSeconds(7200)));
+            boolean openOrder = orderDao.findByTableId(tableId).stream().anyMatch(order -> order.getStatus() != com.dalatcafe.model.OrderStatus.COMPLETED
+                    && order.getStatus() != com.dalatcafe.model.OrderStatus.CANCELLED);
+            if (!anotherBooking && !openOrder) tableDao.findById(tableId).filter(table -> table.getStatus() == TableStatus.RESERVED)
+                    .ifPresent(table -> tableDao.updateStatus(tableId, TableStatus.AVAILABLE, 0));
+        }
     }
 
     private static ReservationStatus parseStatus(String raw) {
@@ -216,6 +292,10 @@ public class ReservationHandler extends ApiHandler {
             if (status == ReservationStatus.SEATED || status == ReservationStatus.CANCELLED) {
                 throw new ApiException(409, "RESOURCE_CONFLICT",
                         "Reservation " + code + " cannot be transferred: " + status.getDescription());
+            }
+            if (reservation.getDateTime() == null || Instant.now().isBefore(reservation.getDateTime())) {
+                throw new ApiException(409, "RESERVATION_NOT_DUE",
+                        "Chưa đến giờ đặt bàn. Chỉ được mở đơn POS khi đến giờ khách đã đặt.");
             }
             if (orderDao.findByOrderCode(reservation.getReservationCode()).isPresent()) {
                 throw new ApiException(409, "RESOURCE_CONFLICT", "An order already exists for reservation " + code);
@@ -252,16 +332,23 @@ public class ReservationHandler extends ApiHandler {
             if (requested.isEmpty() || requested.size() > 10) throw ApiException.badRequest("Chọn từ 1 đến 10 bàn.");
             List<Integer> ids = new ArrayList<>();
             List<String> names = new ArrayList<>();
+            String branch = null;
             for (Object raw : requested) {
                 if (raw == null) throw ApiException.badRequest("Mã bàn không hợp lệ.");
                 int id = requireInt(Map.of("id", raw), "id");
                 if (id < 1 || ids.contains(id)) throw ApiException.badRequest("Mã bàn không hợp lệ hoặc bị trùng.");
                 Table table = tableDao.findById(id).orElseThrow(() -> ApiException.notFound("Table not found: " + id));
+                if (branch != null && !branch.equals(table.getBranch())) {
+                    throw ApiException.badRequest("Các bàn ghép phải cùng một chi nhánh.");
+                }
+                branch = table.getBranch();
                 ids.add(id);
                 names.add(table.getName());
             }
             reservation.setTableIds(ids);
             reservation.setTableName(String.join(", ", names));
+            reservation.setBranch(branch);
+            requireBranch(body, reservation);
             return;
         }
         if (body.get("tableId") != null) {
@@ -270,15 +357,28 @@ public class ReservationHandler extends ApiHandler {
                     .orElseThrow(() -> ApiException.notFound("Table not found: " + tableId));
             reservation.setTableId(table.getId());
             reservation.setTableName(table.getName());
+            reservation.setBranch(table.getBranch());
+            requireBranch(body, reservation);
             return;
         }
         String name = requireStr(body, "table");
+        // Both branches number their tables alike, so a name is looked up within the requested branch.
+        String branch = com.dalatcafe.model.Branches.orDefault(branchField(body));
         Table table = tableDao.findAll().stream()
-                .filter(t -> name.equalsIgnoreCase(t.getName()))
+                .filter(t -> branch.equals(t.getBranch()) && name.equalsIgnoreCase(t.getName()))
                 .findFirst()
                 .orElseThrow(() -> ApiException.notFound("Table not found: " + name));
         reservation.setTableId(table.getId());
         reservation.setTableName(table.getName());
+        reservation.setBranch(table.getBranch());
+    }
+
+    /** A booking that names a branch must use that branch's tables. */
+    private static void requireBranch(Map<String, Object> body, Reservation reservation) {
+        String requested = branchField(body);
+        if (requested != null && !requested.equals(reservation.getBranch())) {
+            throw ApiException.badRequest("Bàn đã chọn không thuộc chi nhánh này.");
+        }
     }
 
     private static Instant parseDateTime(String raw) {
@@ -299,6 +399,7 @@ public class ReservationHandler extends ApiHandler {
         json.put("table", r.getTableName());
         json.put("tableId", r.getTableId());
         json.put("tableIds", r.getTableIds());
+        json.put("branch", r.getBranch());
         json.put("guests", r.getGuests());
         json.put("status", r.getStatus() == null ? null : r.getStatus().getDescription());
         json.put("note", r.getNote());

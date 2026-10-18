@@ -31,9 +31,8 @@ public final class TableAvailabilityValidator extends ReservationValidatorHandle
         if (reservation == null || reservation.getTableId() == null || reservation.getDateTime() == null) {
             return ValidationResult.invalid("Vui lòng cung cấp bàn và thời gian đặt bàn.");
         }
-        Instant end;
         try {
-            end = reservation.getDateTime().plus(duration);
+            reservation.getDateTime().plus(duration);
         } catch (DateTimeException | ArithmeticException ex) {
             return ValidationResult.invalid("Thời gian kết thúc đặt bàn không hợp lệ.");
         }
@@ -47,16 +46,20 @@ public final class TableAvailabilityValidator extends ReservationValidatorHandle
             if (existing.getDateTime() == null || existing.getStatus() == null) {
                 return ValidationResult.invalid("Lịch của bàn thiếu dữ liệu; vui lòng kiểm tra lại.");
             }
-            Instant existingEnd;
             try {
-                existingEnd = existing.getDateTime().plus(duration);
+                existing.getDateTime().plus(duration);
             } catch (DateTimeException | ArithmeticException ex) {
                 return ValidationResult.invalid("Thời gian trong lịch của bàn không hợp lệ.");
             }
-            if (reservation.getDateTime().isBefore(existingEnd) && existing.getDateTime().isBefore(end)) {
+            if (slotsOverlap(reservation.getDateTime(), existing.getDateTime(), duration)) {
                 return ValidationResult.invalid("Bàn đã được đặt trong khung giờ này.");
             }
         }
         return checkNext(reservation);
+    }
+
+    /** Half-open slots: a table can be booked again exactly when the previous slot ends. */
+    public static boolean slotsOverlap(Instant first, Instant second, Duration duration) {
+        return first.isBefore(second.plus(duration)) && second.isBefore(first.plus(duration));
     }
 }

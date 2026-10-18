@@ -39,30 +39,32 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { updateOrderStatus, updateTableStatus } from '@/app/admin/actions'
+import { formatOrderTables } from '@/lib/admin/order-display'
 import { formatCurrency, formatElapsed, tableStatusLabels } from '@/lib/admin/format'
 import type { FloorTable, MenuItem, Order, OrderStatus, TableStatus } from '@/lib/db/schema'
 import { cn } from '@/lib/utils'
+import { DEFAULT_BRANCH_ID } from '@/lib/branches'
 
 // Default fallback data if server props are undefined
-const defaultTables: FloorTable[] = [
-  { id: 12, name: 'Bar 01', seats: 1, zone: 'Quầy Bar', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date() },
-  { id: 13, name: 'Bar 02', seats: 1, zone: 'Quầy Bar', status: 'occupied', guestCount: 1, occupiedSince: new Date(Date.now() - 15 * 60000), updatedAt: new Date() },
-  { id: 14, name: 'Bar 03', seats: 1, zone: 'Quầy Bar', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date() },
-  { id: 15, name: 'Bar 04', seats: 1, zone: 'Quầy Bar', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date() },
-  { id: 1, name: 'Bàn 01', seats: 2, zone: 'Phòng lạnh', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date() },
-  { id: 2, name: 'Bàn 02', seats: 4, zone: 'Phòng lạnh', status: 'occupied', guestCount: 3, occupiedSince: new Date(Date.now() - 35 * 60000), updatedAt: new Date() },
-  { id: 3, name: 'Bàn 03', seats: 4, zone: 'Phòng lạnh', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date() },
-  { id: 4, name: 'Bàn 04', seats: 2, zone: 'Phòng lạnh', status: 'reserved', guestCount: 2, occupiedSince: null, updatedAt: new Date() },
-  { id: 5, name: 'Bàn 05', seats: 6, zone: 'Phòng lạnh', status: 'occupied', guestCount: 5, occupiedSince: new Date(Date.now() - 75 * 60000), updatedAt: new Date() },
-  { id: 6, name: 'Bàn 06', seats: 4, zone: 'Phòng lạnh', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date() },
-  { id: 7, name: 'Vườn 01', seats: 4, zone: 'Sân vườn', status: 'occupied', guestCount: 4, occupiedSince: new Date(Date.now() - 50 * 60000), updatedAt: new Date() },
-  { id: 8, name: 'Vườn 02', seats: 2, zone: 'Sân vườn', status: 'cleaning', guestCount: 0, occupiedSince: null, updatedAt: new Date() },
-  { id: 9, name: 'Vườn 03', seats: 4, zone: 'Sân vườn', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date() },
-  { id: 10, name: 'Vườn 04', seats: 2, zone: 'Sân vườn', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date() },
-  { id: 11, name: 'Vườn 05', seats: 2, zone: 'Sân vườn', status: 'reserved', guestCount: 2, occupiedSince: null, updatedAt: new Date() },
-]
+const defaultTables: FloorTable[] = ([
+  { id: 12, name: 'Bar 01', seats: 1, zone: 'Quầy Bar', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date(), imageUrl: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=800&q=80' },
+  { id: 13, name: 'Bar 02', seats: 1, zone: 'Quầy Bar', status: 'occupied', guestCount: 1, occupiedSince: new Date(Date.now() - 15 * 60000), updatedAt: new Date(), imageUrl: 'https://images.unsplash.com/photo-1445116572660-238429888876?auto=format&fit=crop&w=800&q=80' },
+  { id: 14, name: 'Bar 03', seats: 1, zone: 'Quầy Bar', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date(), imageUrl: 'https://images.unsplash.com/photo-1498804103079-a6351b050096?auto=format&fit=crop&w=800&q=80' },
+  { id: 15, name: 'Bar 04', seats: 1, zone: 'Quầy Bar', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date(), imageUrl: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=800&q=80' },
+  { id: 1, name: 'Bàn 01', seats: 2, zone: 'Phòng lạnh', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date(), imageUrl: 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=800&q=80' },
+  { id: 2, name: 'Bàn 02', seats: 4, zone: 'Phòng lạnh', status: 'occupied', guestCount: 3, occupiedSince: new Date(Date.now() - 35 * 60000), updatedAt: new Date(), imageUrl: 'https://images.unsplash.com/photo-1521017432531-fbd92d768814?auto=format&fit=crop&w=800&q=80' },
+  { id: 3, name: 'Bàn 03', seats: 4, zone: 'Phòng lạnh', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date(), imageUrl: 'https://images.unsplash.com/photo-1442512595331-e89e73853f31?auto=format&fit=crop&w=800&q=80' },
+  { id: 4, name: 'Bàn 04', seats: 2, zone: 'Phòng lạnh', status: 'reserved', guestCount: 2, occupiedSince: null, updatedAt: new Date(), imageUrl: 'https://images.unsplash.com/photo-1559925393-8be0ec4767c8?auto=format&fit=crop&w=800&q=80' },
+  { id: 5, name: 'Bàn 05', seats: 6, zone: 'Phòng lạnh', status: 'occupied', guestCount: 5, occupiedSince: new Date(Date.now() - 75 * 60000), updatedAt: new Date(), imageUrl: 'https://images.unsplash.com/photo-1600093463592-8e36ae95ef56?auto=format&fit=crop&w=800&q=80' },
+  { id: 6, name: 'Bàn 06', seats: 4, zone: 'Phòng lạnh', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date(), imageUrl: 'https://images.unsplash.com/photo-1511920170033-f8396924c348?auto=format&fit=crop&w=800&q=80' },
+  { id: 7, name: 'Vườn 01', seats: 4, zone: 'Sân vườn', status: 'occupied', guestCount: 4, occupiedSince: new Date(Date.now() - 50 * 60000), updatedAt: new Date(), imageUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=800&q=80' },
+  { id: 8, name: 'Vườn 02', seats: 2, zone: 'Sân vườn', status: 'cleaning', guestCount: 0, occupiedSince: null, updatedAt: new Date(), imageUrl: 'https://images.unsplash.com/photo-1525610553991-2bede1a236e2?auto=format&fit=crop&w=800&q=80' },
+  { id: 9, name: 'Vườn 03', seats: 4, zone: 'Sân vườn', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date(), imageUrl: 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=800&q=80' },
+  { id: 10, name: 'Vườn 04', seats: 2, zone: 'Sân vườn', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date(), imageUrl: 'https://images.unsplash.com/photo-1508766917616-d22f3f1eea14?auto=format&fit=crop&w=800&q=80' },
+  { id: 11, name: 'Vườn 05', seats: 2, zone: 'Sân vườn', status: 'reserved', guestCount: 2, occupiedSince: null, updatedAt: new Date(), imageUrl: 'https://images.unsplash.com/photo-1447933601403-0c6688de566e?auto=format&fit=crop&w=800&q=80' },
+] as Omit<FloorTable, 'branch'>[]).map((table) => ({ ...table, branch: DEFAULT_BRANCH_ID }))
 
-const defaultOrders: Order[] = [
+const defaultOrders: Order[] = ([
   {
     id: 101,
     orderCode: 'AC-0101',
@@ -117,7 +119,7 @@ const defaultOrders: Order[] = [
     createdAt: new Date(Date.now() - 12 * 60000),
     completedAt: null,
   },
-]
+] as Omit<Order, 'branch'>[]).map((order) => ({ ...order, branch: DEFAULT_BRANCH_ID }))
 
 export interface DashboardOperationalViewProps {
   initialTables?: FloorTable[]
@@ -168,7 +170,7 @@ export function DashboardOperationalView({
   const money = (value: number) => `${Math.round(value).toLocaleString('vi-VN')} đ`
 
   // Compute live operational metrics
-  const activeOrdersCount = orders.filter((o) => o.status !== 'completed').length
+  const activeOrdersCount = orders.filter((o) => o.status !== 'completed' && o.status !== 'cancelled').length
   const brewingOrdersCount = orders.filter((o) => o.status === 'brewing' || o.status === 'pending').length
   const overdueTablesCount = tables.filter((t) => {
     if (t.status !== 'occupied' || !t.occupiedSince) return false
@@ -369,7 +371,7 @@ export function DashboardOperationalView({
 
                 // Attached order if occupied
                 const matchingOrder = isOccupied
-                  ? orders.find((o) => (o.tableIds?.length ? o.tableIds : [o.tableId]).includes(table.id) && o.status !== 'completed')
+                  ? orders.find((o) => (o.tableIds?.length ? o.tableIds : [o.tableId]).includes(table.id) && o.status !== 'completed' && o.status !== 'cancelled')
                   : null
 
                 return (
@@ -386,7 +388,17 @@ export function DashboardOperationalView({
                       table.status === 'available' && 'bg-emerald-50/70 hover:bg-emerald-50/90'
                     )}
                   >
-                    {table.imageUrl && <><img src={table.imageUrl} alt="" className="absolute inset-0 -z-20 h-full w-full object-cover" loading="lazy" /><div className="absolute inset-0 -z-10 bg-white/65" /></>}
+                    {table.imageUrl && (
+                      <>
+                        <img
+                          src={table.imageUrl}
+                          alt=""
+                          className="absolute inset-0 -z-20 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          loading="lazy"
+                        />
+                        <div className="absolute inset-0 -z-10 bg-gradient-to-t from-white/95 via-white/85 to-white/70 backdrop-blur-[0.5px]" />
+                      </>
+                    )}
                     <div className="flex items-center justify-between gap-1 mb-1.5">
                       <span className="font-extrabold text-sm text-stone-900 tracking-tight">
                         {table.name}
@@ -452,14 +464,14 @@ export function DashboardOperationalView({
                 <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
                   <Coffee className="size-5 text-[#5A3E2B] shrink-0" />
                   <h3 className="text-base font-bold text-stone-900 tracking-tight">
-                    Hàng đợi pha chế Barista (Live Fulfillment Queue)
+                    Hàng đợi pha chế
                   </h3>
                   <span className="inline-flex items-center text-xs px-2.5 py-0.5 rounded-full bg-amber-100 font-bold text-amber-950 tabular-nums whitespace-nowrap shrink-0">
-                    {orders.filter((o) => o.status !== 'completed').length} vé đang xử lý
+                    {orders.filter((o) => o.status !== 'completed' && o.status !== 'cancelled').length} vé đang xử lý
                   </span>
                 </div>
                 <p className="text-xs text-stone-500">
-                  Cập nhật liên tục từ màn hình order thu ngân POS và khách đặt tại bàn.
+                  Cập nhật liên tục từ quầy thu ngân và khách gọi món tại bàn.
                 </p>
               </div>
 
@@ -467,7 +479,7 @@ export function DashboardOperationalView({
                 href="/admin/pos?tab=kitchen"
                 className="h-8 text-xs font-semibold text-[#5A3E2B] hover:text-[#684732] hover:bg-stone-100 px-3 inline-flex items-center gap-1.5 rounded-lg border border-stone-200/60 shadow-2xs transition-colors whitespace-nowrap shrink-0 self-start lg:self-center"
               >
-                <span>Màn hình Bếp/Bar đầy đủ</span>
+                <span>Màn hình pha chế đầy đủ</span>
                 <ArrowRight className="size-3.5 shrink-0" />
               </Link>
             </div>
@@ -475,7 +487,7 @@ export function DashboardOperationalView({
             {/* Tickets Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
               {orders
-                .filter((o) => o.status !== 'completed')
+                .filter((o) => o.status !== 'completed' && o.status !== 'cancelled')
                 .slice(0, 6)
                 .map((order) => {
                   const elapsedMinutes = Math.floor(
@@ -503,19 +515,17 @@ export function DashboardOperationalView({
                           </span>
                           <span className="text-[11px] font-semibold text-stone-500 flex items-center gap-1 tabular-nums">
                             <Clock className="size-3" />
-                            {elapsedMinutes}p trước
+                            {elapsedMinutes} phút trước
                           </span>
                         </div>
 
                         {/* Customer / Location Tag */}
                         <div className="flex items-center justify-between text-xs">
                           <span className="font-bold text-stone-800 truncate max-w-[140px]">
-                            {order.customer}
+                            {order.customer === 'Walk-in' ? 'Khách vãng lai' : order.customer}
                           </span>
                           <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-white text-stone-700 shadow-2xs border border-stone-200/60">
-                            {order.orderType === 'dine-in'
-                              ? `Bàn ${order.tableId ? String(order.tableId).padStart(2, '0') : '02'}`
-                              : 'Mang đi'}
+                            {formatOrderTables(order, tables)}
                           </span>
                         </div>
 
@@ -617,6 +627,23 @@ export function DashboardOperationalView({
                 Trạng thái hiện tại: <strong className="text-stone-800">{tableStatusLabels[activeTableDetail.status]}</strong>
               </DialogDescription>
             </DialogHeader>
+
+            {activeTableDetail.imageUrl && (
+              <div className="relative h-44 w-full overflow-hidden rounded-xl border border-stone-200 mt-2 shadow-2xs">
+                <img
+                  src={activeTableDetail.imageUrl}
+                  alt={activeTableDetail.name}
+                  className="h-full w-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                <div className="absolute bottom-2.5 left-3 right-3 flex items-center justify-between text-white">
+                  <span className="text-xs font-bold drop-shadow-sm">Không gian {activeTableDetail.zone}</span>
+                  <span className="text-[11px] font-semibold bg-white/20 backdrop-blur-md px-2 py-0.5 rounded">
+                    Sức chứa {activeTableDetail.seats} chỗ
+                  </span>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-4 py-3 text-xs">
               <div className="grid grid-cols-2 gap-2 p-3 rounded-lg bg-stone-50 border border-stone-200/60">

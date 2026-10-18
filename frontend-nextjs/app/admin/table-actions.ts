@@ -5,7 +5,8 @@ import { assertAdminAccess } from '@/lib/admin/access'
 import { saveJavaTable, deleteJavaTable, getJavaBackendUrl } from '@/lib/api-client'
 import { saveMockTable, deleteMockTable } from '@/lib/db/mock-store'
 import { isDbConfigured } from '@/lib/db'
-import { saveDatabaseTable, deleteDatabaseTable } from '@/lib/admin/table-repository'
+import { saveDatabaseTable, deleteDatabaseTable, mirrorDatabaseTable, mirrorDeletedTable } from '@/lib/admin/table-repository'
+import { getAdminBranch } from '@/lib/admin/branch'
 import type { FloorTable } from '@/lib/db/schema'
 
 export type TableDetails = { name: string; seats: number; zone: string; imageUrl: string | null }
@@ -21,14 +22,19 @@ export async function saveTableDetails(input: TableDetails, id?: number): Promis
       const url = new URL(details.imageUrl)
       if (!['http:', 'https:'].includes(url.protocol) || details.imageUrl.length > 2048) throw new Error('Ảnh phải là URL http hoặc https hợp lệ.')
     }
+    // A new table joins the branch chosen in the header; an edited one keeps its branch.
+    const located = { ...details, branch: await getAdminBranch() }
     let table: FloorTable
     if (getJavaBackendUrl()) {
-      const result = await saveJavaTable(details, id)
-      if (result.ok) table = { ...result.data, occupiedSince: result.data.occupiedSince ? new Date(result.data.occupiedSince) : null, updatedAt: new Date() }
+      const result = await saveJavaTable(located, id)
+      if (result.ok) {
+        table = { ...result.data, occupiedSince: result.data.occupiedSince ? new Date(result.data.occupiedSince) : null, updatedAt: new Date() }
+        if (isDbConfigured) await mirrorDatabaseTable(table)
+      }
       else if (!result.unreachable) throw new Error(result.error)
-      else table = isDbConfigured ? await saveDatabaseTable(details, id) : saveMockTable(details, id)
+      else table = isDbConfigured ? await saveDatabaseTable(located, id) : saveMockTable(located, id)
     } else {
-      table = isDbConfigured ? await saveDatabaseTable(details, id) : saveMockTable(details, id)
+      table = isDbConfigured ? await saveDatabaseTable(located, id) : saveMockTable(located, id)
     }
     revalidatePath('/admin', 'layout')
     return { ok: true, data: table }
@@ -41,7 +47,9 @@ export async function deleteTable(id: number): Promise<Result<null>> {
     if (!Number.isInteger(id) || id <= 0) throw new Error('Mã bàn không hợp lệ.')
     if (getJavaBackendUrl()) {
       const result = await deleteJavaTable(id)
-      if (!result.ok) {
+      if (result.ok) {
+        if (isDbConfigured) await mirrorDeletedTable(id)
+      } else {
         if (!result.unreachable) throw new Error(result.error)
         if (isDbConfigured) await deleteDatabaseTable(id)
         else deleteMockTable(id)

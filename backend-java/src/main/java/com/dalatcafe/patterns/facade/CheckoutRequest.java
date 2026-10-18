@@ -1,5 +1,6 @@
 package com.dalatcafe.patterns.facade;
 
+import com.dalatcafe.model.Branches;
 import com.dalatcafe.model.Customer;
 import com.dalatcafe.model.OrderType;
 import com.dalatcafe.model.PaymentMethod;
@@ -10,7 +11,8 @@ import java.util.Objects;
 
 /**
  * Immutable input of {@link PosCheckoutFacade#checkout(CheckoutRequest)}.
- * {@code customer}, {@code discountStrategy} and {@code tenderedAmount} are optional.
+ * {@code customer}, {@code discountStrategy}, {@code tenderedAmount} and {@code branch} are optional;
+ * without a branch the order belongs to {@link Branches#DEFAULT}.
  */
 public final class CheckoutRequest {
     private final List<CheckoutLine> lines;
@@ -21,6 +23,7 @@ public final class CheckoutRequest {
     private final IDiscountStrategy discountStrategy;
     private final String note;
     private final Double tenderedAmount;
+    private final String branch;
 
     public CheckoutRequest(List<CheckoutLine> lines, Integer tableId, OrderType orderType,
                            PaymentMethod paymentMethod, Customer customer,
@@ -32,6 +35,12 @@ public final class CheckoutRequest {
     public CheckoutRequest(List<CheckoutLine> lines, Integer tableId, OrderType orderType,
                            PaymentMethod paymentMethod, Customer customer,
                            IDiscountStrategy discountStrategy, String note, Double tenderedAmount) {
+        this(lines, tableId, orderType, paymentMethod, customer, discountStrategy, note, tenderedAmount, null);
+    }
+
+    public CheckoutRequest(List<CheckoutLine> lines, Integer tableId, OrderType orderType,
+                           PaymentMethod paymentMethod, Customer customer,
+                           IDiscountStrategy discountStrategy, String note, Double tenderedAmount, String branch) {
         Objects.requireNonNull(lines, "Lines must not be null");
         if (lines.isEmpty()) {
             throw new IllegalArgumentException("Checkout must contain at least one line");
@@ -47,6 +56,7 @@ public final class CheckoutRequest {
             throw new IllegalArgumentException("Tendered amount must not be negative");
         }
         this.tenderedAmount = tenderedAmount;
+        this.branch = Branches.orDefault(branch);
     }
 
     public List<CheckoutLine> getLines() {
@@ -79,5 +89,9 @@ public final class CheckoutRequest {
 
     public Double getTenderedAmount() {
         return tenderedAmount;
+    }
+
+    public String getBranch() {
+        return branch;
     }
 }

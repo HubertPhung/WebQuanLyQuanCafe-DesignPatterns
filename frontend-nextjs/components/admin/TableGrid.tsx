@@ -9,6 +9,7 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { formatCurrency } from '@/lib/admin/format'
 import { type FloorTable, type Order, type TableStatus } from '@/lib/db/schema'
 import { cn } from '@/lib/utils'
+import { DEFAULT_BRANCH_ID } from '@/lib/branches'
 
 interface TableGridProps {
   tables?: FloorTable[]
@@ -23,6 +24,7 @@ const defaultTables: FloorTable[] = Array.from({ length: 15 }, (_, i) => {
   const status = id === 1 ? 'occupied' : id === 2 ? 'available' : id === 3 ? 'occupied' : id === 4 ? 'reserved' : statuses[i % 4]
   return {
     id,
+    branch: DEFAULT_BRANCH_ID,
     name: `Table ${id}`,
     seats: id <= 4 ? 4 : id <= 11 ? 2 : 1,
     zone,

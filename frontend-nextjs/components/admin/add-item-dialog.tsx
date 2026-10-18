@@ -1,10 +1,12 @@
 'use client'
 
 import { useState, useTransition, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Check,
   ImageIcon,
   ImagePlus,
+  Pencil,
   Plus,
   RefreshCw,
   Trash2,
@@ -26,7 +28,8 @@ import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet 
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
-import { createMenuItem } from '@/app/admin/actions'
+import { createMenuItem, updateMenuItem } from '@/app/admin/actions'
+import type { MenuItem } from '@/lib/db/schema'
 import { cn } from '@/lib/utils'
 
 type Option = { id: number; name: string; price: string }
@@ -38,7 +41,9 @@ const SAMPLE_PRESETS = [
   { name: 'Hạt Arabica', url: '/images/beans.png' },
 ]
 
-export function AddItemDialog({ categories }: { categories: string[] }) {
+// Adds a menu item, or edits `item` when one is given (the form opens filled with its values).
+export function AddItemDialog({ categories, onCreated, item }: { categories: string[]; onCreated?: () => void; item?: MenuItem }) {
+  const router = useRouter()
   const [open, setOpen] = useState(false)
   const kind = 'menu' as const
   const [imageUrl, setImageUrl] = useState('')
@@ -46,14 +51,23 @@ export function AddItemDialog({ categories }: { categories: string[] }) {
   const [isDragging, setIsDragging] = useState(false)
   const [options, setOptions] = useState<Option[]>([])
   const [pending, startTransition] = useTransition()
+  const editing = item !== undefined
+  // Unique per dialog: every table row has its own edit dialog.
+  const idPrefix = editing ? `edit-item-${item.id}` : 'item'
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   function reset() {
-    setImageUrl('')
-    setImageName('')
-    setOptions([])
+    setImageUrl(item?.imageUrl ?? '')
+    setImageName(item?.imageUrl ? 'Ảnh hiện tại của món' : '')
+    setOptions((item?.variations ?? []).map((option, index) => ({ id: index + 1, name: option.name, price: String(option.price) })))
     setIsDragging(false)
+  }
+
+  function changeOpen(next: boolean) {
+    // Opening starts from the item as it is saved now (or an empty form for a new one).
+    if (next) reset()
+    setOpen(next)
   }
 
   const processImageFile = (file: File) => {
@@ -125,7 +139,7 @@ export function AddItemDialog({ categories }: { categories: string[] }) {
     const data = new FormData(form)
     const num = (key: string) => Number(data.get(key) || 0)
     startTransition(async () => {
-      const result = await createMenuItem({
+      const payload = {
         name: String(data.get('name') ?? ''),
         category: String(data.get('category') ?? ''),
         kind,
@@ -135,34 +149,48 @@ export function AddItemDialog({ categories }: { categories: string[] }) {
         recipe: String(data.get('recipe') ?? ''),
         imageUrl,
         variations: options.map((option) => ({ name: option.name, price: Number(option.price || 0) })),
-      })
+      }
+      const result = editing ? await updateMenuItem(item.id, payload) : await createMenuItem(payload)
       if (!result.ok) {
         toast.error(result.error)
         return
       }
       toast.success(result.message)
-      reset()
       setOpen(false)
+      onCreated?.()
+      router.refresh()
     })
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button className="bg-[#3E2723] hover:bg-[#4A3525] text-white font-semibold cursor-pointer" />}>
-        <Plus data-icon="inline-start" />
-        Thêm món mới
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={changeOpen}>
+      {editing ? (
+        <DialogTrigger
+          render={<Button variant="outline" size="sm" className="h-8 px-2.5 rounded-md border-stone-200/80 bg-white hover:bg-stone-50 text-stone-700 text-xs shadow-2xs cursor-pointer" />}
+          aria-label={`Sửa món ${item.name}`}
+        >
+          <Pencil className="size-3.5" data-icon="inline-start" />
+          Sửa
+        </DialogTrigger>
+      ) : (
+        <DialogTrigger render={<Button className="bg-[#3E2723] hover:bg-[#4A3525] text-white font-semibold cursor-pointer" />}>
+          <Plus data-icon="inline-start" />
+          Thêm món mới
+        </DialogTrigger>
+      )}
 
       <DialogContent className="sm:max-w-xl max-h-[90vh] flex flex-col bg-white p-0 gap-0 overflow-hidden rounded-2xl shadow-2xl">
         <DialogHeader className="p-5 sm:p-6 pb-4 border-b border-stone-100 shrink-0">
-          <DialogTitle className="text-xl font-bold text-stone-900">Thêm món mới vào thực đơn</DialogTitle>
+          <DialogTitle className="text-xl font-bold text-stone-900">{editing ? `Sửa món: ${item.name}` : 'Thêm món mới vào thực đơn'}</DialogTitle>
           <DialogDescription className="text-stone-600 text-xs sm:text-sm">
-            Tạo món ăn, thức uống phục vụ trên thực đơn quán và quầy thu ngân POS.
+            {editing
+              ? 'Thay đổi áp dụng cho thực đơn quán và quầy thu ngân POS. Đơn đã bán giữ nguyên tên và giá cũ.'
+              : 'Tạo món ăn, thức uống phục vụ trên thực đơn quán và quầy thu ngân POS.'}
           </DialogDescription>
         </DialogHeader>
 
         <form
-          id="add-item-form"
+          id={`${idPrefix}-form`}
           className="flex-1 min-h-0 flex flex-col overflow-hidden"
           onSubmit={(event) => {
             event.preventDefault()
@@ -283,25 +311,26 @@ export function AddItemDialog({ categories }: { categories: string[] }) {
             {/* CÁC TRƯỜNG THÔNG TIN MÓN */}
             <div className="grid gap-4 sm:grid-cols-2">
               <Field>
-                <FieldLabel htmlFor="item-name" className="text-stone-700 font-semibold text-xs sm:text-sm">
+                <FieldLabel htmlFor={`${idPrefix}-name`} className="text-stone-700 font-semibold text-xs sm:text-sm">
                   Tên món *
                 </FieldLabel>
-                <Input id="item-name" name="name" required maxLength={80} placeholder="Ví dụ: Cà phê Muối" />
+                <Input id={`${idPrefix}-name`} name="name" required maxLength={80} defaultValue={item?.name} placeholder="Ví dụ: Cà phê Muối" />
               </Field>
 
               <Field>
-                <FieldLabel htmlFor="item-category" className="text-stone-700 font-semibold text-xs sm:text-sm">
+                <FieldLabel htmlFor={`${idPrefix}-category`} className="text-stone-700 font-semibold text-xs sm:text-sm">
                   Phân loại *
                 </FieldLabel>
                 <Input
-                  id="item-category"
+                  id={`${idPrefix}-category`}
                   name="category"
                   required
-                  list="item-categories"
+                  defaultValue={item?.category}
+                  list={`${idPrefix}-categories`}
                   maxLength={40}
                   placeholder="Cà phê, Bánh ngọt..."
                 />
-                <datalist id="item-categories">
+                <datalist id={`${idPrefix}-categories`}>
                   {categories.map((name) => (
                     <option key={name} value={name} />
                   ))}
@@ -309,25 +338,26 @@ export function AddItemDialog({ categories }: { categories: string[] }) {
               </Field>
 
               <Field>
-                <FieldLabel htmlFor="item-unit" className="text-stone-700 font-semibold text-xs sm:text-sm">
+                <FieldLabel htmlFor={`${idPrefix}-unit`} className="text-stone-700 font-semibold text-xs sm:text-sm">
                   Đơn vị tính *
                 </FieldLabel>
                 <Input
-                  id="item-unit"
+                  id={`${idPrefix}-unit`}
                   name="unit"
-                  defaultValue="ly"
+                  defaultValue={item?.unit ?? 'ly'}
                   placeholder="ly, tách, phần..."
                   maxLength={12}
                 />
               </Field>
 
               <Field>
-                <FieldLabel htmlFor="item-cost" className="text-stone-700 font-semibold text-xs sm:text-sm">
+                <FieldLabel htmlFor={`${idPrefix}-cost`} className="text-stone-700 font-semibold text-xs sm:text-sm">
                   Giá vốn (VNĐ) *
                 </FieldLabel>
                 <Input
-                  id="item-cost"
+                  id={`${idPrefix}-cost`}
                   name="costPrice"
+                  defaultValue={item?.costPrice}
                   type="number"
                   min="0"
                   step="1000"
@@ -337,12 +367,13 @@ export function AddItemDialog({ categories }: { categories: string[] }) {
               </Field>
 
               <Field className="sm:col-span-2">
-                <FieldLabel htmlFor="item-price" className="text-stone-700 font-semibold text-xs sm:text-sm">
+                <FieldLabel htmlFor={`${idPrefix}-price`} className="text-stone-700 font-semibold text-xs sm:text-sm">
                   Giá bán (VNĐ) *
                 </FieldLabel>
                 <Input
-                  id="item-price"
+                  id={`${idPrefix}-price`}
                   name="sellPrice"
+                  defaultValue={item?.sellPrice}
                   type="number"
                   min="0"
                   step="1000"
@@ -354,12 +385,13 @@ export function AddItemDialog({ categories }: { categories: string[] }) {
 
             {/* CÔNG THỨC ĐỊNH LƯỢNG */}
             <Field>
-              <FieldLabel htmlFor="item-recipe" className="text-stone-700 font-semibold text-xs sm:text-sm">
+              <FieldLabel htmlFor={`${idPrefix}-recipe`} className="text-stone-700 font-semibold text-xs sm:text-sm">
                 Công thức định lượng
               </FieldLabel>
               <Textarea
-                id="item-recipe"
+                id={`${idPrefix}-recipe`}
                 name="recipe"
+                defaultValue={item?.recipe ?? ''}
                 rows={3}
                 placeholder="20g bột cà phê, 40ml sữa đặc, 30ml kem muối..."
                 maxLength={1000}
@@ -436,7 +468,7 @@ export function AddItemDialog({ categories }: { categories: string[] }) {
             <Button
               type="button"
               variant="outline"
-              onClick={() => setOpen(false)}
+              onClick={() => changeOpen(false)}
               className="rounded-lg cursor-pointer"
             >
               Hủy bỏ
@@ -447,7 +479,7 @@ export function AddItemDialog({ categories }: { categories: string[] }) {
               className="bg-[#3E2723] hover:bg-[#4A3525] text-white font-semibold rounded-lg cursor-pointer"
             >
               {pending && <Spinner data-icon="inline-start" />}
-              Lưu món ăn
+              {editing ? 'Lưu thay đổi' : 'Lưu món ăn'}
             </Button>
           </DialogFooter>
         </form>

@@ -1,10 +1,11 @@
 import { boolean, integer, jsonb, numeric, pgTable, serial, text, timestamp } from 'drizzle-orm/pg-core'
+import { DEFAULT_BRANCH_ID, type BranchId } from '../branches'
 
 export type OrderItem = { name: string; qty: number; price: number; variation?: string }
 export type Variation = { name: string; price: number }
 
 export const tableStatuses = ['available', 'occupied', 'reserved', 'cleaning'] as const
-export const orderStatuses = ['pending', 'brewing', 'ready', 'completed'] as const
+export const orderStatuses = ['pending', 'brewing', 'ready', 'completed', 'cancelled'] as const
 export const paymentMethods = ['cash', 'qr', 'card'] as const
 export const orderTypes = ['dine-in', 'pickup', 'delivery'] as const
 
@@ -18,6 +19,7 @@ export const adminTables = pgTable('admin_tables', {
   name: text('name').notNull(),
   seats: integer('seats').notNull().default(2),
   zone: text('zone').notNull().default('Main'),
+  branch: text('branch').$type<BranchId>().notNull().default(DEFAULT_BRANCH_ID),
   imageUrl: text('image_url'),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
   status: text('status').$type<TableStatus>().notNull().default('available'),
@@ -47,6 +49,7 @@ export const adminOrders = pgTable('admin_orders', {
   customer: text('customer').notNull().default('Walk-in'),
   tableId: integer('table_id'),
   tableIds: jsonb('table_ids').$type<number[]>().notNull().default([]),
+  branch: text('branch').$type<BranchId>().notNull().default(DEFAULT_BRANCH_ID),
   orderType: text('order_type').$type<OrderType>().notNull().default('dine-in'),
   items: jsonb('items').$type<OrderItem[]>().notNull().default([]),
   subtotal: numeric('subtotal', { precision: 10, scale: 2, mode: 'number' }).notNull().default(0),

@@ -1,24 +1,29 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
-import { Coffee, Search, Tag, UtensilsCrossed } from 'lucide-react'
+import { Coffee, Search, Tag, Trash2, UtensilsCrossed } from 'lucide-react'
 import { toast } from 'sonner'
-import { setItemInStock } from '@/app/admin/actions'
+import { deleteMenuItem, setItemInStock } from '@/app/admin/actions'
 import { AddItemDialog } from '@/components/admin/add-item-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Spinner } from '@/components/ui/spinner'
 import type { MenuItem } from '@/lib/db/schema'
 import { cn } from '@/lib/utils'
 
-// The menu as the POS sells it. Items are created through createMenuItem (Java first, then the
-// admin store) and switched on or off through setItemInStock. Categories are the names items use;
-// a new one appears by typing it when adding an item.
-export function MenuManagement({ items }: { items: MenuItem[] }) {
+// The menu as the POS sells it. Items are created, edited and removed through createMenuItem,
+// updateMenuItem and deleteMenuItem (Java first, then the admin store), and switched on or off
+// through setItemInStock. Editing and removing need MANAGER. Categories are the names items use;
+// a new one appears by typing it when adding or editing an item.
+export function MenuManagement({ items, canManage = false }: { items: MenuItem[]; canManage?: boolean }) {
   const [activeTab, setActiveTab] = useState<'items' | 'categories'>('items')
   const [search, setSearch] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [pendingId, setPendingId] = useState<number | null>(null)
   const [, startTransition] = useTransition()
+  const [deleting, setDeleting] = useState<MenuItem | null>(null)
+  const [deletePending, startDelete] = useTransition()
 
   const menuItems = useMemo(() => items.filter((item) => item.kind === 'menu'), [items])
   const categories = useMemo(() => {
@@ -52,6 +57,22 @@ export function MenuManagement({ items }: { items: MenuItem[] }) {
     })
   }
 
+  function confirmDelete() {
+    const item = deleting
+    if (!item) return
+    startDelete(async () => {
+      const result = await deleteMenuItem(item.id)
+      if (!result.ok) {
+        toast.error(result.error)
+        return
+      }
+      toast.success(`Đã xoá "${item.name}" khỏi thực đơn`)
+      setDeleting(null)
+    })
+  }
+
+  const categoryNames = categories.map((category) => category.name)
+
   return (
     <div className="space-y-6 font-sans text-stone-900">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-stone-200/50">
@@ -79,7 +100,13 @@ export function MenuManagement({ items }: { items: MenuItem[] }) {
             <span>Danh mục món ({categories.length})</span>
           </button>
         </div>
-        <AddItemDialog categories={categories.map((category) => category.name)} />
+        {canManage && (
+          <AddItemDialog categories={categoryNames} onCreated={() => {
+            setActiveTab('items')
+            setSearch('')
+            setSelectedCategory('all')
+          }} />
+        )}
       </div>
 
       {activeTab === 'items' && (
@@ -171,6 +198,21 @@ export function MenuManagement({ items }: { items: MenuItem[] }) {
                             >
                               {item.inStock ? 'Ngừng bán' : 'Mở bán'}
                             </Button>
+                            {canManage && (
+                              <>
+                                <AddItemDialog categories={categoryNames} item={item} />
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  aria-label={`Xoá món ${item.name}`}
+                                  onClick={() => setDeleting(item)}
+                                  className="h-8 px-2.5 rounded-md border-rose-200 bg-white hover:bg-rose-50 text-rose-700 text-xs shadow-2xs cursor-pointer"
+                                >
+                                  <Trash2 className="size-3.5" data-icon="inline-start" />
+                                  Xoá
+                                </Button>
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -224,6 +266,26 @@ export function MenuManagement({ items }: { items: MenuItem[] }) {
           </div>
         </div>
       )}
+      <Dialog open={deleting !== null} onOpenChange={(open) => { if (!open && !deletePending) setDeleting(null) }}>
+        <DialogContent className="sm:max-w-md bg-white rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-stone-900">Xoá món khỏi thực đơn?</DialogTitle>
+            <DialogDescription className="text-stone-600 text-sm">
+              "{deleting?.name}" sẽ biến mất khỏi thực đơn, quầy POS và trang đặt món. Các đơn đã bán vẫn giữ tên và giá cũ.
+              Nếu chỉ tạm hết hàng, hãy dùng "Ngừng bán" thay vì xoá.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" disabled={deletePending} onClick={() => setDeleting(null)} className="rounded-lg cursor-pointer">
+              Giữ lại
+            </Button>
+            <Button disabled={deletePending} onClick={confirmDelete} className="bg-rose-600 hover:bg-rose-700 text-white rounded-lg cursor-pointer">
+              {deletePending && <Spinner data-icon="inline-start" />}
+              Xoá món
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

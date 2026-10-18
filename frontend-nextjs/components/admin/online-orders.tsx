@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils'
 const nextStatus: Partial<Record<OrderStatus, OrderStatus>> = { pending: 'brewing', brewing: 'ready', ready: 'completed' }
 
 function statusLabel(order: OnlineOrderView) {
+  if (order.status === 'cancelled') return 'Đã hủy'
   if (order.status === 'pending') return 'Chờ pha chế'
   if (order.status === 'brewing') return 'Đang pha chế'
   if (order.status === 'ready') return order.contact.fulfilment === 'delivery' ? 'Đang giao' : 'Chờ khách lấy'
@@ -36,6 +37,7 @@ const statusStyles: Record<OrderStatus, string> = {
   brewing: 'bg-purple-50/90 text-purple-950 border-purple-300/80',
   ready: 'bg-blue-50/90 text-blue-950 border-blue-300/80',
   completed: 'bg-emerald-50/90 text-emerald-900 border-emerald-300/80',
+  cancelled: 'bg-rose-50 text-rose-900 border-rose-300',
 }
 
 const filters: { id: 'all' | OrderStatus; label: string }[] = [
@@ -44,6 +46,7 @@ const filters: { id: 'all' | OrderStatus; label: string }[] = [
   { id: 'brewing', label: 'Đang pha chế' },
   { id: 'ready', label: 'Đang giao / chờ lấy' },
   { id: 'completed', label: 'Hoàn thành' },
+  { id: 'cancelled', label: 'Đã hủy' },
 ]
 
 const paymentLabels: Record<string, string> = { qr: 'VietQR', card: 'Thẻ', cash: 'Tiền mặt khi nhận' }
@@ -96,7 +99,7 @@ export function OnlineOrders({ orders }: { orders: OnlineOrderView[] }) {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Tìm mã ĐH, khách hàng, SĐT..."
-              aria-label="Tìm đơn online"
+              aria-label="Tìm đơn trực tuyến"
               className="h-10 w-full truncate rounded-lg border border-stone-200/90 bg-white pl-10 pr-4 text-xs text-stone-900 placeholder:text-stone-400 focus:border-[#5A3E2B] focus:outline-none md:text-sm"
             />
           </div>
@@ -156,7 +159,7 @@ export function OnlineOrders({ orders }: { orders: OnlineOrderView[] }) {
                     <span className={cn('inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-bold', statusStyles[order.status])}>
                       {statusLabel(order)}
                     </span>
-                    {order.paymentStatus !== 'paid' && <span className="ml-1.5 text-[11px] font-semibold text-amber-800">· chưa thu tiền</span>}
+                    {order.paymentStatus === 'unpaid' && <span className="ml-1.5 text-[11px] font-semibold text-amber-800">· chưa thu tiền</span>}
                   </td>
                   <td className="px-3 py-3.5 text-right text-sm font-black tabular-nums text-[#5A3E2B]">{order.total.toLocaleString('vi-VN')} đ</td>
                   <td className="px-3 py-3.5 font-mono text-xs text-stone-500">{time(order.createdAt)}</td>
@@ -176,7 +179,7 @@ export function OnlineOrders({ orders }: { orders: OnlineOrderView[] }) {
               {filtered.length === 0 && (
                 <tr>
                   <td colSpan={7} className="py-10 text-center text-sm text-stone-500">
-                    {orders.length === 0 ? 'Chưa có đơn đặt online nào.' : 'Không có đơn nào khớp với bộ lọc.'}
+                    {orders.length === 0 ? 'Chưa có đơn đặt trực tuyến nào.' : 'Không có đơn nào khớp với bộ lọc.'}
                   </td>
                 </tr>
               )}
@@ -192,13 +195,13 @@ export function OnlineOrders({ orders }: { orders: OnlineOrderView[] }) {
               <div className="flex items-center justify-between gap-2">
                 <DialogTitle className="flex items-center gap-2 text-xl font-bold text-stone-900">
                   <Globe className="size-5 text-[#5A3E2B]" aria-hidden="true" />
-                  Đơn online {selected.orderCode}
+                  Đơn trực tuyến {selected.orderCode}
                 </DialogTitle>
                 <Badge className="rounded-full bg-[#5A3E2B] px-2.5 py-0.5 text-xs text-white">{statusLabel(selected)}</Badge>
               </div>
               <DialogDescription className="text-xs text-stone-500">
                 Đặt lúc {time(selected.createdAt)} · {selected.contact.fulfilment === 'delivery' ? 'Giao hàng tận nơi' : 'Khách tự đến lấy'} ·{' '}
-                {paymentLabels[selected.paymentMethod] ?? selected.paymentMethod} ({selected.paymentStatus === 'paid' ? 'đã thanh toán' : 'chưa thu tiền'})
+                {paymentLabels[selected.paymentMethod] ?? selected.paymentMethod} ({selected.paymentStatus === 'refunded' ? 'đã ghi nhận hoàn tiền' : selected.paymentStatus === 'paid' ? 'đã thanh toán' : 'chưa thu tiền'})
               </DialogDescription>
             </DialogHeader>
 
@@ -254,7 +257,7 @@ export function OnlineOrders({ orders }: { orders: OnlineOrderView[] }) {
             </div>
 
             <DialogFooter className="flex-wrap gap-2 pt-2">
-              {selected.paymentStatus !== 'paid' && (
+              {selected.status !== 'cancelled' && selected.paymentStatus === 'unpaid' && (
                 <Button variant="outline" disabled={pending} onClick={() => collectCash(selected)} className="gap-1.5 text-xs font-semibold">
                   <Banknote className="size-4" aria-hidden="true" />
                   Đã thu tiền

@@ -27,7 +27,7 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * GET /api/analytics/overview?days=7 (MANAGER+): revenue (total, today, yesterday and per day),
+ * GET /api/analytics/overview?days=7[&branch=id] (MANAGER+): revenue (total, today, yesterday and per day),
  * payment mix, order counts by status, best sellers, fulfillment time and floor occupancy, computed from the DAOs on each call.
  * Revenue counts paid orders only; refunded or cancelled orders are excluded.
  */
@@ -56,7 +56,7 @@ public class AnalyticsHandler extends ApiHandler {
         if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
             throw methodNotAllowed(exchange);
         }
-        sendOk(exchange, 200, overview(Instant.now(), days(queryParam(exchange, "days"))), null);
+        sendOk(exchange, 200, overview(Instant.now(), days(queryParam(exchange, "days")), branchFilter(exchange)), null);
     }
 
     private static int days(String raw) {
@@ -75,10 +75,17 @@ public class AnalyticsHandler extends ApiHandler {
     }
 
     Map<String, Object> overview(Instant now, int days) {
+        return overview(now, days, null);
+    }
+
+    /** {@code branch} limits orders and tables to one branch; null covers the whole shop. */
+    Map<String, Object> overview(Instant now, int days, String branch) {
         LocalDate today = now.atZone(STORE_ZONE).toLocalDate();
         LocalDate yesterday = today.minusDays(1);
         LocalDate firstDay = today.minusDays(days - 1L);
-        List<Order> orders = orderDao.findAll();
+        List<Order> orders = orderDao.findAll().stream()
+                .filter(order -> branch == null || branch.equals(order.getBranch()))
+                .toList();
         Map<LocalDate, double[]> perDay = new LinkedHashMap<>();
         for (LocalDate day = firstDay; !day.isAfter(today); day = day.plusDays(1)) {
             perDay.put(day, new double[2]);
@@ -173,7 +180,7 @@ public class AnalyticsHandler extends ApiHandler {
         byStatus.forEach((status, count) -> statusCounts.put(status.name().toLowerCase(Locale.ROOT), count));
         data.put("ordersByStatus", statusCounts);
         data.put("topItems", topItems(items));
-        data.put("tables", tables());
+        data.put("tables", tables(branch));
         return data;
     }
 
@@ -204,12 +211,14 @@ public class AnalyticsHandler extends ApiHandler {
         return top;
     }
 
-    private Map<String, Object> tables() {
+    private Map<String, Object> tables(String branch) {
         Map<TableStatus, Integer> counts = new EnumMap<>(TableStatus.class);
         for (TableStatus status : TableStatus.values()) {
             counts.put(status, 0);
         }
-        List<Table> all = tableDao.findAll();
+        List<Table> all = tableDao.findAll().stream()
+                .filter(table -> branch == null || branch.equals(table.getBranch()))
+                .toList();
         for (Table table : all) {
             if (table.getStatus() != null) {
                 counts.merge(table.getStatus(), 1, Integer::sum);

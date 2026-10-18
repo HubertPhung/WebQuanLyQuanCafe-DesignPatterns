@@ -52,7 +52,7 @@ export function OrderStream({ orders }: { orders: Order[] }) {
   const [filter, setFilter] = useState<string>('all')
 
   const filteredOrders = orders.filter((order) => {
-    if (filter === 'in-progress') return order.status !== 'completed'
+    if (filter === 'in-progress') return order.status !== 'completed' && order.status !== 'cancelled'
     if (filter === 'completed') return order.status === 'completed'
     if (filter === 'unpaid') return order.paymentStatus !== 'paid'
     return true
@@ -80,7 +80,7 @@ export function OrderStream({ orders }: { orders: Order[] }) {
             Tất cả ({orders.length})
           </ToggleGroupItem>
           <ToggleGroupItem value="in-progress" className="text-xs md:text-sm font-semibold h-9 px-3.5 rounded-lg">
-            Đang phục vụ ({orders.filter((o) => o.status !== 'completed').length})
+            Đang phục vụ ({orders.filter((o) => o.status !== 'completed' && o.status !== 'cancelled').length})
           </ToggleGroupItem>
           <ToggleGroupItem value="completed" className="text-xs md:text-sm font-semibold h-9 px-3.5 rounded-lg">
             Hoàn tất ({orders.filter((o) => o.status === 'completed').length})

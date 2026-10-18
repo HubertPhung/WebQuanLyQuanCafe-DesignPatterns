@@ -14,7 +14,7 @@ export function formatTrend(current: number, previous: number) {
 export function formatElapsed(from: Date | string, now = Date.now()) {
   const minutes = Math.max(0, Math.floor((now - new Date(from).getTime()) / 60000))
   if (minutes < 60) return `${minutes} phút`
-  return `${Math.floor(minutes / 60)}h ${minutes % 60}p`
+  return `${Math.floor(minutes / 60)} giờ ${minutes % 60} phút`
 }
 
 export function formatTime(value: Date | string) {
@@ -32,6 +32,7 @@ export const statusLabels = {
   brewing: 'Đang thực hiện',
   ready: 'Sẵn sàng phục vụ',
   completed: 'Đã hoàn thành',
+  cancelled: 'Đã hủy',
 } as const
 
 export const tableStatusLabels = {

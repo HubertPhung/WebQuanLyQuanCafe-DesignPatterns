@@ -5,9 +5,10 @@ import { listContactsForUser } from '@/lib/orders/online-contacts'
 import { isFirstOnlineOrderAvailable } from '@/lib/orders/first-online-order'
 import type { Session } from '@/lib/auth/session'
 import type { Rank } from './loyalty'
+import { getAccountReservations, type AccountReservation } from './reservations'
 
 // What /account shows a signed-in customer: their own online orders (admin_order_contacts keeps
-// the account that placed each one), the delivery addresses they used, and the membership of the
+// the account that placed each one), their reservations, delivery addresses, and the membership of the
 // phone on their latest order, read from Java (members live there).
 
 export type AccountOrder = {
@@ -15,8 +16,9 @@ export type AccountOrder = {
   createdAt: string
   items: string
   total: number
-  status: 'pending' | 'brewing' | 'ready' | 'completed'
+  status: 'pending' | 'brewing' | 'ready' | 'completed' | 'cancelled'
   paid: boolean
+  refunded: boolean
   fulfilment: 'delivery' | 'pickup'
 }
 
@@ -25,6 +27,8 @@ export type AccountAddress = { address: string; phone: string; lastUsed: string 
 export type AccountMember = { phone: string; rank: Rank; points: number; totalSpent: number; totalOrders: number }
 
 export type AccountOverview = {
+  reservations: AccountReservation[]
+  reservationsUnavailable: boolean
   orders: AccountOrder[]
   addresses: AccountAddress[]
   phone: string | null
@@ -35,8 +39,11 @@ export type AccountOverview = {
 }
 
 export async function getAccountOverview(session: Session): Promise<AccountOverview> {
-  const contacts = await listContactsForUser(session.userId)
-  const welcomeVoucherEligible = await isFirstOnlineOrderAvailable(session.userId).catch(() => false)
+  const [contacts, welcomeVoucherEligible, reservationHistory] = await Promise.all([
+    listContactsForUser(session.userId),
+    isFirstOnlineOrderAvailable(session.userId).catch(() => false),
+    getAccountReservations(session),
+  ])
   const orders = (await joinContactOrders(contacts)).map<AccountOrder>((order) => ({
     orderCode: order.orderCode,
     createdAt: new Date(order.createdAt).toISOString(),
@@ -44,6 +51,7 @@ export async function getAccountOverview(session: Session): Promise<AccountOverv
     total: Number(order.total),
     status: order.status,
     paid: order.paymentStatus === 'paid',
+    refunded: order.paymentStatus === 'refunded',
     fulfilment: order.contact.fulfilment,
   }))
 
@@ -71,6 +79,7 @@ export async function getAccountOverview(session: Session): Promise<AccountOverv
     }
   }
   return {
+    ...reservationHistory,
     welcomeVoucherEligible,
     orders,
     addresses: [...addresses.values()],

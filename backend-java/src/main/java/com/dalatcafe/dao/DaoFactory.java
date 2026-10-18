@@ -1,5 +1,8 @@
 package com.dalatcafe.dao;
 
+import com.dalatcafe.model.Branches;
+import com.dalatcafe.model.Table;
+import java.util.List;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.logging.Level;
@@ -53,6 +56,11 @@ public class DaoFactory {
             if (tables.findAll().isEmpty()) {
                 seed.getTables().values().forEach(tables::save);
                 LOGGER.info("Seeded " + seed.getTables().size() + " tables into PostgreSQL.");
+            } else if (tables.findAll().stream().noneMatch(t -> Branches.BUI_THI_XUAN.equals(t.getBranch()))) {
+                // A floor saved before branches existed: give the second branch its own tables.
+                List<Table> branchTwo = InMemoryDatabase.branchTwoTables(tables.nextId());
+                branchTwo.forEach(tables::save);
+                LOGGER.info("Seeded " + branchTwo.size() + " tables for branch " + Branches.BUI_THI_XUAN + ".");
             }
             if (menu.findAll().isEmpty()) {
                 seed.getMenuItems().values().forEach(menu::save);

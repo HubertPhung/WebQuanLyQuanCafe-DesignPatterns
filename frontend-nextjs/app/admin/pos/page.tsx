@@ -6,6 +6,7 @@ import { AutoRefresh, PageHeading } from '@/components/admin/shared'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { fetchConfig } from '@/lib/api-client'
 import { getActiveOrders, getMenuItems, getPendingSyncCount, getTables } from '@/lib/admin/queries'
+import { markTablesInUse } from '@/lib/admin/pos-table-availability'
 
 export const metadata = { title: 'Đơn hàng & POS' }
 
@@ -30,18 +31,18 @@ export default async function PosPage({ searchParams }: { searchParams: Promise<
       <Tabs key={tab === 'kitchen' ? 'kitchen' : 'pos'} defaultValue={tab === 'kitchen' ? 'kitchen' : 'pos'} className="gap-4">
         <TabsList>
           <TabsTrigger value="pos">
-            Máy bán hàng POS <span className="sr-only">Point of sale</span>
+            Quầy bán hàng
           </TabsTrigger>
           <TabsTrigger value="kitchen">
-            Màn hình pha chế ({activeOrders.length}) <span className="sr-only">Kitchen display</span>
+            Màn hình pha chế ({activeOrders.length})
           </TabsTrigger>
         </TabsList>
         <TabsContent value="pos">
           <GroupTablePayment tables={tables} orders={activeOrders} />
-          <PosTerminal menu={menu} tables={tables} pointValue={config.ok ? config.data.pointRedeemValueVnd : undefined} />
+          <PosTerminal menu={menu} tables={markTablesInUse(tables, activeOrders)} pointValue={config.ok ? config.data.pointRedeemValueVnd : undefined} />
         </TabsContent>
         <TabsContent value="kitchen">
-          <KdsBoard orders={activeOrders} />
+          <KdsBoard orders={activeOrders} tables={tables} />
         </TabsContent>
       </Tabs>
     </>

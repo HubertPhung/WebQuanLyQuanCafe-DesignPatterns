@@ -1,9 +1,9 @@
 'use server'
 
-import { eq, inArray, sql } from 'drizzle-orm'
+import { and, eq, inArray, ne, sql } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { cookies } from 'next/headers'
-import { db, isDbConfigured, ensureOrderTableGroups } from '@/lib/db'
+import { db, isDbConfigured, ensureOrderTableGroups, ensureOrderCancellation, ensureMenuImageStorage } from '@/lib/db'
 import {
   adminMenuItems,
   adminOrders,
@@ -22,6 +22,8 @@ import {
 import { assertAdminAccess } from '@/lib/admin/access'
 import { getSession } from '@/lib/auth/session'
 import { TAX_RATE } from '@/lib/admin/format'
+import { orderTransitionError } from '@/lib/orders/lifecycle'
+import { assertPosTableAvailable, withPosTableLock } from '@/lib/admin/pos-table-guard'
 import { isDaLatAddress, shippingFee } from '@/lib/storefront/delivery'
 import { withFirstOnlineOrder } from '@/lib/orders/first-online-order'
 import { voucherDiscount } from '@/lib/storefront/vouchers'
@@ -34,12 +36,17 @@ import {
 import {
   checkout,
   createJavaMenuItem,
+  updateJavaMenuItem,
+  deleteJavaMenuItem,
   createReservation as createJavaReservation,
   findCustomerByPhone,
+  fetchMenu,
+  getJavaBackendUrl,
   payJavaOrder,
   transferReservation as transferJavaReservation,
   updateJavaOrderStatus,
   updateJavaReservationStatus,
+  updateJavaReservation,
   updateJavaStock,
   updateTable,
   syncJavaOrders,
@@ -57,8 +64,11 @@ import type { Cart } from '@/lib/shopify'
 import { parseMenuVariant } from '@/lib/storefront/menu-catalog'
 import { saveOrderContact, type Fulfilment } from '@/lib/orders/online-contacts'
 import { dequeueSync, enqueueSync, listSyncQueue } from '@/lib/admin/local-links'
-import { linkMenuItem, normalizeMenuName, resolveJavaMenuIds } from '@/lib/admin/menu-link'
+import { normalizeMenuName, resolveJavaMenuIds } from '@/lib/admin/menu-link'
+import { deleteMenuItemRecord, persistMenuItem, updateMenuItemRecord, type MenuCatalogInput } from '@/lib/admin/menu-store'
 import { hasReservationTimePassed } from '@/lib/reservation-rules'
+import { getAdminBranch, ADMIN_BRANCH_COOKIE } from '@/lib/admin/branch'
+import { DEFAULT_BRANCH_ID, branchById, isBranchId, type BranchId } from '@/lib/branches'
 import {
   updateMockOrderStatus,
   markMockOrderPaid,
@@ -66,13 +76,13 @@ import {
   setMockItemInStock,
   cashTenderError,
   createMockOrder,
-  createMockMenuItem,
   getMockMenuItems,
   createMockReservation,
   createMockOrderFromItems,
   getMockOrder,
   getMockOrdersByCode,
   updateMockReservationStatus,
+  updateMockReservation,
   reservationStatuses,
   type ReservationStatusLabel,
   transferMockReservation,
@@ -84,30 +94,32 @@ type ActionResult = { ok: true; message?: string } | { ok: false; error: string 
 
 function refresh() {
   revalidatePath('/admin', 'layout')
+  revalidatePath('/account/orders')
+}
+
+function refreshMenu() {
+  refresh()
+  revalidatePath('/')
 }
 
 function fail(error: unknown): ActionResult {
   return { ok: false, error: error instanceof Error ? error.message : 'Something went wrong.' }
 }
 
-type LocalOrderRef = Pick<Order, 'orderCode' | 'tableId' | 'tableIds' | 'paymentMethod'>
+type LocalOrderRef = Pick<Order, 'orderCode' | 'tableId' | 'tableIds' | 'paymentMethod' | 'status' | 'paymentStatus'>
 
-// Code and table of a frontend order: the database first, then the mock store.
+// Resolve ids only within the configured store; mock ids can refer to unrelated orders.
 async function findLocalOrder(orderId: number): Promise<LocalOrderRef | null> {
   await ensureOrderTableGroups()
   if (isDbConfigured && db) {
-    try {
-      const [row] = await db
-        .select({ orderCode: adminOrders.orderCode, tableId: adminOrders.tableId, tableIds: adminOrders.tableIds, paymentMethod: adminOrders.paymentMethod })
-        .from(adminOrders)
-        .where(eq(adminOrders.id, orderId))
-      if (row) return row
-    } catch {
-      // Fall through to the mock store, like the writes below.
-    }
+    const [row] = await db
+      .select({ orderCode: adminOrders.orderCode, tableId: adminOrders.tableId, tableIds: adminOrders.tableIds, paymentMethod: adminOrders.paymentMethod, status: adminOrders.status, paymentStatus: adminOrders.paymentStatus })
+      .from(adminOrders)
+      .where(eq(adminOrders.id, orderId))
+    return row ?? null
   }
   const mock = getMockOrder(orderId)
-  return mock ? { orderCode: mock.orderCode, tableId: mock.tableId, tableIds: mock.tableIds, paymentMethod: mock.paymentMethod } : null
+  return mock ?? null
 }
 
 // Java only knows the orders it priced or opened, and for those its answer is final.
@@ -120,37 +132,58 @@ function javaRefusal(result: JavaResult<unknown>): string | null {
 export async function updateOrderStatus(orderId: number, status: OrderStatus): Promise<ActionResult> {
   try {
     await assertAdminAccess()
-    if (!Number.isInteger(orderId) || !orderStatuses.includes(status)) throw new Error('Invalid order update.')
+    if (!Number.isInteger(orderId) || !orderStatuses.includes(status)) throw new Error('Trạng thái đơn không hợp lệ.')
+    // Apply the database upgrade before changing Java, so a legacy CHECK cannot split the stores.
+    await ensureOrderCancellation()
     const local = await findLocalOrder(orderId)
+    if (!local) return { ok: false, error: 'Không tìm thấy đơn hàng.' }
+    const invalid = orderTransitionError(local, status)
+    if (invalid) return { ok: false, error: invalid }
+    let remoteRefunded = false
     if (local) {
-      const refused = javaRefusal(await updateJavaOrderStatus(local.orderCode, status))
+      const remote = await updateJavaOrderStatus(local.orderCode, status)
+      if (status === 'cancelled' && getJavaBackendUrl() && !remote.ok && remote.unreachable) return { ok: false, error: 'Không kết nối được máy chủ để hủy đơn. Vui lòng thử lại.' }
+      const refused = javaRefusal(remote)
       if (refused) return { ok: false, error: refused }
+      remoteRefunded = remote.ok && remote.data.paymentStatus === 'refunded'
     }
     if (!isDbConfigured || !db) {
+      if (remoteRefunded) {
+        const mock = getMockOrder(orderId)
+        if (mock) mock.paymentStatus = 'refunded'
+      }
       const res = updateMockOrderStatus(orderId, status)
       refresh()
       return res.ok ? { ok: true } : { ok: false, error: res.error ?? 'Failed' }
     }
     try {
-      await db.transaction(async (tx) => {
-        await tx
+      const saved = await db.transaction(async (tx) => {
+        const changed = await tx
           .update(adminOrders)
-          .set({ status, completedAt: status === 'completed' ? new Date() : null })
-          .where(eq(adminOrders.id, orderId))
+          .set({ status, completedAt: status === 'completed' ? new Date() : null,
+            ...(status === 'cancelled' ? { paymentStatus: remoteRefunded ? 'refunded' as const : sql`case when ${adminOrders.paymentStatus} = 'paid' then 'refunded' else ${adminOrders.paymentStatus} end` } : {}),
+          })
+          .where(and(eq(adminOrders.id, orderId), sql`(${adminOrders.status} not in ('completed', 'cancelled') or ${adminOrders.status} = ${status})`))
+          .returning({ id: adminOrders.id })
+        if (!changed.length) return false
         // Mirrors the Java TableStatusSyncObserver: a finished dine-in order frees its table for cleaning.
-        if (status === 'completed' && local?.tableId) {
+        if ((status === 'completed' || status === 'cancelled') && local?.tableId) {
           for (const tableId of local.tableIds?.length ? local.tableIds : [local.tableId]) {
             const rows = await tx.execute<{ remaining: boolean }>(sql`select exists(select 1 from admin_orders where id <> ${orderId} and status not in ('completed', 'cancelled') and (table_id = ${tableId} or table_ids @> ${JSON.stringify([tableId])}::jsonb)) as remaining`)
             if (rows.rows[0]?.remaining) continue
-          await tx
-            .update(adminTables)
-            .set({ status: 'cleaning', guestCount: 0, occupiedSince: null, updatedAt: new Date() })
-            .where(eq(adminTables.id, tableId))
+            await tx
+              .update(adminTables)
+              .set({ status: 'cleaning', guestCount: 0, occupiedSince: null, updatedAt: new Date() })
+              .where(eq(adminTables.id, tableId))
           }
         }
+        return true
       })
-    } catch {
-      updateMockOrderStatus(orderId, status)
+      if (!saved) return { ok: false, error: 'Đơn vừa kết thúc hoặc bị hủy. Vui lòng tải lại.' }
+    } catch (error) {
+      console.error('Could not persist order status:', error)
+      refresh()
+      return { ok: false, error: 'Chưa lưu được trạng thái đơn. Vui lòng thử lại để đồng bộ.' }
     }
     refresh()
     return { ok: true }
@@ -164,6 +197,7 @@ export async function markOrderPaid(orderId: number): Promise<ActionResult> {
     await assertAdminAccess()
     if (!Number.isInteger(orderId)) throw new Error('Invalid order.')
     const local = await findLocalOrder(orderId)
+    if (local?.status === 'cancelled' || local?.paymentStatus === 'refunded') return { ok: false, error: 'Không thể thu tiền đơn đã hủy.' }
     if (local) {
       const refused = javaRefusal(await payJavaOrder(local.orderCode, local.paymentMethod))
       if (refused) return { ok: false, error: refused }
@@ -174,7 +208,10 @@ export async function markOrderPaid(orderId: number): Promise<ActionResult> {
       return res.ok ? { ok: true } : { ok: false, error: res.error ?? 'Failed' }
     }
     try {
-      await db.update(adminOrders).set({ paymentStatus: 'paid' }).where(eq(adminOrders.id, orderId))
+      const saved = await db.update(adminOrders).set({ paymentStatus: 'paid' })
+        .where(and(eq(adminOrders.id, orderId), ne(adminOrders.status, 'cancelled'), ne(adminOrders.paymentStatus, 'refunded')))
+        .returning({ id: adminOrders.id })
+      if (!saved.length) return { ok: false, error: 'Đơn vừa bị hủy. Vui lòng tải lại và đối soát thanh toán.' }
     } catch {
       markMockOrderPaid(orderId)
     }
@@ -299,6 +336,7 @@ async function forwardCheckout(
     orderType: order.orderType,
     paymentMethod: order.paymentMethod,
     tenderedAmount: order.tenderedAmount,
+    branch: order.branch,
     ...member,
     ...extra,
   }, { asService })
@@ -347,6 +385,12 @@ async function recordOrderLocally(input: LocalOrderInput, quantities: Map<number
     const customer = input.customer.trim().slice(0, 60) || 'Walk-in'
 
     await db.transaction(async (tx) => {
+      if (input.tableId) {
+        const [table] = await tx.select({ id: adminTables.id }).from(adminTables).where(eq(adminTables.id, input.tableId)).for('update')
+        if (!table) throw new Error('Bàn không còn phục vụ.')
+        const open = await tx.execute<{ busy: boolean }>(sql`select exists(select 1 from admin_orders where (table_id = ${input.tableId} or table_ids @> ${JSON.stringify([input.tableId])}::jsonb) and status <> 'cancelled' and (status <> 'completed' or payment_status = 'unpaid')) as busy`)
+        if (open.rows[0]?.busy) throw new Error('Bàn đã có đơn đang phục vụ. Vui lòng chọn bàn khác.')
+      }
       const [{ next }] = await tx.execute<{ next: number }>(
         sql`select coalesce(max(id), 0) + 1 as next from admin_orders`,
       ).then((result) => result.rows)
@@ -354,6 +398,8 @@ async function recordOrderLocally(input: LocalOrderInput, quantities: Map<number
         orderCode: input.orderCode ?? `AC-${String(next).padStart(4, '0')}-${Date.now().toString(36).slice(-3).toUpperCase()}`,
         customer,
         tableId: input.tableId,
+        tableIds: input.tableId ? [input.tableId] : [],
+        branch: input.branch ?? DEFAULT_BRANCH_ID,
         orderType: input.orderType,
         items,
         subtotal,
@@ -365,14 +411,14 @@ async function recordOrderLocally(input: LocalOrderInput, quantities: Map<number
       if (input.tableId) {
         await tx
           .update(adminTables)
-          .set({ status: 'occupied', occupiedSince: sql`coalesce(${adminTables.occupiedSince}, now())`, updatedAt: new Date() })
+          .set({ status: 'occupied', guestCount: sql`greatest(${adminTables.guestCount}, 1)`, occupiedSince: sql`coalesce(${adminTables.occupiedSince}, now())`, updatedAt: new Date() })
           .where(eq(adminTables.id, input.tableId))
       }
     })
     return { ok: true, message: `Order sent to the bar for ${customer}.` }
-  } catch {
-    const res = createMockOrder(input)
-    return res.ok ? { ok: true, message: res.message } : { ok: false, error: res.error ?? 'Failed' }
+  } catch (error) {
+    console.error('Could not record order:', error)
+    return { ok: false, error: 'Không lưu được đơn hàng. Vui lòng kiểm tra lại trạng thái bàn và thử lại.' }
   }
 }
 
@@ -419,52 +465,57 @@ export async function createOrder(input: NewOrderInput): Promise<ActionResult> {
       paid: input.paid,
       // Only a cash payment taken now has cash to count.
       tenderedAmount: input.paid && paymentMethod === 'cash' ? tendered : undefined,
+      // The POS sells for the branch chosen in the header; its tables are the only ones it shows.
+      branch: await getAdminBranch(),
     }
 
-    // Check availability locally first so the backend never charges for an order we cannot record.
-    const localMenu = await loadLocalMenu([...quantities.keys()])
-    const unavailable = lines.some((line) => {
-      const item = localMenu.find((candidate) => candidate.id === line.menuItemId)
-      return !item || item.kind !== 'menu' || !item.inStock
-    })
-    if (unavailable) throw new Error('One of the items is no longer available.')
+    return await withPosTableLock(order.tableId, async () => {
+      await assertPosTableAvailable(order.tableId, order.branch ?? DEFAULT_BRANCH_ID)
+      // Check availability locally first so the backend never charges for an order we cannot record.
+      const localMenu = await loadLocalMenu([...quantities.keys()])
+      const unavailable = lines.some((line) => {
+        const item = localMenu.find((candidate) => candidate.id === line.menuItemId)
+        return !item || item.kind !== 'menu' || !item.inStock
+      })
+      if (unavailable) throw new Error('One of the items is no longer available.')
 
-    const member: MemberCheckout = customerPhone ? { customerPhone, useLoyaltyPoints: points || undefined } : {}
-    const outcome = await forwardCheckout(order, localMenu, member)
-    if (outcome.kind === 'rejected') return { ok: false, error: outcome.error }
-    // Points live in the Java store; charging full price instead would surprise the member.
-    if (outcome.kind === 'local' && points > 0) {
-      return { ok: false, error: 'Redeeming points needs the Java backend, which could not price this order. Retry or remove the points.' }
-    }
-
-    const receipt = outcome.kind === 'accepted' ? outcome.receipt : undefined
-    const orderCode = receipt?.orderCode ?? newLocalOrderCode()
-    const res = await recordOrderLocally(
-      {
-        ...order,
-        orderCode,
-        totals: receipt ? { subtotal: receipt.subtotal, total: receipt.finalTotal } : undefined,
-      },
-      quantities,
-    )
-    refresh()
-    if (!res.ok) return res
-    if (!receipt) {
-      // Java has not seen this order: queue it, and push it at once unless Java just failed to answer.
-      await enqueueSync(orderCode)
-      if (outcome.kind === 'local' && outcome.javaDown) {
-        return { ok: true, message: `${res.message} Saved offline; it will be sent to the Java backend when it is back.` }
+      const member: MemberCheckout = customerPhone ? { customerPhone, useLoyaltyPoints: points || undefined } : {}
+      const outcome = await forwardCheckout(order, localMenu, member)
+      if (outcome.kind === 'rejected') return { ok: false, error: outcome.error }
+      // Points live in the Java store; charging full price instead would surprise the member.
+      if (outcome.kind === 'local' && points > 0) {
+        return { ok: false, error: 'Redeeming points needs the Java backend, which could not price this order. Retry or remove the points.' }
       }
-      const pushed = await pushQueuedOrders([orderCode])
-      return pushed.sent > 0 ? { ok: true, message: `${res.message} Order ${orderCode} synced to the Java backend.` } : res
-    }
-    const change = receipt.changeDue > 0 ? ` Change due: ${receipt.changeDue.toLocaleString('vi-VN')} đ.` : ''
-    const redeemed = receipt.pointsRedeemed > 0 ? ` Redeemed ${receipt.pointsRedeemed} points.` : ''
-    const earned = receipt.pointsEarned > 0 ? ` Earned ${receipt.pointsEarned} points.` : ''
-    return {
-      ok: true,
-      message: `Order ${receipt.orderCode} recorded by the Java backend: ${receipt.finalTotal.toLocaleString('vi-VN')} đ.${change}${redeemed}${earned}`,
-    }
+
+      const receipt = outcome.kind === 'accepted' ? outcome.receipt : undefined
+      const orderCode = receipt?.orderCode ?? newLocalOrderCode()
+      const res = await recordOrderLocally(
+        {
+          ...order,
+          orderCode,
+          totals: receipt ? { subtotal: receipt.subtotal, total: receipt.finalTotal } : undefined,
+        },
+        quantities,
+      )
+      refresh()
+      if (!res.ok) return res
+      if (!receipt) {
+        // Java has not seen this order: queue it, and push it at once unless Java just failed to answer.
+        await enqueueSync(orderCode)
+        if (outcome.kind === 'local' && outcome.javaDown) {
+          return { ok: true, message: `${res.message} Saved offline; it will be sent to the Java backend when it is back.` }
+        }
+        const pushed = await pushQueuedOrders([orderCode])
+        return pushed.sent > 0 ? { ok: true, message: `${res.message} Order ${orderCode} synced to the Java backend.` } : res
+      }
+      const change = receipt.changeDue > 0 ? ` Change due: ${receipt.changeDue.toLocaleString('vi-VN')} đ.` : ''
+      const redeemed = receipt.pointsRedeemed > 0 ? ` Redeemed ${receipt.pointsRedeemed} points.` : ''
+      const earned = receipt.pointsEarned > 0 ? ` Earned ${receipt.pointsEarned} points.` : ''
+      return {
+        ok: true,
+        message: `Order ${receipt.orderCode} recorded by the Java backend: ${receipt.finalTotal.toLocaleString('vi-VN')} đ.${change}${redeemed}${earned}`,
+      }
+    })
   } catch (error) {
     return fail(error)
   }
@@ -481,6 +532,8 @@ export type OnlineOrderInput = {
   address?: string
   payment: keyof typeof onlinePayments
   note?: string
+  // The branch that prepares the order: pickup happens there, delivery leaves from there.
+  branch?: BranchId
 }
 
 export type OnlineOrderResult = { ok: true; orderCode: string; total: number; paid: boolean } | { ok: false; error: string }
@@ -535,6 +588,8 @@ export async function placeOnlineOrder(input: OnlineOrderInput): Promise<OnlineO
     if (!Object.hasOwn(onlinePayments, input.payment)) throw new Error('Chọn phương thức thanh toán.')
     const paymentMethod = onlinePayments[input.payment]
     const note = String(input.note ?? '').trim().slice(0, 300)
+    if (input.branch !== undefined && !isBranchId(input.branch)) throw new Error('Chọn chi nhánh nhận đơn.')
+    const branch = input.branch ?? DEFAULT_BRANCH_ID
 
     const jar = await cookies()
     const cart = readCart(jar.get(CART_COOKIE)?.value)
@@ -566,12 +621,12 @@ export async function placeOnlineOrder(input: OnlineOrderInput): Promise<OnlineO
 
     return await withFirstOnlineOrder<OnlineOrderResult>(session.userId, async ({ isFirstOrder, markPlaced }) => {
       const paid = input.payment !== 'cod'
-      const order: LocalOrderInput = { lines, customer: name, tableId: null, orderType: fulfilment, paymentMethod, paid }
+      const order: LocalOrderInput = { lines, customer: name, tableId: null, orderType: fulfilment, paymentMethod, paid, branch }
       const voucherCode = cart?.discountCodes?.find((code) => code.applicable)?.code?.trim().toUpperCase()
       if (voucherCode === 'WELCOME10' && !isFirstOrder) {
         throw new Error('WELCOME10 chỉ áp dụng cho đơn online đầu tiên của tài khoản mới.')
       }
-      const javaNote = ['Đơn online', fulfilment === 'delivery' ? `Giao tới: ${address}` : 'Khách tự đến lấy', `SĐT ${phone}`, note, ...lineNotes]
+      const javaNote = ['Đơn online', `Chi nhánh ${branchById(branch).street}`, fulfilment === 'delivery' ? `Giao tới: ${address}` : 'Khách tự đến lấy', `SĐT ${phone}`, note, ...lineNotes]
         .filter(Boolean)
         .join(' · ')
         .slice(0, 1000)
@@ -663,6 +718,56 @@ type NewReservationInput = {
   dateTime: string
   guests: number
   tableId: number
+  // A booking that joins several tables; tableId is then the first of them.
+  tableIds?: number[]
+}
+
+// Shared by creating and editing a booking from the admin page.
+function bookingFields(input: NewReservationInput) {
+  const customer = input.customer.trim().slice(0, 60)
+  const contact = input.contact.trim().slice(0, 30)
+  if (!customer || !contact) throw new Error('Nhập tên khách và số điện thoại.')
+  if (!Number.isInteger(input.guests) || input.guests < 1) throw new Error('Số khách phải là số nguyên từ 1 trở lên.')
+  const tableIds = input.tableIds?.length ? input.tableIds : [input.tableId]
+  if (tableIds.length > 10 || new Set(tableIds).size !== tableIds.length || tableIds.some(id => !Number.isInteger(id) || id < 1)) {
+    throw new Error('Chọn bàn hợp lệ.')
+  }
+  const dateTime = new Date(input.dateTime)
+  if (Number.isNaN(dateTime.getTime())) throw new Error('Chọn ngày giờ hợp lệ.')
+  if (hasReservationTimePassed(dateTime)) throw new Error('Chọn ngày giờ chưa qua.')
+  return {
+    customer,
+    contact,
+    email: input.email?.trim() || undefined,
+    note: input.note?.trim().slice(0, 500) || undefined,
+    dateTime,
+    guests: input.guests,
+    tableId: tableIds[0],
+    tableIds,
+  }
+}
+
+// "Sửa phiếu" on /admin/reservations: Java bookings through PUT /api/reservations/{code}, which runs
+// the whole chain again; local ones through the same rules in the mock store.
+export async function updateReservation(code: string, source: 'java' | 'local', input: NewReservationInput): Promise<ActionResult> {
+  try {
+    await assertAdminAccess()
+    if (typeof code !== 'string' || !/^[A-Za-z0-9-]{1,40}$/.test(code)) throw new Error('Mã phiếu không hợp lệ.')
+    const booking = bookingFields(input)
+    if (source === 'local') {
+      const res = updateMockReservation(code, { ...booking, email: booking.email ?? null, note: booking.note ?? null })
+      refresh()
+      return res.ok ? { ok: true, message: `Đã lưu phiếu ${code}.` } : { ok: false, error: res.error ?? 'Không lưu được phiếu.' }
+    }
+    const remote = await updateJavaReservation(code, { ...booking, dateTime: booking.dateTime.toISOString() })
+    if (!remote.ok) {
+      return { ok: false, error: remote.unreachable ? 'Backend Java chưa phản hồi, phiếu chưa thay đổi. Vui lòng thử lại.' : remote.error }
+    }
+    refresh()
+    return { ok: true, message: `Đã lưu phiếu ${code}.` }
+  } catch (error) {
+    return fail(error)
+  }
 }
 
 export async function createReservation(input: NewReservationInput): Promise<ActionResult> {
@@ -691,6 +796,7 @@ export async function createReservation(input: NewReservationInput): Promise<Act
       dateTime: dateTime.toISOString(),
       guests: input.guests,
       tableId: input.tableId,
+      branch: await getAdminBranch(),
     }
 
     // Java runs the full validation chain (hours, capacity, availability); its verdict is final.
@@ -702,8 +808,8 @@ export async function createReservation(input: NewReservationInput): Promise<Act
     if (!remote.unreachable) return { ok: false, error: remote.error }
     // With a real database the bookings live only in Java: a local copy could not see them (double
     // booking) and would vanish on restart, so nothing is promised until Java is back.
-    if (isDbConfigured) {
-      return { ok: false, error: 'The reservation service is unavailable, so nothing was booked. Please retry in a moment.' }
+    if (isDbConfigured || getJavaBackendUrl()) {
+      return { ok: false, error: 'Chưa kiểm tra được lịch bàn do mất kết nối. Chưa ghi nhận đặt bàn, vui lòng thử lại.' }
     }
 
     // Demo mode without a database: the local store applies the same chain with the Java defaults.
@@ -730,6 +836,7 @@ async function recordExternalOrder(input: ExternalOrderInput): Promise<ActionRes
         customer: input.customer.trim().slice(0, 60) || 'Walk-in',
         tableId: input.tableId,
         tableIds: input.tableIds ?? (input.tableId ? [input.tableId] : []),
+        branch: input.branch ?? DEFAULT_BRANCH_ID,
         orderType: 'dine-in',
         items: input.items,
         subtotal,
@@ -783,6 +890,7 @@ export async function transferReservationToPos(code: string, source: 'java' | 'l
       tableIds: order.tableIds,
       items: order.items.map((item) => ({ name: item.name, qty: item.qty, price: item.price })),
       guests: Math.min(Math.max(Math.trunc(guests), 1), 20),
+      branch: order.branch,
     })
     refresh()
     return res.ok ? { ok: true, message: `Order ${order.orderCode} opened by the Java backend.` } : res
@@ -845,15 +953,16 @@ export async function setItemInStock(itemId: number, inStock: boolean): Promise<
     }
     if (!isDbConfigured || !db) {
       const res = setMockItemInStock(itemId, inStock)
-      refresh()
+      refreshMenu()
       return res.ok ? { ok: true } : { ok: false, error: res.error ?? 'Failed' }
     }
     try {
-      await db.update(adminMenuItems).set({ inStock: Boolean(inStock) }).where(eq(adminMenuItems.id, itemId))
+      const updated = await db.update(adminMenuItems).set({ inStock: Boolean(inStock) }).where(eq(adminMenuItems.id, itemId)).returning({ id: adminMenuItems.id })
+      if (updated.length === 0) return { ok: false, error: 'Không tìm thấy món trong thực đơn.' }
     } catch {
-      setMockItemInStock(itemId, inStock)
+      return { ok: false, error: 'Chưa lưu được trạng thái bán của món. Vui lòng thử lại.' }
     }
-    refresh()
+    refreshMenu()
     return { ok: true }
   } catch (error) {
     return fail(error)
@@ -872,75 +981,113 @@ type NewItemInput = {
   variations: Variation[]
 }
 
+// Prices are in VND: a drink can cost well over 100.000đ.
 function money(value: number, label: string) {
-  if (!Number.isFinite(value) || value < 0 || value > 100000) throw new Error(`${label} must be a positive number.`)
+  if (!Number.isFinite(value) || value < 0 || value > 100_000_000) throw new Error(`${label} phải là số từ 0 đến 100.000.000.`)
   return Math.round(value * 100) / 100
+}
+
+// The validated catalog fields shared by creating and editing a menu item.
+function catalogFields(input: NewItemInput): MenuCatalogInput {
+  const name = input.name.trim().slice(0, 80)
+  const category = input.category.trim().slice(0, 40)
+  if (!name || !category) throw new Error('Vui lòng nhập tên món và danh mục.')
+  const imageUrl = input.imageUrl.trim()
+  if (imageUrl && !/^(https:\/\/|\/|data:image\/)/.test(imageUrl)) throw new Error('Ảnh phải là đường dẫn HTTPS, ảnh trong trang hoặc ảnh tải lên.')
+  return {
+    name,
+    category,
+    kind: input.kind === 'ingredient' ? 'ingredient' : 'menu',
+    unit: input.unit.trim().slice(0, 12) || 'pcs',
+    costPrice: money(input.costPrice, 'Giá vốn'),
+    sellPrice: money(input.sellPrice, 'Giá bán'),
+    recipe: input.recipe.trim().slice(0, 1000),
+    imageUrl,
+    variations: input.variations.filter(option => option.name.trim()).slice(0, 12)
+      .map(option => ({ name: option.name.trim().slice(0, 40), price: money(option.price, 'Giá tùy chọn') })),
+  }
+}
+
+// Java prices POS orders, so an edit or a removal must reach it first. Without a Java backend
+// configured (demo mode) only the local catalog changes.
+async function javaCatalogRefusal(result: JavaResult<unknown>): Promise<string | null> {
+  if (result.ok) return null
+  if (result.unreachable) return getJavaBackendUrl() ? 'Backend Java chưa phản hồi, thực đơn chưa thay đổi. Vui lòng thử lại.' : null
+  return result.status === 404 ? null : result.error
+}
+
+export async function updateMenuItem(itemId: number, input: NewItemInput): Promise<ActionResult> {
+  try {
+    await assertAdminAccess('MANAGER')
+    if (!Number.isInteger(itemId) || itemId < 1) throw new Error('Món không hợp lệ.')
+    const fields = catalogFields(input)
+    await ensureMenuImageStorage()
+    const javaId = await javaMenuIdFor(itemId)
+    if (javaId !== undefined) {
+      const refused = await javaCatalogRefusal(await updateJavaMenuItem(javaId, fields))
+      if (refused) return { ok: false, error: refused }
+    } else if (getJavaBackendUrl() && !(await fetchMenu()).ok) {
+      return { ok: false, error: 'Backend Java chưa phản hồi, thực đơn chưa thay đổi. Vui lòng thử lại.' }
+    }
+    await updateMenuItemRecord(itemId, fields)
+    refreshMenu()
+    return { ok: true, message: `Đã lưu thay đổi của ${fields.name}.` }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+export async function deleteMenuItem(itemId: number): Promise<ActionResult> {
+  try {
+    await assertAdminAccess('MANAGER')
+    if (!Number.isInteger(itemId) || itemId < 1) throw new Error('Món không hợp lệ.')
+    const javaId = await javaMenuIdFor(itemId)
+    if (javaId !== undefined) {
+      const refused = await javaCatalogRefusal(await deleteJavaMenuItem(javaId))
+      if (refused) return { ok: false, error: refused }
+    } else if (getJavaBackendUrl() && !(await fetchMenu()).ok) {
+      return { ok: false, error: 'Backend Java chưa phản hồi, thực đơn chưa thay đổi. Vui lòng thử lại.' }
+    }
+    await deleteMenuItemRecord(itemId)
+    refreshMenu()
+    return { ok: true, message: 'Đã xoá món khỏi thực đơn.' }
+  } catch (error) {
+    return fail(error)
+  }
 }
 
 export async function createMenuItem(input: NewItemInput): Promise<ActionResult> {
   try {
     await assertAdminAccess('MANAGER')
-    const name = input.name.trim().slice(0, 80)
-    const category = input.category.trim().slice(0, 40)
-    if (!name || !category) throw new Error('Name and category are required.')
-    const imageUrl = input.imageUrl.trim()
-    if (imageUrl && !/^(https:\/\/|\/|data:image\/)/.test(imageUrl)) throw new Error('Image must be an https URL, a site path, or an uploaded image.')
-    const variations = input.variations
-      .filter((option) => option.name.trim())
-      .slice(0, 12)
-      .map((option) => ({ name: option.name.trim().slice(0, 40), price: money(option.price, 'Option price') }))
+    let catalogInput = catalogFields(input)
+    const name = catalogInput.name
 
-    // POST /api/menu (MANAGER) keeps the Java catalog in step; 409 means Java already sells it.
-    const remote = await createJavaMenuItem({
-      name,
-      category,
-      kind: input.kind === 'ingredient' ? 'ingredient' : 'menu',
-      sellPrice: money(input.sellPrice, 'Selling price'),
-      costPrice: money(input.costPrice, 'Cost price'),
-      unit: input.unit.trim().slice(0, 12) || 'pcs',
-      recipe: input.recipe.trim().slice(0, 1000) || undefined,
-      imageUrl: imageUrl || undefined,
-      variations,
-    })
-    if (!remote.ok && !remote.unreachable && remote.status !== 409) return { ok: false, error: remote.error }
-
-    const localInput = {
-      name,
-      category,
-      kind: input.kind === 'ingredient' ? ('ingredient' as const) : ('menu' as const),
-      unit: input.unit.trim().slice(0, 12) || 'pcs',
-      costPrice: money(input.costPrice, 'Cost price'),
-      sellPrice: money(input.sellPrice, 'Selling price'),
-      recipe: input.recipe.trim().slice(0, 1000) || '',
-      imageUrl,
-      variations,
-    }
-
-    let localId: number | undefined
-    if (!isDbConfigured || !db) {
-      const res = createMockMenuItem(localInput)
-      if (!res.ok) return { ok: false, error: res.error ?? 'Failed' }
-      localId = res.id
-    } else {
-      try {
-        const [row] = await db
-          .insert(adminMenuItems)
-          .values({
-            ...localInput,
-            inStock: true,
-            recipe: localInput.recipe || null,
-            imageUrl: imageUrl || null,
-          })
-          .returning({ id: adminMenuItems.id })
-        localId = row?.id
-      } catch {
-        localId = createMockMenuItem(localInput).id
+    // Upgrade legacy image storage before Java accepts a new item.
+    await ensureMenuImageStorage()
+    const remote = await createJavaMenuItem(catalogInput)
+    let javaId: number | undefined
+    if (remote.ok) {
+      javaId = remote.data.id
+    } else if (!remote.unreachable) {
+      if (remote.status !== 409) return { ok: false, error: remote.error }
+      // A previous partial save can already exist in Java. Recover its real data on retry.
+      const catalog = await fetchMenu()
+      if (!catalog.ok) return { ok: false, error: 'Chưa tải được thực đơn để đồng bộ món. Vui lòng thử lại.' }
+      const existing = catalog.data.find(item => normalizeMenuName(item.name) === normalizeMenuName(name))
+      if (!existing) return { ok: false, error: remote.error }
+      javaId = existing.id
+      catalogInput = {
+        name: existing.name, category: existing.category,
+        kind: existing.kind === 'ingredient' ? 'ingredient' : 'menu',
+        unit: existing.unit, costPrice: existing.costPrice, sellPrice: existing.sellPrice,
+        recipe: existing.recipe || '', imageUrl: existing.imageUrl || '',
+        variations: existing.variations ?? [], inStock: existing.inStock,
       }
     }
-    // Created on both sides: keep the id pair so on/off switches and checkouts never rely on the name.
-    if (remote.ok && localId !== undefined) await linkMenuItem(localId, remote.data.id)
-    refresh()
-    return { ok: true, message: `${name} added.` }
+
+    await persistMenuItem(catalogInput, javaId)
+    refreshMenu()
+    return { ok: true, message: catalogInput.name + ' đã được thêm vào thực đơn.' }
   } catch (error) {
     return fail(error)
   }
@@ -995,8 +1142,9 @@ async function pushQueuedOrders(codes: string[], asService = false): Promise<Pus
     tableId: order.tableId,
     tableIds: order.tableIds,
     orderType: order.orderType,
+    branch: order.branch,
     paymentMethod: order.paymentMethod,
-    paid: order.paymentStatus === 'paid',
+    paid: order.paymentStatus === 'paid' || order.paymentStatus === 'refunded',
     status: order.status,
     createdAt: order.createdAt.toISOString(),
     completedAt: order.completedAt ? order.completedAt.toISOString() : null,
@@ -1036,14 +1184,14 @@ export async function syncOfflineOrders(): Promise<ActionResult> {
   try {
     await assertAdminAccess()
     const queued = await listSyncQueue()
-    if (queued.length === 0) return { ok: true, message: 'Nothing to sync: the Java backend has every order.' }
+    if (queued.length === 0) return { ok: true, message: 'Mọi đơn hàng đã được đồng bộ.' }
     const summary = await pushQueuedOrders(queued)
     refresh()
-    if (summary.unreachable) return { ok: false, error: 'Java backend is unreachable; the orders stay queued.' }
+    if (summary.unreachable) return { ok: false, error: 'Không kết nối được máy chủ; các đơn vẫn được giữ để đồng bộ lại.' }
     if (summary.failed.length > 0) {
-      return { ok: false, error: `Synced ${summary.sent}, ${summary.failed.length} refused: ${summary.failed.slice(0, 3).join('; ')}` }
+      return { ok: false, error: `Đã đồng bộ ${summary.sent} đơn, ${summary.failed.length} đơn bị từ chối: ${summary.failed.slice(0, 3).join('; ')}` }
     }
-    return { ok: true, message: `Synced ${summary.sent} offline order(s) to the Java backend.` }
+    return { ok: true, message: `Đã đồng bộ ${summary.sent} đơn hàng lên máy chủ.` }
   } catch (error) {
     return fail(error)
   }
@@ -1096,6 +1244,25 @@ export async function updateAccount(id: number, change: { role?: string; active?
     if (!result.ok) return { ok: false, error: accountError(result) }
     refresh()
     return { ok: true, message: `Account ${result.data.email} updated.` }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+// Header branch switch: every admin page, the POS and the reports follow the chosen branch.
+export async function selectAdminBranch(branch: string): Promise<ActionResult> {
+  try {
+    await assertAdminAccess()
+    if (!isBranchId(branch)) throw new Error('Chi nhánh không hợp lệ.')
+    ;(await cookies()).set(ADMIN_BRANCH_COOKIE, branch, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 365,
+    })
+    refresh()
+    return { ok: true, message: `Đang xem chi nhánh ${branchById(branch).street}.` }
   } catch (error) {
     return fail(error)
   }

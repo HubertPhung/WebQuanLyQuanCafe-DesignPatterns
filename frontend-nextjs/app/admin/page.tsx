@@ -3,7 +3,7 @@ import { AutoRefresh } from '@/components/admin/shared'
 import { getTables, getActiveOrders, getOverview, getMenuItems, getOrdersSince, getReservations } from '@/lib/admin/queries'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Dashboard · Tổng quan hoạt động Coffee Shop' }
+export const metadata = { title: 'Tổng quan hoạt động quán cà phê' }
 
 export default async function AdminDashboardPage() {
   const [tables, activeOrders, overview, menuItems, reportOrders, bookings] = await Promise.all([
@@ -18,13 +18,6 @@ export default async function AdminDashboardPage() {
   return (
     <>
       <AutoRefresh />
-      {/* Automated test suite keyword invariants */}
-      <div className="sr-only">
-        <span>Good morning</span>
-        <span>Total revenue today</span>
-        <span>Active tables</span>
-        <span>Live order stream</span>
-      </div>
 
       <DashboardOperationalView
         initialTables={tables}

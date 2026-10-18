@@ -14,6 +14,10 @@ public interface IReservationDao {
     Optional<Reservation> findById(int id);
     Optional<Reservation> findByReservationCode(String code);
     List<Reservation> findByStatus(ReservationStatus status);
+    default List<Reservation> findForAccount(int userId, String email) {
+        return findAll().stream().filter(reservation -> reservation.belongsToAccount(userId, email))
+                .sorted(java.util.Comparator.comparing(Reservation::getDateTime).reversed()).limit(50).toList();
+    }
     boolean save(Reservation reservation);
     boolean updateStatus(int id, ReservationStatus status);
     boolean deleteById(int id);
