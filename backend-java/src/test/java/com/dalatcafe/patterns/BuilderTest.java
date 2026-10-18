@@ -128,6 +128,6 @@ class BuilderTest {
     }
 
     private MenuItem menuItem() {
-        return new MenuItem(1, "Salted Cream Coffee", "Coffee", 55_000, 20_000, 100);
+        return new MenuItem(1, "Salted Cream Coffee", "Coffee", 55_000, 20_000);
     }
 }

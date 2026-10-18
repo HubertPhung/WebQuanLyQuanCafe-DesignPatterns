@@ -382,21 +382,20 @@ async function runAdminMutationTests() {
       paymentMethod: 'card',
       paid: true,
     })
-    // An order never sells more than is in stock, even split over two lines of the same item.
-    const left = getMockMenuItems().find((m) => m.id === 1).stockQty
-    const oversell = createMockOrder({
-      lines: [{ menuItemId: 1, qty: left }, { menuItemId: 1, qty: 1 }],
-      customer: 'Automated Oversell',
+    // Quantities are not tracked: only an unknown or switched-off item refuses a line.
+    const unknownItem = createMockOrder({
+      lines: [{ menuItemId: 999999, qty: 1 }],
+      customer: 'Automated Unknown Item',
       tableId: null,
       orderType: 'pickup',
       paymentMethod: 'cash',
       paid: false,
     })
-    const stockKept = getMockMenuItems().find((m) => m.id === 1).stockQty === left
-    if (orderRes.ok && !oversell.ok && oversell.error?.startsWith(`Only ${left}`) && stockKept) {
-      recordTest('TC-ACT-01', 'Place Order via POS (Table 5 Occupied, Stock Deducted, No Overselling)', 'Admin Actions', 'PASS', `${orderRes.message} Oversell refused: ${oversell.error}`)
+    const tableSeated = getMockTables().find((t) => t.id === 5)?.status === 'occupied'
+    if (orderRes.ok && !unknownItem.ok && tableSeated) {
+      recordTest('TC-ACT-01', 'Place Order via POS (Table 5 Occupied, Unknown Item Refused)', 'Admin Actions', 'PASS', `${orderRes.message} Unknown item refused: ${unknownItem.error}`)
     } else {
-      recordTest('TC-ACT-01', 'Place Order via POS', 'Admin Actions', 'FAIL', `${orderRes.error ?? ''} oversell=${JSON.stringify(oversell)} stockKept=${stockKept}`)
+      recordTest('TC-ACT-01', 'Place Order via POS', 'Admin Actions', 'FAIL', `${orderRes.error ?? ''} unknown=${JSON.stringify(unknownItem)} tableSeated=${tableSeated}`)
     }
 
     // TC-ACT-02: Kitchen Status Progression
@@ -442,9 +441,7 @@ async function runAdminMutationTests() {
       name: 'Matcha Blossom Latte',
       category: 'Specialty',
       kind: 'menu',
-      stockQty: 30,
       unit: 'cups',
-      lowStockThreshold: 10,
       costPrice: 1.5,
       sellPrice: 6.5,
       recipe: 'Ceremonial grade Uji matcha with oat milk and blossom syrup.',
@@ -508,7 +505,7 @@ async function runAdminMutationTests() {
 
     // TC-ACT-09: A new menu item reports its id so it can be linked to the Java menu item
     const linked = createMockMenuItem({
-      name: 'Atiso Cold Tea', category: 'Tea', kind: 'menu', stockQty: 12, unit: 'cups', lowStockThreshold: 3,
+      name: 'Atiso Cold Tea', category: 'Tea', kind: 'menu', unit: 'cups',
       costPrice: 1, sellPrice: 3.5, recipe: '', imageUrl: '', variations: [],
     })
     const linkedItem = getMockMenuItems().find(m => m.id === linked.id)
@@ -544,16 +541,14 @@ async function runAdminMutationTests() {
     const cashOrder = (customer, paymentMethod, tenderedAmount) => createMockOrder({
       lines: [{ menuItemId: 1, qty: 1 }], customer, tableId: null, orderType: 'pickup', paymentMethod, paid: true, tenderedAmount,
     })
-    const stockBefore = getMockMenuItems().find(m => m.id === 1).stockQty
     const short = cashOrder('Cash Short Tester', 'cash', 1000)
-    const stockAfterShort = getMockMenuItems().find(m => m.id === 1).stockQty
     const shortRecorded = getMockActiveOrders().some(o => o.customer === 'Cash Short Tester')
     const covered = cashOrder('Cash Covered Tester', 'cash', 10_000_000)
     const card = cashOrder('Card Tender Tester', 'card', 1000)
-    if (!short.ok && !shortRecorded && stockAfterShort === stockBefore && covered.ok && card.ok) {
+    if (!short.ok && !shortRecorded && covered.ok && card.ok) {
       recordTest('TC-ACT-11', 'Offline Cash Sale Must Be Covered by the Cash Tendered', 'Admin Actions', 'PASS', short.error)
     } else {
-      recordTest('TC-ACT-11', 'Offline Cash Sale Must Be Covered by the Cash Tendered', 'Admin Actions', 'FAIL', JSON.stringify({ short, shortRecorded, stockBefore, stockAfterShort, covered, card }))
+      recordTest('TC-ACT-11', 'Offline Cash Sale Must Be Covered by the Cash Tendered', 'Admin Actions', 'FAIL', JSON.stringify({ short, shortRecorded, covered, card }))
     }
 
   } catch (err) {

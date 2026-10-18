@@ -33,8 +33,8 @@ import java.util.logging.Logger;
  * orchestrates OrderBuilder, BeverageDecorator, DiscountStrategy, PaymentProcessorFactory,
  * OrderEventSubject and the DAO layer.
  *
- * Consistency: stock is validated, then reserved, then payment is taken, then the order is
- * saved. Any failure before the order is saved restores the reserved stock and persists nothing.
+ * Consistency: every line must be on sale (the in-stock switch; quantities are not tracked),
+ * then payment is taken, then the order is saved. Any failure before the save persists nothing.
  * Observers run after the commit; their failures are reported as warnings and never undo it.
  */
 public class PosCheckoutFacade {
@@ -66,8 +66,7 @@ public class PosCheckoutFacade {
         Objects.requireNonNull(request, "Request must not be null");
 
         Map<Integer, MenuItem> menu = new LinkedHashMap<>();
-        Map<Integer, Integer> demand = new LinkedHashMap<>();
-        CheckoutResult problem = resolveMenu(request, menu, demand);
+        CheckoutResult problem = resolveMenu(request, menu);
         if (problem != null) {
             return problem;
         }
@@ -78,9 +77,6 @@ public class PosCheckoutFacade {
         if (request.getPaymentMethod() == PaymentMethod.CASH && tendered != null && tendered < order.getTotal()) {
             return CheckoutResult.failure(CheckoutResult.FailureType.PAYMENT_FAILED,
                     "Cash tendered " + tendered + " does not cover the total " + order.getTotal(), null);
-        }
-        if (!reserveStock(demand)) {
-            return CheckoutResult.failure(CheckoutResult.FailureType.OUT_OF_STOCK, "Could not reserve inventory", null);
         }
 
         // Step 4: payment.
@@ -94,11 +90,9 @@ public class PosCheckoutFacade {
                 payment = processor.processPayment(order.getTotal(), order.getOrderCode());
             }
         } catch (RuntimeException e) {
-            releaseStock(demand);
             return CheckoutResult.failure(CheckoutResult.FailureType.PAYMENT_FAILED, "Payment error: " + e.getMessage(), null);
         }
         if (payment == null || !payment.isSuccess()) {
-            releaseStock(demand);
             return CheckoutResult.failure(CheckoutResult.FailureType.PAYMENT_FAILED,
                     payment == null ? "Payment declined" : "Payment declined: " + payment.getMessage(), payment);
         }
@@ -114,7 +108,6 @@ public class PosCheckoutFacade {
             saved = false;
         }
         if (!saved) {
-            releaseStock(demand);
             return CheckoutResult.failure(CheckoutResult.FailureType.PERSISTENCE_FAILED, "Order could not be saved (payment "
                     + payment.getTransactionId() + " must be voided)", payment);
         }
@@ -130,7 +123,7 @@ public class PosCheckoutFacade {
         return CheckoutResult.success(order, payment, warnings);
     }
 
-    private CheckoutResult resolveMenu(CheckoutRequest request, Map<Integer, MenuItem> menu, Map<Integer, Integer> demand) {
+    private CheckoutResult resolveMenu(CheckoutRequest request, Map<Integer, MenuItem> menu) {
         for (CheckoutLine line : request.getLines()) {
             MenuItem item = menu.get(line.getMenuItemId());
             if (item == null) {
@@ -140,15 +133,9 @@ public class PosCheckoutFacade {
                 }
                 menu.put(line.getMenuItemId(), item);
             }
+            // Quantities are not tracked: an item is sold while its in-stock switch is on.
             if (!item.isInStock()) {
                 return CheckoutResult.failure(CheckoutResult.FailureType.OUT_OF_STOCK, "Menu item out of stock: " + item.getName(), null);
-            }
-            demand.merge(line.getMenuItemId(), line.getQuantity(), Integer::sum);
-        }
-        for (Map.Entry<Integer, Integer> entry : demand.entrySet()) {
-            MenuItem item = menu.get(entry.getKey());
-            if (item.getStockQty() < entry.getValue()) {
-                return CheckoutResult.failure(CheckoutResult.FailureType.OUT_OF_STOCK, "Insufficient stock for " + item.getName(), null);
             }
         }
         return null;
@@ -187,23 +174,5 @@ public class PosCheckoutFacade {
             };
         }
         return beverage;
-    }
-
-    private boolean reserveStock(Map<Integer, Integer> demand) {
-        List<Integer> reserved = new ArrayList<>();
-        for (Map.Entry<Integer, Integer> entry : demand.entrySet()) {
-            if (!menuDao.deductStockIfAvailable(entry.getKey(), entry.getValue())) {
-                for (Integer id : reserved) {
-                    menuDao.updateStock(id, demand.get(id));
-                }
-                return false;
-            }
-            reserved.add(entry.getKey());
-        }
-        return true;
-    }
-
-    private void releaseStock(Map<Integer, Integer> demand) {
-        demand.forEach((id, qty) -> menuDao.updateStock(id, qty));
     }
 }

@@ -122,7 +122,7 @@ Lưu ý: kho của frontend và kho của Java là hai bộ dữ liệu riêng, 
 | Vai trò | Được làm |
 | :--- | :--- |
 | `CUSTOMER` | Storefront, `/account` (đơn, voucher, mật khẩu). Tự đăng ký tại `/register` hoặc tiếp tục với Google |
-| `STAFF` | Thêm toàn bộ console `/admin`: POS, KDS, bàn, đặt bàn, kho, khách hàng |
+| `STAFF` | Thêm toàn bộ console `/admin`: POS, KDS, bàn, đặt bàn, thực đơn, khách hàng |
 | `MANAGER` | Thêm tạo món (`POST /api/menu`), thống kê, nhân sự, lịch làm việc |
 | `ADMIN` | Thêm cài đặt quán (`/api/config`) và `/admin/users` (cấp tài khoản, đổi vai trò, khoá) |
 
@@ -193,7 +193,7 @@ sequenceDiagram
     JavaFacade->>Strategy: executeDiscount(subtotal, customer)
     Strategy-->>JavaFacade: Số tiền được giảm
 
-    JavaFacade->>JavaFacade: Giữ chỗ tồn kho
+    JavaFacade->>JavaFacade: Kiểm món còn bật bán (inStock)
     JavaFacade->>Factory: createProcessor(paymentMethod)
     Factory-->>JavaFacade: IPaymentProcessor
     JavaFacade->>JavaFacade: processPayment(total, orderCode)

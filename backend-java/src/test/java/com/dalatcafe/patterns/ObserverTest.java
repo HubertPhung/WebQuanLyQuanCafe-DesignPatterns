@@ -245,7 +245,7 @@ class ObserverTest {
     }
 
     private Order order(boolean dineIn, boolean paid) {
-        MenuItem menuItem = new MenuItem(1, "Latte", "Coffee", 50_000, 18_000, 100);
+        MenuItem menuItem = new MenuItem(1, "Latte", "Coffee", 50_000, 18_000);
         OrderBuilder builder = new OrderBuilder()
                 .forCustomer(customer.getName())
                 .addItem(new BaseCoffee(menuItem), 1)

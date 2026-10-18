@@ -11,7 +11,7 @@ export default async function AdminMenuPage() {
     <div className="space-y-6">
       <PageHeading
         title="Quản lý Thực đơn & Danh mục món"
-        description="Danh sách món POS đang bán, đồng bộ với backend Java: thêm món mới và bật, tắt món theo tồn kho."
+        description="Danh sách món POS đang bán, đồng bộ với backend Java: thêm món mới và bật, tắt món đang bán."
       />
       <MenuManagement items={items} />
     </div>

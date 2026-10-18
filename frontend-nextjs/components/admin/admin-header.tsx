@@ -23,7 +23,6 @@ import { signOut } from '@/app/auth/actions'
 import { roleLabels, type Role } from '@/lib/auth/roles'
 
 type HeaderProps = {
-  lowStock?: { id: number; name: string; stockQty: number; unit: string }[]
   readyOrders?: { id: number; orderCode: string; customer: string }[]
   activeCount?: number
   user: { name: string; email: string; role: Role }
@@ -40,14 +39,13 @@ function initials(name: string) {
 }
 
 export function AdminHeader({
-  lowStock = [],
   readyOrders = [],
   activeCount = 0,
   user,
 }: HeaderProps) {
   const router = useRouter()
   const [branch, setBranch] = useState('123 Phan Đình Phùng')
-  const notificationCount = lowStock.length + readyOrders.length
+  const notificationCount = readyOrders.length
 
   return (
     <header className="sticky top-0 z-20 flex h-20 shrink-0 items-center gap-3 border-b border-stone-200/50 bg-[#F7F5F0]/90 backdrop-blur-md px-4 md:px-8 text-stone-900 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
@@ -130,7 +128,7 @@ export function AdminHeader({
                 <span>Thông báo trực tiếp</span>
                 <Badge className="bg-[#5A3E2B] text-white text-[10px] whitespace-nowrap">{notificationCount} mới</Badge>
               </DropdownMenuLabel>
-              {readyOrders.length === 0 && lowStock.length === 0 && (
+              {readyOrders.length === 0 && (
                 <DropdownMenuItem disabled className="px-3 py-3 text-xs text-stone-400 text-center whitespace-nowrap">
                   Không có thông báo mới nào
                 </DropdownMenuItem>
@@ -144,18 +142,6 @@ export function AdminHeader({
                   <Coffee className="size-4 text-amber-600 shrink-0" />
                   <span className="truncate font-medium text-stone-800">
                     Món đã pha xong: {order.orderCode} · {order.customer}
-                  </span>
-                </DropdownMenuItem>
-              ))}
-              {lowStock.map((item) => (
-                <DropdownMenuItem
-                  key={item.id}
-                  className="h-10 rounded-lg px-3 gap-2.5 hover:bg-stone-100 cursor-pointer text-xs whitespace-nowrap"
-                  onClick={() => router.push('/admin/menu')}
-                >
-                  <span className="truncate font-medium text-amber-800">Cảnh báo kho: {item.name}</span>
-                  <span className="ml-auto text-xs font-bold text-red-600 tabular-nums whitespace-nowrap">
-                    {item.stockQty} {item.unit}
                   </span>
                 </DropdownMenuItem>
               ))}

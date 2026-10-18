@@ -38,9 +38,7 @@ erDiagram
         text name
         text category
         text kind
-        numeric stock_qty
         text unit
-        numeric low_stock_threshold
         numeric cost_price
         numeric sell_price
         boolean in_stock
@@ -79,9 +77,7 @@ erDiagram
         varchar name
         varchar category
         varchar kind
-        numeric stock_qty
         varchar unit
-        numeric low_stock_threshold
         numeric cost_price
         numeric sell_price
         boolean in_stock
@@ -188,6 +184,7 @@ DAO ghi trạng thái bằng **tên enum in hoa** (giá trị mặc định tron
 - Khoá ngoại `fk_orders_table` và `fk_reservations_table` được thêm trong khối `DO` có kiểm tra tồn tại, với `NOT VALID`: dòng cũ được giữ nguyên, dòng mới phải trỏ tới bàn có thật. Kèm chỉ mục cho `table_id`, `orders.status`, `reservations.date_time`.
 - Nếu `tables` hoặc `menu_items` còn trống, 15 bàn và thực đơn mẫu của `InMemoryDatabase` được ghi vào (đơn tại bàn cần bàn tồn tại vì có khoá ngoại). Sau đó `syncSequences` đưa các sequence SERIAL vượt id lớn nhất.
 - Nếu không chuẩn bị được schema (ví dụ thiếu quyền), server ở lại chế độ In-Memory và ghi log lỗi.
+- **Không theo dõi tồn kho.** `menu_items` và `admin_menu_items` không còn cột `stock_qty`, `low_stock_threshold`; món bán hay không chỉ do cột `in_stock`. Trên Supabase hai cột này đã được xoá bằng migration `drop_menu_stock_columns`. Database cũ còn giữ hai cột vẫn chạy được, vì code không đọc hay ghi chúng và chúng có giá trị mặc định.
 
 **Kết nối.** `JdbcDatabase` giữ một pool nhỏ (tối đa 8 kết nối rảnh): `close()` trả kết nối về pool sau khi rollback giao dịch dở và bật lại auto-commit. `isAvailable()` lưu kết quả kiểm tra 5 giây, nên kiểm tra sức khoẻ trên đường xử lý request không mở kết nối mới mỗi lần.
 

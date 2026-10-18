@@ -160,7 +160,7 @@ export function DashboardOperationalView({
   const paidOrders = reportOrders.filter(order => order.paymentStatus === 'paid')
   const reportTotal = paidOrders.reduce((sum, order) => sum + order.total, 0)
   const cashTotal = paidOrders.filter(order => order.paymentMethod === 'cash').reduce((sum, order) => sum + order.total, 0)
-  const lowStock = menuItems.filter(item => item.stockQty <= item.lowStockThreshold)
+  const offSale = menuItems.filter(item => item.kind === 'menu' && !item.inStock)
   const sold = new Map<string, number>()
   for (const order of paidOrders) for (const item of order.items) sold.set(item.name, (sold.get(item.name) ?? 0) + item.qty)
   const bestSellers = [...sold].sort((a, b) => b[1] - a[1]).slice(0, 4)
@@ -270,7 +270,7 @@ export function DashboardOperationalView({
             className="h-10 rounded-lg bg-white text-stone-800 shadow-2xs hover:bg-stone-50 border border-stone-200/80 font-semibold text-xs gap-1.5 px-3.5 flex items-center justify-center transition-colors"
           >
             <Package className="size-3.5 text-[#5A3E2B]" />
-            <span>Tồn kho món</span>
+            <span>Thực đơn</span>
           </Link>
 
           <Button
@@ -586,9 +586,9 @@ export function DashboardOperationalView({
             <Link href="/admin/analytics" className="text-sm font-semibold text-[#5A3E2B] underline">Xem báo cáo chi tiết</Link>
           </section>
           <section className="rounded-xl border border-stone-200 bg-white p-5 space-y-3">
-            <h4 className="font-bold text-stone-700">Cảnh báo tồn kho · {lowStock.length} mục</h4>
-            {lowStock.length === 0 ? <p className="text-sm text-stone-500">Không có món hoặc nguyên liệu dưới định mức.</p> : lowStock.slice(0, 4).map(item => <div key={item.id} className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm"><strong>{item.name}</strong><p>Còn {item.stockQty} {item.unit} · Ngưỡng {item.lowStockThreshold}</p></div>)}
-            <Link href="/admin/menu" className="text-sm font-semibold text-[#5A3E2B] underline">Kiểm tra và điều chỉnh kho</Link>
+            <h4 className="font-bold text-stone-700">Món tạm ngưng bán · {offSale.length} món</h4>
+            {offSale.length === 0 ? <p className="text-sm text-stone-500">Tất cả món đang được bán.</p> : offSale.slice(0, 4).map(item => <div key={item.id} className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm"><strong>{item.name}</strong><p>{item.category} · đang tắt bán</p></div>)}
+            <Link href="/admin/menu" className="text-sm font-semibold text-[#5A3E2B] underline">Bật, tắt món trong thực đơn</Link>
           </section>
           <section className="rounded-xl border border-stone-200 bg-white p-5 space-y-3">
             <h4 className="font-bold text-stone-700">Món bán chạy · 7 ngày</h4>

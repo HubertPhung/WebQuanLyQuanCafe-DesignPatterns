@@ -17,9 +17,7 @@ public class MenuItem implements Serializable {
     private String name;
     private String category;
     private String kind; // "menu" or "ingredient"
-    private double stockQty;
     private String unit;
-    private double lowStockThreshold;
     private double costPrice;
     private double sellPrice;
     private boolean inStock;
@@ -31,24 +29,18 @@ public class MenuItem implements Serializable {
     public MenuItem() {
         this.kind = "menu";
         this.unit = "ly";
-        this.lowStockThreshold = 10.0;
         this.inStock = true;
         this.variations = new ArrayList<>();
         this.createdAt = Instant.now();
     }
 
-    public MenuItem(Integer id, String name, String category, double sellPrice, double costPrice, double stockQty) {
+    public MenuItem(Integer id, String name, String category, double sellPrice, double costPrice) {
         this();
         this.id = id;
         this.name = name;
         this.category = category;
         this.sellPrice = sellPrice;
         this.costPrice = costPrice;
-        this.stockQty = stockQty;
-    }
-
-    public boolean isLowStock() {
-        return this.stockQty <= this.lowStockThreshold;
     }
 
     public Integer getId() {
@@ -83,28 +75,12 @@ public class MenuItem implements Serializable {
         this.kind = kind;
     }
 
-    public double getStockQty() {
-        return stockQty;
-    }
-
-    public void setStockQty(double stockQty) {
-        this.stockQty = Math.max(0, stockQty);
-    }
-
     public String getUnit() {
         return unit;
     }
 
     public void setUnit(String unit) {
         this.unit = unit;
-    }
-
-    public double getLowStockThreshold() {
-        return lowStockThreshold;
-    }
-
-    public void setLowStockThreshold(double lowStockThreshold) {
-        this.lowStockThreshold = lowStockThreshold;
     }
 
     public double getCostPrice() {
@@ -190,7 +166,6 @@ public class MenuItem implements Serializable {
                 ", category='" + category + '\'' +
                 ", sellPrice=" + sellPrice +
                 ", inStock=" + inStock +
-                ", stockQty=" + stockQty +
                 '}';
     }
 }

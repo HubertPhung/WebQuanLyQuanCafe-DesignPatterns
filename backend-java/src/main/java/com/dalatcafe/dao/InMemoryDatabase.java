@@ -93,39 +93,38 @@ public class InMemoryDatabase {
 
     private void seedMenuItems() {
         // Menu item 1: Ca phe Muoi
-        MenuItem item1 = new MenuItem(1, "Cà phê Muối Đặc Biệt", "Cà phê", 45000.0, 15000.0, 85.0);
+        MenuItem item1 = new MenuItem(1, "Cà phê Muối Đặc Biệt", "Cà phê", 45000.0, 15000.0);
         item1.setRecipe("Cà phê pha phin truyền thống kết hợp lớp kem mặn béo ngậy.");
         item1.addVariation(new Variation("Nóng", 0.0));
         item1.addVariation(new Variation("Đá", 0.0));
         menuItems.put(1, item1);
 
         // Menu item 2: Latte Vani
-        MenuItem item2 = new MenuItem(2, "Cà phê Latte Vani Mịn", "Cà phê", 55000.0, 18000.0, 45.0);
+        MenuItem item2 = new MenuItem(2, "Cà phê Latte Vani Mịn", "Cà phê", 55000.0, 18000.0);
         item2.setRecipe("Double shot espresso, siro vani và sữa tươi thanh trùng.");
         item2.addVariation(new Variation("Sữa tươi", 0.0));
         item2.addVariation(new Variation("Sữa yến mạch", 10000.0));
         menuItems.put(2, item2);
 
         // Menu item 3: Bac Xiu
-        MenuItem item3 = new MenuItem(3, "Bạc Xỉu Sữa Tươi", "Cà phê", 45000.0, 16000.0, 32.0);
+        MenuItem item3 = new MenuItem(3, "Bạc Xỉu Sữa Tươi", "Cà phê", 45000.0, 16000.0);
         item3.setRecipe("Nhiều sữa ít cà phê, béo ngậy chuẩn vị Sài Gòn.");
         item3.addVariation(new Variation("Nóng", 0.0));
         item3.addVariation(new Variation("Đá", 0.0));
         menuItems.put(3, item3);
 
         // Menu item 4: Cold Brew Cam Vang
-        MenuItem item4 = new MenuItem(4, "Cold Brew Cam Vàng", "Cà phê ủ lạnh", 55000.0, 20000.0, 28.0);
+        MenuItem item4 = new MenuItem(4, "Cold Brew Cam Vàng", "Cà phê ủ lạnh", 55000.0, 20000.0);
         item4.setRecipe("Cà phê ủ lạnh 16h kết hợp lát cam vàng mọng nước.");
         menuItems.put(4, item4);
 
         // Menu item 5: Tra Dao Cam Sa
-        MenuItem item5 = new MenuItem(5, "Trà Đào Cam Sả", "Trà & Bánh", 50000.0, 18000.0, 24.0);
+        MenuItem item5 = new MenuItem(5, "Trà Đào Cam Sả", "Trà & Bánh", 50000.0, 18000.0);
         item5.setRecipe("Trà đen thơm mát kết hợp miếng đào tươi giòn và sả đập dập.");
         menuItems.put(5, item5);
 
         // Menu item 6: Banh Croissant
-        MenuItem item6 = new MenuItem(6, "Bánh Croissant Bơ Tỏi", "Trà & Bánh", 35000.0, 12000.0, 8.0); // Low stock
-        item6.setLowStockThreshold(10.0);
+        MenuItem item6 = new MenuItem(6, "Bánh Croissant Bơ Tỏi", "Trà & Bánh", 35000.0, 12000.0);
         item6.setUnit("cái");
         menuItems.put(6, item6);
     }

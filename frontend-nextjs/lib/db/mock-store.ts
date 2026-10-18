@@ -49,9 +49,7 @@ function createInitialMenuItems(): MenuItem[] {
       name: 'Cà phê Muối Đặc Biệt',
       category: 'Cà phê',
       kind: 'menu',
-      stockQty: 85,
       unit: 'ly',
-      lowStockThreshold: 20,
       costPrice: 15000,
       sellPrice: 45000,
       inStock: true,
@@ -65,9 +63,7 @@ function createInitialMenuItems(): MenuItem[] {
       name: 'Cà phê Latte Vani Mịn',
       category: 'Cà phê',
       kind: 'menu',
-      stockQty: 45,
       unit: 'ly',
-      lowStockThreshold: 15,
       costPrice: 18000,
       sellPrice: 55000,
       inStock: true,
@@ -81,9 +77,7 @@ function createInitialMenuItems(): MenuItem[] {
       name: 'Bạc Xỉu Sữa Tươi',
       category: 'Cà phê',
       kind: 'menu',
-      stockQty: 32,
       unit: 'ly',
-      lowStockThreshold: 10,
       costPrice: 16000,
       sellPrice: 45000,
       inStock: true,
@@ -97,9 +91,7 @@ function createInitialMenuItems(): MenuItem[] {
       name: 'Cold Brew Cam Vàng',
       category: 'Cà phê ủ lạnh',
       kind: 'menu',
-      stockQty: 28,
       unit: 'ly',
-      lowStockThreshold: 10,
       costPrice: 20000,
       sellPrice: 55000,
       inStock: true,
@@ -113,9 +105,7 @@ function createInitialMenuItems(): MenuItem[] {
       name: 'Trà Đào Cam Sả',
       category: 'Trà & Bánh',
       kind: 'menu',
-      stockQty: 24,
       unit: 'ly',
-      lowStockThreshold: 10,
       costPrice: 18000,
       sellPrice: 50000,
       inStock: true,
@@ -129,9 +119,7 @@ function createInitialMenuItems(): MenuItem[] {
       name: 'Cà phê Ủ Lạnh Nitro',
       category: 'Cà phê ủ lạnh',
       kind: 'menu',
-      stockQty: 18,
       unit: 'ly',
-      lowStockThreshold: 10,
       costPrice: 22000,
       sellPrice: 58000,
       inStock: true,
@@ -145,9 +133,7 @@ function createInitialMenuItems(): MenuItem[] {
       name: 'Cà phê Trứng Hà Nội',
       category: 'Cà phê',
       kind: 'menu',
-      stockQty: 22,
       unit: 'ly',
-      lowStockThreshold: 10,
       costPrice: 25000,
       sellPrice: 60000,
       inStock: true,
@@ -161,9 +147,7 @@ function createInitialMenuItems(): MenuItem[] {
       name: 'Cà phê Pour Over Guji Ethiopia',
       category: 'Pha thủ công',
       kind: 'menu',
-      stockQty: 14,
       unit: 'phần',
-      lowStockThreshold: 5,
       costPrice: 28000,
       sellPrice: 65000,
       inStock: true,
@@ -177,9 +161,7 @@ function createInitialMenuItems(): MenuItem[] {
       name: 'Cà phê Geisha Tuyển Chọn',
       category: 'Pha thủ công',
       kind: 'menu',
-      stockQty: 4,
       unit: 'phần',
-      lowStockThreshold: 8,
       costPrice: 45000,
       sellPrice: 95000,
       inStock: true,
@@ -193,9 +175,7 @@ function createInitialMenuItems(): MenuItem[] {
       name: 'Bánh Croissant Bơ Pháp',
       category: 'Bánh ngọt',
       kind: 'menu',
-      stockQty: 5,
       unit: 'chiếc',
-      lowStockThreshold: 8,
       costPrice: 20000,
       sellPrice: 45000,
       inStock: true,
@@ -209,9 +189,7 @@ function createInitialMenuItems(): MenuItem[] {
       name: 'Bánh Pain au Chocolat Socola',
       category: 'Bánh ngọt',
       kind: 'menu',
-      stockQty: 9,
       unit: 'chiếc',
-      lowStockThreshold: 6,
       costPrice: 18000,
       sellPrice: 42000,
       inStock: true,
@@ -225,9 +203,7 @@ function createInitialMenuItems(): MenuItem[] {
       name: 'Bánh Chuối Óc Chó Thủ Công',
       category: 'Bánh ngọt',
       kind: 'menu',
-      stockQty: 14,
       unit: 'lát',
-      lowStockThreshold: 5,
       costPrice: 15000,
       sellPrice: 38000,
       inStock: true,
@@ -241,9 +217,7 @@ function createInitialMenuItems(): MenuItem[] {
       name: 'Hạt Cà Phê Đà Lạt House Blend (250g)',
       category: 'Cà phê hạt',
       kind: 'menu',
-      stockQty: 16,
       unit: 'gói',
-      lowStockThreshold: 5,
       costPrice: 90000,
       sellPrice: 180000,
       inStock: true,
@@ -257,9 +231,7 @@ function createInitialMenuItems(): MenuItem[] {
       name: 'Sữa tươi thanh trùng nguyên kem',
       category: 'Nguyên liệu',
       kind: 'ingredient',
-      stockQty: 6,
       unit: 'lít',
-      lowStockThreshold: 10,
       costPrice: 38000,
       sellPrice: 0,
       inStock: true,
@@ -273,9 +245,7 @@ function createInitialMenuItems(): MenuItem[] {
       name: 'Sữa yến mạch chuyên pha chế Barista',
       category: 'Nguyên liệu',
       kind: 'ingredient',
-      stockQty: 14,
       unit: 'hộp',
-      lowStockThreshold: 8,
       costPrice: 45000,
       sellPrice: 0,
       inStock: true,
@@ -289,9 +259,7 @@ function createInitialMenuItems(): MenuItem[] {
       name: 'Siro Vani Madagascar',
       category: 'Siro & Gia vị',
       kind: 'ingredient',
-      stockQty: 3,
       unit: 'chai',
-      lowStockThreshold: 6,
       costPrice: 120000,
       sellPrice: 0,
       inStock: true,
@@ -305,9 +273,7 @@ function createInitialMenuItems(): MenuItem[] {
       name: 'Siro Caramel Muối Biển',
       category: 'Siro & Gia vị',
       kind: 'ingredient',
-      stockQty: 2,
       unit: 'chai',
-      lowStockThreshold: 5,
       costPrice: 125000,
       sellPrice: 0,
       inStock: true,
@@ -321,9 +287,7 @@ function createInitialMenuItems(): MenuItem[] {
       name: 'Hạt Cà Phê Espresso Rang Mộc',
       category: 'Hạt cà phê',
       kind: 'ingredient',
-      stockQty: 4,
       unit: 'kg',
-      lowStockThreshold: 10,
       costPrice: 220000,
       sellPrice: 0,
       inStock: true,
@@ -798,15 +762,6 @@ export function setMockItemInStock(itemId: number, inStock: boolean): { ok: bool
   return { ok: true }
 }
 
-// Stock received (positive) or written off (negative); never below zero.
-export function changeMockStock(itemId: number, change: number): { ok: boolean; error?: string } {
-  const item = getStore().menuItems.find((m) => m.id === itemId)
-  if (!item) return { ok: false, error: 'Item not found.' }
-  if (item.stockQty + change < 0) return { ok: false, error: `Only ${item.stockQty} ${item.unit} of ${item.name} left.` }
-  item.stockQty = Math.round((item.stockQty + change) * 100) / 100
-  return { ok: true }
-}
-
 export type NewMockOrderInput = {
   lines: { menuItemId: number; qty: number; variation?: string; customizations?: PosCustomization[] }[]
   customer: string
@@ -820,26 +775,6 @@ export type NewMockOrderInput = {
   totals?: { subtotal: number; total: number }
   // Cash the customer handed over; optional, but when given a paid cash order must be covered.
   tenderedAmount?: number
-  // Set when Java already sold the order from its own stock: the local copy follows, even if short.
-  javaSold?: boolean
-}
-
-// Lines of one item are added up, so two lines cannot each take the last unit.
-export function shortStockError(
-  menu: Pick<MenuItem, 'id' | 'name' | 'unit' | 'stockQty'>[],
-  quantities: Map<number, number>,
-): string | null {
-  for (const item of menu) {
-    const wanted = quantities.get(item.id) ?? 0
-    if (wanted > item.stockQty) return `Only ${Math.max(0, item.stockQty)} ${item.unit} of ${item.name} left.`
-  }
-  return null
-}
-
-export function quantitiesOf(lines: NewMockOrderInput['lines']) {
-  const quantities = new Map<number, number>()
-  for (const line of lines) quantities.set(line.menuItemId, (quantities.get(line.menuItemId) ?? 0) + line.qty)
-  return quantities
 }
 
 // The local stand-in for the Java Facade rule: cash tendered below the total is refused.
@@ -855,7 +790,6 @@ export function createMockOrder(input: NewMockOrderInput): { ok: boolean; messag
   const byId = new Map(store.menuItems.map((item) => [item.id, item]))
 
   const items: OrderItem[] = []
-  const sold: { item: MenuItem; qty: number }[] = []
   for (const line of input.lines) {
     const item = byId.get(line.menuItemId)
     if (!item || item.kind !== 'menu' || !item.inStock) {
@@ -869,17 +803,12 @@ export function createMockOrder(input: NewMockOrderInput): { ok: boolean; messag
       price: item.sellPrice + (variation?.price ?? 0) + customizationSurcharge(customizations),
       variation: [variation?.name, describeCustomizations(customizations)].filter(Boolean).join(' · ') || undefined,
     })
-    sold.push({ item, qty: line.qty })
   }
 
   const subtotal = input.totals?.subtotal ?? Math.round(items.reduce((s, it) => s + it.price * it.qty, 0) * 100) / 100
   const total = input.totals?.total ?? Math.round(subtotal * (1 + TAX_RATE) * 100) / 100 + shippingFee(input.orderType)
   const tenderError = cashTenderError(input, total)
   if (tenderError) return { ok: false, error: tenderError }
-  const shortStock = input.javaSold ? null : shortStockError([...new Set(sold.map(({ item }) => item))], quantitiesOf(input.lines))
-  if (shortStock) return { ok: false, error: shortStock }
-  // Stock is deducted only once the order is sure to be recorded.
-  for (const { item, qty } of sold) item.stockQty = Math.max(0, item.stockQty - qty)
   const nextId = store.orders.reduce((max, o) => Math.max(max, o.id), 0) + 1
 
   const newOrder: Order = {
@@ -1044,9 +973,7 @@ export type NewMockItemInput = {
   name: string
   category: string
   kind: 'menu' | 'ingredient'
-  stockQty: number
   unit: string
-  lowStockThreshold: number
   costPrice: number
   sellPrice: number
   recipe: string
@@ -1062,12 +989,10 @@ export function createMockMenuItem(input: NewMockItemInput): { ok: boolean; id?:
     name: input.name,
     category: input.category,
     kind: input.kind,
-    stockQty: input.stockQty,
     unit: input.unit || 'pcs',
-    lowStockThreshold: input.lowStockThreshold,
     costPrice: input.costPrice,
     sellPrice: input.sellPrice,
-    inStock: input.stockQty > 0,
+    inStock: true,
     recipe: input.recipe || null,
     variations: input.variations,
     imageUrl: input.imageUrl || null,

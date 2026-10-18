@@ -129,9 +129,7 @@ export function AddItemDialog({ categories }: { categories: string[] }) {
         name: String(data.get('name') ?? ''),
         category: String(data.get('category') ?? ''),
         kind,
-        stockQty: num('stockQty'),
         unit: String(data.get('unit') ?? '') || 'ly',
-        lowStockThreshold: num('lowStockThreshold'),
         costPrice: num('costPrice'),
         sellPrice: num('sellPrice'),
         recipe: String(data.get('recipe') ?? ''),
@@ -311,13 +309,6 @@ export function AddItemDialog({ categories }: { categories: string[] }) {
               </Field>
 
               <Field>
-                <FieldLabel htmlFor="item-stock" className="text-stone-700 font-semibold text-xs sm:text-sm">
-                  Số lượng tồn ban đầu *
-                </FieldLabel>
-                <Input id="item-stock" name="stockQty" type="number" min="0" step="0.01" required placeholder="50" />
-              </Field>
-
-              <Field>
                 <FieldLabel htmlFor="item-unit" className="text-stone-700 font-semibold text-xs sm:text-sm">
                   Đơn vị tính *
                 </FieldLabel>
@@ -327,20 +318,6 @@ export function AddItemDialog({ categories }: { categories: string[] }) {
                   defaultValue="ly"
                   placeholder="ly, tách, phần..."
                   maxLength={12}
-                />
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="item-threshold" className="text-stone-700 font-semibold text-xs sm:text-sm">
-                  Ngưỡng báo sắp hết
-                </FieldLabel>
-                <Input
-                  id="item-threshold"
-                  name="lowStockThreshold"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  defaultValue="10"
                 />
               </Field>
 

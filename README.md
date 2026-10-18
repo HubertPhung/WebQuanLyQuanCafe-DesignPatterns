@@ -6,14 +6,14 @@
 ![Java SE 17](https://img.shields.io/badge/Backend-Pure%20Java%20SE%2017-orange?style=for-the-badge&logo=openjdk)
 ![Design Patterns](https://img.shields.io/badge/Architecture-9%20GoF%20Patterns-success?style=for-the-badge)
 [![CI/CD Pipeline](https://github.com/HubertPhung/WebQuanLyQuanCafe-DesignPatterns/actions/workflows/ci.yml/badge.svg)](https://github.com/HubertPhung/WebQuanLyQuanCafe-DesignPatterns/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/Tests-256%20JUnit%20%2B%2038%20UI-brightgreen?style=for-the-badge)
+![Tests](https://img.shields.io/badge/Tests-312%20JUnit%20%2B%2038%20UI-brightgreen?style=for-the-badge)
 
 ---
 
 ## 1. Giới thiệu
 
 **Đà Lạt Cafe** là đồ án học phần **Thiết kế Mẫu & Kiến trúc Phần mềm**. Hệ thống gồm hai phần:
-1. **Frontend Next.js 16** (React 19, Tailwind v4): Storefront cho khách đặt món, và khu quản trị gồm POS, bếp KDS, sơ đồ bàn, đặt bàn, kho, CRM, báo cáo.
+1. **Frontend Next.js 16** (React 19, Tailwind v4): Storefront cho khách đặt món, và khu quản trị gồm POS, bếp KDS, sơ đồ bàn, đặt bàn, thực đơn, CRM, báo cáo.
 2. **Backend Java SE 17 thuần**: cài đặt đủ **9 mẫu thiết kế GoF**, không dùng Spring Boot / Spring Security / Spring Data JPA.
 
 Frontend chạy được một mình, nhờ kho dữ liệu trong bộ nhớ. Khi Backend Java đang chạy, các nghiệp vụ POS được chuyển sang Java xử lý: chốt đơn (kể cả Size L / topping), đổi trạng thái bàn, tạo đặt bàn và chuyển đặt bàn sang POS. Chi tiết tại [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Danh mục tính năng và trạng thái triển khai xem [docs/PROJECT_MANAGEMENT.md](docs/PROJECT_MANAGEMENT.md).
@@ -87,7 +87,7 @@ Frontend chạy ngay mà không cần database. Nếu đặt `DATABASE_URL` (Pos
 ### 5.2. Backend Java
 ```bash
 cd backend-java
-mvn clean test                                            # 256 test JUnit 5
+mvn clean test                                            # 312 test JUnit 5
 mvn -q compile
 java -cp target/classes com.dalatcafe.server.MainServer   # cổng 8080, chế độ In-Memory
 ```
@@ -130,7 +130,7 @@ Tài khoản nằm ở backend Java, nên **cần chạy Java** để đăng nh�
 
 ```bash
 cd frontend-nextjs && npm test     # 38 test UI/UX (tự khởi động next dev nếu chưa có server)
-cd backend-java && mvn clean test  # 256 test JUnit 5 (kể cả JDBC trên PostgreSQL nhúng)
+cd backend-java && mvn clean test  # 312 test JUnit 5 (kể cả JDBC trên PostgreSQL nhúng)
 ```
 Danh mục test, báo cáo E2E và các giới hạn đã biết: [docs/TESTING.md](docs/TESTING.md).
 

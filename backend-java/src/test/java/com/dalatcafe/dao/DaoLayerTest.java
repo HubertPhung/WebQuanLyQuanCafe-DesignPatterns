@@ -137,72 +137,6 @@ class DaoLayerTest {
         }
 
         @Test
-        @DisplayName("findLowStockItems should identify items at or below threshold")
-        void testFindLowStock() {
-            List<MenuItem> lowStock = menuDao.findLowStockItems();
-            assertFalse(lowStock.isEmpty());
-            assertTrue(lowStock.stream().anyMatch(i -> i.getName().contains("Croissant")));
-        }
-
-        @Test
-        @DisplayName("updateStock should add/deduct stock quantity and never go below zero")
-        void testUpdateStock() {
-            MenuItem item = menuDao.findById(1).orElseThrow();
-            double initialStock = item.getStockQty();
-
-            // Deduct 5
-            assertTrue(menuDao.updateStock(1, -5.0));
-            assertEquals(initialStock - 5.0, menuDao.findById(1).orElseThrow().getStockQty());
-
-            // Deduct more than available -> clamps to 0
-            assertTrue(menuDao.updateStock(1, -9999.0));
-            assertEquals(0.0, menuDao.findById(1).orElseThrow().getStockQty());
-
-            // Add stock
-            assertTrue(menuDao.updateStock(1, 50.0));
-            assertEquals(50.0, menuDao.findById(1).orElseThrow().getStockQty());
-        }
-
-        @Test
-        @DisplayName("deductStockIfAvailable should refuse to take more than is left")
-        void testDeductStockIfAvailable() {
-            assertTrue(menuDao.updateStock(1, 10.0 - menuDao.findById(1).orElseThrow().getStockQty()));
-
-            assertFalse(menuDao.deductStockIfAvailable(1, 11));
-            assertEquals(10.0, menuDao.findById(1).orElseThrow().getStockQty());
-            assertFalse(menuDao.deductStockIfAvailable(1, 0));
-            assertFalse(menuDao.deductStockIfAvailable(999_999, 1), "unknown item");
-
-            assertTrue(menuDao.deductStockIfAvailable(1, 4));
-            assertTrue(menuDao.deductStockIfAvailable(1, 6));
-            assertEquals(0.0, menuDao.findById(1).orElseThrow().getStockQty());
-            assertFalse(menuDao.deductStockIfAvailable(1, 1));
-        }
-
-        @Test
-        @DisplayName("concurrent deductions should never sell more than the stock")
-        void testConcurrentDeductionsNeverOversell() throws Exception {
-            int stock = 500;
-            assertTrue(menuDao.updateStock(1, stock - menuDao.findById(1).orElseThrow().getStockQty()));
-            java.util.concurrent.atomic.AtomicInteger sold = new java.util.concurrent.atomic.AtomicInteger();
-
-            List<Runnable> tasks = new ArrayList<>();
-            for (int w = 0; w < 8; w++) {
-                tasks.add(() -> {
-                    for (int i = 0; i < 200; i++) {
-                        if (menuDao.deductStockIfAvailable(1, 1)) {
-                            sold.incrementAndGet();
-                        }
-                    }
-                });
-            }
-            Concurrently.run(tasks);
-
-            assertEquals(stock, sold.get(), "exactly the stock on hand is sold");
-            assertEquals(0.0, menuDao.findById(1).orElseThrow().getStockQty());
-        }
-
-        @Test
         @DisplayName("toggleInStock should toggle availability")
         void testToggleInStock() {
             assertTrue(menuDao.toggleInStock(1, false));
@@ -215,7 +149,7 @@ class DaoLayerTest {
         @Test
         @DisplayName("save and deleteById should handle new menu items")
         void testSaveAndDeleteMenuItem() {
-            MenuItem newItem = new MenuItem(null, "Trà Sen Vàng Đà Lạt", "Trà & Bánh", 52000.0, 19000.0, 30.0);
+            MenuItem newItem = new MenuItem(null, "Trà Sen Vàng Đà Lạt", "Trà & Bánh", 52000.0, 19000.0);
             assertTrue(menuDao.save(newItem));
             assertNotNull(newItem.getId());
 

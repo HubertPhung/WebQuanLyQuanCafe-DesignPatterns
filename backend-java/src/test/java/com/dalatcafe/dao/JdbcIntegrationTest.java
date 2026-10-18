@@ -89,14 +89,14 @@ class JdbcIntegrationTest {
         assertEquals(seededTables, tables.findAll().size());
 
         int maxId = menu.findAll().stream().mapToInt(MenuItem::getId).max().orElseThrow();
-        MenuItem fresh = new MenuItem(null, "Tra atiso", "Tea", 39_000, 12_000, 20);
+        MenuItem fresh = new MenuItem(null, "Tra atiso", "Tea", 39_000, 12_000);
         assertTrue(menu.save(fresh));
         assertTrue(fresh.getId() > maxId);
     }
 
     @Test
     void menuVariationsRoundTripThroughJsonb() {
-        MenuItem item = new MenuItem(null, "Bac xiu", "Coffee", 35_000, 10_000, 15);
+        MenuItem item = new MenuItem(null, "Bac xiu", "Coffee", 35_000, 10_000);
         item.addVariation(new Variation("Size L", 10_000));
         item.addVariation(new Variation("It duong", 0));
         assertTrue(menu.save(item));
@@ -219,7 +219,7 @@ class JdbcIntegrationTest {
 
     @Test
     void checkoutFacadePersistsEverythingOnPostgres() {
-        MenuItem drink = new MenuItem(null, "Ca phe muoi", "Coffee", 45_000, 15_000, 10);
+        MenuItem drink = new MenuItem(null, "Ca phe muoi", "Coffee", 45_000, 15_000);
         assertTrue(menu.save(drink));
         tables.updateStatus(6, TableStatus.AVAILABLE, 0);
         OrderEventSubject subject = new OrderEventSubject();
@@ -236,7 +236,6 @@ class JdbcIntegrationTest {
         assertEquals(2, saved.getItems().get(0).getQty());
         assertEquals(OrderStatus.PENDING, saved.getStatus());
         assertEquals(PaymentStatus.PAID, saved.getPaymentStatus());
-        assertEquals(8.0, menu.findById(drink.getId()).orElseThrow().getStockQty());
         assertEquals(TableStatus.OCCUPIED, tables.findById(6).orElseThrow().getStatus());
     }
 
@@ -320,38 +319,6 @@ class JdbcIntegrationTest {
         assertEquals(opening, after.getLoyaltyPoints(), "every earned and redeemed point is counted");
         assertEquals(1 + workers * rounds, after.getTotalOrders());
         assertEquals(workers * rounds * 1_000.0, after.getTotalSpent());
-    }
-
-    @Test
-    void stockIsNeverDeductedBelowWhatIsLeft() throws Exception {
-        MenuItem item = new MenuItem(null, "Ca phe trung", "Coffee", 45_000, 15_000, 10);
-        assertTrue(menu.save(item));
-        int id = item.getId();
-
-        assertFalse(menu.deductStockIfAvailable(id, 11));
-        assertEquals(10.0, menu.findById(id).orElseThrow().getStockQty());
-        assertFalse(menu.deductStockIfAvailable(id, 0));
-        assertFalse(menu.deductStockIfAvailable(999_999, 1), "unknown item");
-        assertTrue(menu.deductStockIfAvailable(id, 10));
-        assertFalse(menu.deductStockIfAvailable(id, 1));
-
-        int stock = 60;
-        assertTrue(menu.updateStock(id, stock));
-        java.util.concurrent.atomic.AtomicInteger sold = new java.util.concurrent.atomic.AtomicInteger();
-        List<Runnable> tasks = new ArrayList<>();
-        for (int w = 0; w < JdbcDatabase.POOL_SIZE / 2; w++) {
-            tasks.add(() -> {
-                for (int i = 0; i < 20; i++) {
-                    if (menu.deductStockIfAvailable(id, 1)) {
-                        sold.incrementAndGet();
-                    }
-                }
-            });
-        }
-        Concurrently.run(tasks);
-
-        assertEquals(stock, sold.get(), "exactly the stock on hand is sold");
-        assertEquals(0.0, menu.findById(id).orElseThrow().getStockQty());
     }
 
     @Test

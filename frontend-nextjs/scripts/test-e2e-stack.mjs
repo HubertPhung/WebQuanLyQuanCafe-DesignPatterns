@@ -3,7 +3,7 @@
 //   Next.js (TEST_BASE_URL, default http://localhost:3000), both on DATABASE_URL.
 // Unlike test-ui-ux.mjs, which drives the mock store in-process, every step here goes through
 // HTTP and is checked against the database. Rows it writes carry a run id and are deleted at the
-// end; table states, stock levels and settings it changes are put back. Existing data is not touched.
+// end; table states, on/off switches and settings it changes are put back. Existing data is not touched.
 //
 //   npm run test:e2e   (reads DATABASE_URL and AUTH_JWT_SECRET from the environment or .env.local;
 //   Java also needs the frontend's AUTH_SERVICE_KEY for guests' online orders)
@@ -66,8 +66,8 @@ function cafeDateTime(daysAhead, hour, minute = 0) {
 // --- what the run may change, recorded before it starts ---
 async function snapshot() {
   const tables = (await db.query('SELECT id, status, guest_count, occupied_since FROM tables')).rows
-  const stock = (await db.query('SELECT id, stock_qty, in_stock FROM menu_items')).rows
-  const adminStock = (await db.query('SELECT id, stock_qty, in_stock FROM admin_menu_items')).rows
+  const stock = (await db.query('SELECT id, in_stock FROM menu_items')).rows
+  const adminStock = (await db.query('SELECT id, in_stock FROM admin_menu_items')).rows
   const config = (await call('GET', '/api/config')).data
   return { tables, stock, adminStock, config }
 }
@@ -87,10 +87,10 @@ async function restore(before) {
     await db.query('UPDATE tables SET status = $2, guest_count = $3, occupied_since = $4 WHERE id = $1', [t.id, t.status, t.guest_count, t.occupied_since])
   }
   for (const s of before.stock) {
-    await db.query('UPDATE menu_items SET stock_qty = $2, in_stock = $3 WHERE id = $1', [s.id, s.stock_qty, s.in_stock])
+    await db.query('UPDATE menu_items SET in_stock = $2 WHERE id = $1', [s.id, s.in_stock])
   }
   for (const s of before.adminStock) {
-    await db.query('UPDATE admin_menu_items SET stock_qty = $2, in_stock = $3 WHERE id = $1', [s.id, s.stock_qty, s.in_stock])
+    await db.query('UPDATE admin_menu_items SET in_stock = $2 WHERE id = $1', [s.id, s.in_stock])
   }
   await db.query("SELECT setval(pg_get_serial_sequence('admin_orders', 'id'), COALESCE((SELECT MAX(id) FROM admin_orders), 0) + 1, false)")
   for (const table of ['menu_items', 'orders', 'reservations', 'customers', 'users']) {
@@ -163,12 +163,12 @@ async function run() {
   r = await call('PUT', '/api/config', { storeName: 'x' }, STAFF)
   check('AUTH-05', 'Staff cannot change admin-only settings', r.status === 403, brief(r))
 
-  // --- Menu & stock ---
+  // --- Menu & on/off switch ---
   r = await call('GET', '/api/menu', undefined, null)
   const menu = r.data ?? []
   check('MENU-01', 'Public menu is served', r.status === 200 && menu.length > 0, `${menu.length} items`)
   const itemName = `${RUN} Trà Atiso`
-  r = await call('POST', '/api/menu', { name: itemName, category: 'Trà', kind: 'menu', sellPrice: 39000, costPrice: 12000, stockQty: 20, unit: 'ly', lowStockThreshold: 5 })
+  r = await call('POST', '/api/menu', { name: itemName, category: 'Trà', kind: 'menu', sellPrice: 39000, costPrice: 12000, unit: 'ly' })
   const item = r.data
   if (item?.id) created.menuIds.add(item.id)
   check('MENU-02', 'Manager adds a menu item', r.status === 201 && item?.id, brief(r))
@@ -179,10 +179,9 @@ async function run() {
   check('MENU-03', 'The new item is stored in PostgreSQL', true)
   r = await call('POST', '/api/menu', { name: itemName.toLowerCase(), category: 'Trà', sellPrice: 1 })
   check('MENU-04', 'Duplicate name is refused', r.status === 409, brief(r))
+  check('MENU-05', 'A new item is on sale and reports no quantity', item?.inStock === true && !('stockQty' in (item ?? {})), brief(r))
   r = await call('PATCH', `/api/menu/${item.id}/stock`, { change: -3 })
-  check('MENU-05', 'Stock write-off', r.status === 200 && r.data?.stockQty === 17, brief(r))
-  r = await call('PATCH', `/api/menu/${item.id}/stock`, { change: -100 })
-  check('MENU-06', 'Writing off more than is left is refused', r.status === 409, brief(r))
+  check('MENU-06', 'Quantity changes are refused: stock is not tracked', r.status === 400, brief(r))
   r = await call('PATCH', `/api/menu/${item.id}/stock`, { inStock: false })
   check('MENU-07', 'An item can be switched off', r.status === 200 && r.data?.inStock === false, brief(r))
   await call('PATCH', `/api/menu/${item.id}/stock`, { inStock: true })
@@ -218,7 +217,7 @@ async function run() {
   check('RES-06', 'A booking is transferred only once', r.status === 409, brief(r))
 
   // --- Checkout (Facade, Decorator, Builder, Strategy, Factory, Observer) ---
-  const latte = menu.find((m) => m.stockQty >= 2) ?? menu[0]
+  const latte = menu.find((m) => m.inStock) ?? menu[0]
   r = await call('POST', '/api/checkout', { customer: `${RUN} Khách`, tableId: posTable, orderType: 'dine-in', paymentMethod: 'card', voucherCode: 'WELCOME10', lines: [{ menuItemId: latte.id, qty: 2, size: 'L', toppings: ['cheese foam', 'trân châu'] }] })
   const dineIn = r.data
   if (dineIn?.orderCode) created.orders.add(dineIn.orderCode)
@@ -231,8 +230,10 @@ async function run() {
   check('POS-04', 'Cash short of the total is refused before charging', r.status === 400, brief(r))
   r = await call('POST', '/api/checkout', { lines: [{ menuItemId: latte.id, qty: 1 }], tableId: 99999, paymentMethod: 'cash' })
   check('POS-05', 'Unknown table is refused before charging', r.status === 404, brief(r))
-  r = await call('POST', '/api/checkout', { lines: [{ menuItemId: item.id, qty: 999 }], orderType: 'pickup', paymentMethod: 'qr' })
-  check('POS-06', 'Out-of-stock order is refused', r.status === 409, brief(r))
+  await call('PATCH', `/api/menu/${item.id}/stock`, { inStock: false })
+  r = await call('POST', '/api/checkout', { lines: [{ menuItemId: item.id, qty: 1 }], orderType: 'pickup', paymentMethod: 'qr' })
+  check('POS-06', 'An item switched off is refused', r.status === 409, brief(r))
+  await call('PATCH', `/api/menu/${item.id}/stock`, { inStock: true })
   r = await call('POST', '/api/checkout', { lines: [{ menuItemId: item.id, qty: 1 }], orderType: 'pickup', paymentMethod: 'cash', tenderedAmount: 100000 })
   const pickup = r.data
   if (pickup?.orderCode) created.orders.add(pickup.orderCode)
@@ -280,7 +281,7 @@ async function run() {
   if (!actionId) {
     check('ONLINE', 'Online checkout (needs a production build: next build, next start)', false, '.next/server/server-reference-manifest.json not found')
   } else {
-    const product = (await db.query("SELECT id, name FROM admin_menu_items WHERE kind = 'menu' AND in_stock AND stock_qty >= 2 ORDER BY id LIMIT 1")).rows[0]
+    const product = (await db.query("SELECT id, name FROM admin_menu_items WHERE kind = 'menu' AND in_stock ORDER BY id LIMIT 1")).rows[0]
     const productId = product?.id
     const guestShopper = shopperSession()
     const home = await guestShopper.page('/')
@@ -354,7 +355,7 @@ try {
   if (before) {
     try {
       await restore(before)
-      console.log(`\nCleaned up run ${RUN}: removed ${created.orders.size} orders, ${created.reservations.size} bookings, ${created.users.size} accounts, ${created.menuIds.size} menu items; tables, stock and opening hours restored.`)
+      console.log(`\nCleaned up run ${RUN}: removed ${created.orders.size} orders, ${created.reservations.size} bookings, ${created.users.size} accounts, ${created.menuIds.size} menu items; tables, on/off switches and opening hours restored.`)
     } catch (error) {
       crashed ??= error
       console.error(`⚠️ Cleanup failed, rows tagged ${RUN} may remain: ${error.message}`)

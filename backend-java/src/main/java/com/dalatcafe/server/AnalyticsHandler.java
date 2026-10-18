@@ -28,8 +28,7 @@ import java.util.Objects;
 
 /**
  * GET /api/analytics/overview?days=7 (MANAGER+): revenue (total, today, yesterday and per day),
- * payment mix, order counts by status, best sellers, fulfillment time, low-stock items and
- * floor occupancy, computed from the DAOs on each call.
+ * payment mix, order counts by status, best sellers, fulfillment time and floor occupancy, computed from the DAOs on each call.
  * Revenue counts paid orders only; refunded or cancelled orders are excluded.
  */
 public class AnalyticsHandler extends ApiHandler {
@@ -174,7 +173,6 @@ public class AnalyticsHandler extends ApiHandler {
         byStatus.forEach((status, count) -> statusCounts.put(status.name().toLowerCase(Locale.ROOT), count));
         data.put("ordersByStatus", statusCounts);
         data.put("topItems", topItems(items));
-        data.put("lowStockItems", lowStock());
         data.put("tables", tables());
         return data;
     }
@@ -204,20 +202,6 @@ public class AnalyticsHandler extends ApiHandler {
                     top.add(row);
                 });
         return top;
-    }
-
-    private List<Object> lowStock() {
-        List<Object> low = new ArrayList<>();
-        for (MenuItem item : menuDao.findLowStockItems()) {
-            Map<String, Object> row = new LinkedHashMap<>();
-            row.put("id", item.getId());
-            row.put("name", item.getName());
-            row.put("stockQty", item.getStockQty());
-            row.put("unit", item.getUnit());
-            row.put("lowStockThreshold", item.getLowStockThreshold());
-            low.add(row);
-        }
-        return low;
     }
 
     private Map<String, Object> tables() {

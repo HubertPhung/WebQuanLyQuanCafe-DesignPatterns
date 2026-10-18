@@ -58,7 +58,7 @@ class CheckoutHandlerTest {
         InMemoryDatabase.getInstance().reset();
         SystemConfigManager.getInstance().resetToDefaults();
         menu = new InMemoryMenuDao();
-        drink = new MenuItem(DRINK_ID, "Ca phe muoi", "Coffee", 45_000, 15_000, 10);
+        drink = new MenuItem(DRINK_ID, "Ca phe muoi", "Coffee", 45_000, 15_000);
         drink.setInStock(true);
         menu.save(drink);
         customers = new SnapshotCustomerDao();
@@ -161,16 +161,14 @@ class CheckoutHandlerTest {
         assertEquals(503, response.statusCode(), response.body());
         assertTrue(response.body().contains("DATABASE_UNAVAILABLE"), response.body());
         assertEquals(ordersBefore, orders.findAll().size(), "no order may be saved");
-        assertEquals(10, menu.findById(DRINK_ID).orElseThrow().getStockQty());
         assertEquals(BALANCE, customers.findByPhone(PHONE).orElseThrow().getLoyaltyPoints());
     }
 
     @Test
     void failedCheckoutGivesTheHeldPointsBack() throws Exception {
-        // 11 drinks against a stock of 10: the facade refuses after the points were checked.
-        HttpResponse<String> response = post("{\"paymentMethod\":\"cash\",\"orderType\":\"pickup\",\"lines\":[{\"menuItemId\":"
-                + DRINK_ID + ",\"qty\":11}],\"customerPhone\":\"" + PHONE + "\",\"useLoyaltyPoints\":" + BALANCE + "}")
-                .get(10, TimeUnit.SECONDS);
+        // The drink is off sale: the facade refuses after the points were checked.
+        menu.toggleInStock(DRINK_ID, false);
+        HttpResponse<String> response = redeemAll().get(10, TimeUnit.SECONDS);
 
         assertEquals(409, response.statusCode(), response.body());
         assertEquals(BALANCE, customers.findByPhone(PHONE).orElseThrow().getLoyaltyPoints());
