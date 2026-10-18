@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -163,6 +164,45 @@ class DaoLayerTest {
         }
 
         @Test
+        @DisplayName("deductStockIfAvailable should refuse to take more than is left")
+        void testDeductStockIfAvailable() {
+            assertTrue(menuDao.updateStock(1, 10.0 - menuDao.findById(1).orElseThrow().getStockQty()));
+
+            assertFalse(menuDao.deductStockIfAvailable(1, 11));
+            assertEquals(10.0, menuDao.findById(1).orElseThrow().getStockQty());
+            assertFalse(menuDao.deductStockIfAvailable(1, 0));
+            assertFalse(menuDao.deductStockIfAvailable(999_999, 1), "unknown item");
+
+            assertTrue(menuDao.deductStockIfAvailable(1, 4));
+            assertTrue(menuDao.deductStockIfAvailable(1, 6));
+            assertEquals(0.0, menuDao.findById(1).orElseThrow().getStockQty());
+            assertFalse(menuDao.deductStockIfAvailable(1, 1));
+        }
+
+        @Test
+        @DisplayName("concurrent deductions should never sell more than the stock")
+        void testConcurrentDeductionsNeverOversell() throws Exception {
+            int stock = 500;
+            assertTrue(menuDao.updateStock(1, stock - menuDao.findById(1).orElseThrow().getStockQty()));
+            java.util.concurrent.atomic.AtomicInteger sold = new java.util.concurrent.atomic.AtomicInteger();
+
+            List<Runnable> tasks = new ArrayList<>();
+            for (int w = 0; w < 8; w++) {
+                tasks.add(() -> {
+                    for (int i = 0; i < 200; i++) {
+                        if (menuDao.deductStockIfAvailable(1, 1)) {
+                            sold.incrementAndGet();
+                        }
+                    }
+                });
+            }
+            Concurrently.run(tasks);
+
+            assertEquals(stock, sold.get(), "exactly the stock on hand is sold");
+            assertEquals(0.0, menuDao.findById(1).orElseThrow().getStockQty());
+        }
+
+        @Test
         @DisplayName("toggleInStock should toggle availability")
         void testToggleInStock() {
             assertTrue(menuDao.toggleInStock(1, false));
@@ -315,6 +355,58 @@ class DaoLayerTest {
             // Redeem 30 points
             assertTrue(customerDao.redeemPoints(id, 30));
             assertEquals(40, customerDao.findById(id).orElseThrow().getLoyaltyPoints());
+        }
+
+        @Test
+        @DisplayName("restorePoints should give points back without counting a visit")
+        void testRestorePoints() {
+            Customer c = new Customer(null, "Khách Hoàn Điểm", "0999888666", null);
+            assertTrue(customerDao.save(c));
+            int id = c.getId();
+            assertTrue(customerDao.addOrderRecord(id, 100000.0, 50));
+            assertTrue(customerDao.redeemPoints(id, 50));
+
+            assertTrue(customerDao.restorePoints(id, 20));
+            assertFalse(customerDao.restorePoints(id, 0));
+            assertFalse(customerDao.restorePoints(id, -5));
+            assertFalse(customerDao.restorePoints(999999, 1), "unknown member");
+
+            Customer after = customerDao.findById(id).orElseThrow();
+            assertEquals(20, after.getLoyaltyPoints());
+            assertEquals(1, after.getTotalOrders());
+            assertEquals(100000.0, after.getTotalSpent());
+        }
+
+        @Test
+        @DisplayName("concurrent earning and redeeming on one member should keep every change")
+        void testConcurrentEarnAndRedeem() throws Exception {
+            int workers = 4;
+            int rounds = 20_000;
+            Customer c = new Customer(null, "Khách Đồng Thời", "0999000111", null);
+            assertTrue(customerDao.save(c));
+            int id = c.getId();
+            int opening = workers * rounds;
+            assertTrue(customerDao.addOrderRecord(id, 0, opening));
+
+            List<Runnable> tasks = new ArrayList<>();
+            for (int w = 0; w < workers; w++) {
+                tasks.add(() -> {
+                    for (int i = 0; i < rounds; i++) {
+                        customerDao.addOrderRecord(id, 1, 1);
+                    }
+                });
+                tasks.add(() -> {
+                    for (int i = 0; i < rounds; i++) {
+                        assertTrue(customerDao.redeemPoints(id, 1));
+                    }
+                });
+            }
+            Concurrently.run(tasks);
+
+            Customer after = customerDao.findById(id).orElseThrow();
+            assertEquals(opening, after.getLoyaltyPoints(), "every earned and redeemed point is counted");
+            assertEquals(1 + workers * rounds, after.getTotalOrders());
+            assertEquals(workers * rounds, after.getTotalSpent());
         }
     }
 

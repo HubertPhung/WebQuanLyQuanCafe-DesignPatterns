@@ -7,7 +7,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "tsx scripts/test-ui-ux.mjs"
+    "test": "tsx scripts/test-ui-ux.mjs",
+    "test:e2e": "node --env-file-if-exists=.env.local scripts/test-e2e-stack.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

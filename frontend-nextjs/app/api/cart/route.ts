@@ -1,20 +1,21 @@
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
-import { Cart, cartFields, shopify, demoProducts } from '@/lib/shopify'
+import { Cart, cartFields, shopify } from '@/lib/shopify'
 import { validateVoucher } from '@/lib/api-client'
+import { findMenuVariant } from '@/lib/storefront/menu-catalog'
+import { findVoucher, voucherDiscount } from '@/lib/storefront/vouchers'
+import { getSession } from '@/lib/auth/session'
 
 const isShopifyConfigured = Boolean(process.env.SHOPIFY_STORE_DOMAIN && process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN)
 
-// Demo codes used when the Java backend cannot be asked.
-const OFFLINE_CODES = ['WELCOME', 'WELCOME10', 'DALATCAFE', 'COFFEE', 'DISCOUNT']
+const OPTION_KEYS = ['Milk', 'Sugar', 'Sweetness', 'Ice']
 
 // Java's VoucherCatalog decides whether a code exists (POST /api/vouchers/validate, the same
-// Strategy checkout applies). The demo cart is priced in USD, so only that verdict is used and
-// the cart keeps its flat 10% off; without Java the demo list above applies.
+// Strategy checkout applies); without Java, the copy of that catalog in lib/storefront/vouchers.
 async function isVoucherApplicable(code: string, subtotal: number): Promise<boolean> {
   const verdict = await validateVoucher(code, subtotal)
   if (verdict.ok) return verdict.data.valid
-  return OFFLINE_CODES.includes(code)
+  return Boolean(findVoucher(code))
 }
 
 async function getLocalCart(): Promise<Cart | null> {
@@ -45,9 +46,9 @@ async function setLocalCart(cart: Cart | null) {
 
 function calculateCost(lines: Cart['lines']['nodes'], discountCodes: { code: string; applicable: boolean }[]) {
   const subtotal = lines.reduce((sum, line) => sum + Number(line.merchandise.price.amount) * line.quantity, 0)
-  const discountMultiplier = discountCodes.some((d) => d.applicable) ? 0.9 : 1.0
-  const total = subtotal * discountMultiplier
-  const currencyCode = lines[0]?.merchandise.price.currencyCode ?? 'USD'
+  const discount = voucherDiscount(subtotal, discountCodes.find((d) => d.applicable)?.code)
+  const total = subtotal - discount
+  const currencyCode = lines[0]?.merchandise.price.currencyCode ?? 'VND'
   return {
     subtotalAmount: { amount: subtotal.toFixed(2), currencyCode },
     totalAmount: { amount: total.toFixed(2), currencyCode },
@@ -79,6 +80,10 @@ export async function POST(request: NextRequest) {
   if (request.headers.get('sec-fetch-site') !== 'same-origin' && request.headers.get('origin') !== request.nextUrl.origin) {
     return NextResponse.json({ error: 'Invalid origin' }, { status: 403 })
   }
+  // Ordering is for signed-in customers: the order, its points and its history belong to an account.
+  if (!(await getSession())) {
+    return NextResponse.json({ error: 'Vui lòng đăng nhập để đặt món.', loginRequired: true }, { status: 401 })
+  }
 
   try {
     const body = await request.json()
@@ -91,28 +96,25 @@ export async function POST(request: NextRequest) {
         totalQuantity: 0,
         note: '',
         discountCodes: [],
-        cost: { subtotalAmount: { amount: '0.00', currencyCode: 'USD' }, totalAmount: { amount: '0.00', currencyCode: 'USD' } },
+        cost: { subtotalAmount: { amount: '0.00', currencyCode: 'VND' }, totalAmount: { amount: '0.00', currencyCode: 'VND' } },
         lines: { nodes: [] },
       }
 
       if (body.action === 'add') {
-        const variantId = String(body.variantId ?? '')
-        let matchedProduct = demoProducts.find((p) => p.variants.nodes.some((v) => v.id === variantId))
-        let matchedVariant = matchedProduct?.variants.nodes.find((v) => v.id === variantId)
+        // Price and availability come from the menu, never from the request.
+        const match = await findMenuVariant(String(body.variantId ?? ''))
+        if (!match) throw new Error('Choose a valid product.')
+        if (!match.variant.availableForSale) throw new Error(`${match.product.title} is sold out right now.`)
+        const matchedProduct = match.product
+        const matchedVariant = match.variant
 
-        if (!matchedVariant && demoProducts.length > 0) {
-          matchedProduct = demoProducts[0]
-          matchedVariant = matchedProduct.variants.nodes[0]
-        }
-
-        if (!matchedVariant || !matchedProduct) {
-          throw new Error('Choose a valid product.')
-        }
-
-        const existingLine = cart.lines.nodes.find((l) => l.merchandise.id === matchedVariant?.id)
         const attributes = Object.entries(body.options ?? {})
-          .filter(([k, v]) => ['Milk', 'Sweetness', 'Ice'].includes(k) && typeof v === 'string')
+          .filter(([k, v]) => OPTION_KEYS.includes(k) && typeof v === 'string' && v.length <= 40)
           .map(([key, value]) => ({ key, value: String(value) }))
+        // Same drink with other options (milk, sugar, ice) is a separate line, so no choice is lost.
+        const sameOptions = (line: Cart['lines']['nodes'][number]) =>
+          JSON.stringify(line.attributes) === JSON.stringify(attributes)
+        const existingLine = cart.lines.nodes.find((l) => l.merchandise.id === matchedVariant.id && sameOptions(l))
 
         if (existingLine) {
           existingLine.quantity = Math.min(existingLine.quantity + 1, 20)
@@ -170,7 +172,7 @@ export async function POST(request: NextRequest) {
       const existing = cart?.lines.nodes.filter((l) => l.merchandise.id === body.variantId).reduce((sum, l) => sum + l.quantity, 0) ?? 0
       if (existing >= 20) throw new Error('Limit of 20 per product.')
       const attributes = Object.entries(body.options ?? {})
-        .filter(([k, v]) => ['Milk', 'Sweetness', 'Ice'].includes(k) && typeof v === 'string' && v.length <= 40)
+        .filter(([k, v]) => OPTION_KEYS.includes(k) && typeof v === 'string' && v.length <= 40)
         .map(([key, value]) => ({ key, value }))
       const lines = [{ merchandiseId: body.variantId, quantity: 1, attributes }]
       if (!cart) {

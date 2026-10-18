@@ -1,8 +1,10 @@
 package com.dalatcafe.server;
 
+import com.dalatcafe.dao.IMenuDao;
 import com.dalatcafe.dao.IOrderDao;
 import com.dalatcafe.dao.IReservationDao;
 import com.dalatcafe.dao.ITableDao;
+import com.dalatcafe.model.MenuItem;
 import com.dalatcafe.model.Order;
 import com.dalatcafe.model.OrderItem;
 import com.dalatcafe.model.Reservation;
@@ -39,12 +41,14 @@ public class ReservationHandler extends ApiHandler {
     private final IReservationDao reservationDao;
     private final ITableDao tableDao;
     private final IOrderDao orderDao;
+    private final IMenuDao menuDao;
     private final ReservationValidatorHandler validationChain;
 
-    public ReservationHandler(IReservationDao reservationDao, ITableDao tableDao, IOrderDao orderDao) {
+    public ReservationHandler(IReservationDao reservationDao, ITableDao tableDao, IOrderDao orderDao, IMenuDao menuDao) {
         this.reservationDao = Objects.requireNonNull(reservationDao, "Reservation DAO must not be null");
         this.tableDao = Objects.requireNonNull(tableDao, "Table DAO must not be null");
         this.orderDao = Objects.requireNonNull(orderDao, "Order DAO must not be null");
+        this.menuDao = Objects.requireNonNull(menuDao, "Menu DAO must not be null");
         this.validationChain = ReservationValidationChainFactory.create(tableDao, reservationDao);
     }
 
@@ -98,23 +102,26 @@ public class ReservationHandler extends ApiHandler {
         resolveTable(body, reservation);
         for (Object raw : list(body, "preOrders")) {
             Map<String, Object> line = asObject(raw, "preOrders entry");
-            Double price = num(line, "price");
-            if (price == null || price < 0) {
-                throw ApiException.badRequest("preOrders price must be a non-negative number");
-            }
             int qty = requireInt(line, "qty");
             if (qty <= 0) {
                 throw ApiException.badRequest("preOrders qty must be greater than zero");
             }
-            reservation.addPreOrder(new OrderItem(requireStr(line, "name"), qty, price));
+            // The booking form is public: name and price come from the menu, never from the client.
+            int menuItemId = requireInt(line, "menuItemId");
+            MenuItem item = menuDao.findById(menuItemId)
+                    .orElseThrow(() -> ApiException.badRequest("Unknown menu item in preOrders: " + menuItemId));
+            reservation.addPreOrder(new OrderItem(item.getId(), item.getName(), qty, item.getSellPrice(), null, null));
         }
 
-        ValidationResult result = validationChain.validate(reservation);
-        if (!result.isValid()) {
-            throw new ApiException(400, "CHAIN_VALIDATION_FAILED", result.getErrorMessage());
-        }
-        if (!reservationDao.save(reservation)) {
-            throw new ApiException(500, "INTERNAL_SERVER_ERROR", "Could not save the reservation");
+        // Checking and saving are one step, or two requests could both claim the same slot.
+        synchronized (this) {
+            ValidationResult result = validationChain.validate(reservation);
+            if (!result.isValid()) {
+                throw new ApiException(400, "CHAIN_VALIDATION_FAILED", result.getErrorMessage());
+            }
+            if (!reservationDao.save(reservation)) {
+                throw new ApiException(500, "INTERNAL_SERVER_ERROR", "Could not save the reservation");
+            }
         }
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("id", reservation.getReservationCode());
@@ -129,29 +136,37 @@ public class ReservationHandler extends ApiHandler {
     private void updateStatus(HttpExchange exchange, String code) throws IOException {
         Map<String, Object> body = readJsonBody(exchange);
         ReservationStatus target = parseStatus(requireStr(body, "status"));
-        Reservation reservation = reservationDao.findByReservationCode(code)
-                .orElseThrow(() -> ApiException.notFound("Reservation not found: " + code));
-        ReservationStatus current = reservation.getStatus();
         if (target == ReservationStatus.SEATED) {
             throw ApiException.badRequest("Use POST /api/reservations/" + code + "/transfer-pos to seat a booking");
         }
-        if (current == target) {
+        Reservation reservation;
+        boolean changed;
+        // Same lock as transferToPos(): a booking cannot be cancelled while it is being seated.
+        synchronized (this) {
+            reservation = reservationDao.findByReservationCode(code)
+                    .orElseThrow(() -> ApiException.notFound("Reservation not found: " + code));
+            ReservationStatus current = reservation.getStatus();
+            changed = current != target;
+            if (changed) {
+                boolean allowed = switch (target) {
+                    case CONFIRMED -> current == ReservationStatus.PENDING;
+                    case CANCELLED -> current == ReservationStatus.PENDING || current == ReservationStatus.CONFIRMED;
+                    default -> false;
+                };
+                if (!allowed) {
+                    throw new ApiException(409, "RESOURCE_CONFLICT", "Reservation " + code + " cannot go from "
+                            + current.getDescription() + " to " + target.getDescription());
+                }
+                if (reservation.getId() == null || !reservationDao.updateStatus(reservation.getId(), target)) {
+                    throw new ApiException(500, "INTERNAL_SERVER_ERROR", "Could not update reservation " + code);
+                }
+                reservation.setStatus(target);
+            }
+        }
+        if (!changed) {
             sendOk(exchange, 200, toJson(reservation), "Reservation " + code + " is already " + target.getDescription());
             return;
         }
-        boolean allowed = switch (target) {
-            case CONFIRMED -> current == ReservationStatus.PENDING;
-            case CANCELLED -> current == ReservationStatus.PENDING || current == ReservationStatus.CONFIRMED;
-            default -> false;
-        };
-        if (!allowed) {
-            throw new ApiException(409, "RESOURCE_CONFLICT", "Reservation " + code + " cannot go from "
-                    + current.getDescription() + " to " + target.getDescription());
-        }
-        if (reservation.getId() == null || !reservationDao.updateStatus(reservation.getId(), target)) {
-            throw new ApiException(500, "INTERNAL_SERVER_ERROR", "Could not update reservation " + code);
-        }
-        reservation.setStatus(target);
         sendOk(exchange, 200, toJson(reservation), "Reservation " + code + ": " + target.getDescription());
     }
 
@@ -164,29 +179,34 @@ public class ReservationHandler extends ApiHandler {
     }
 
     private void transferToPos(HttpExchange exchange, String code) throws IOException {
-        Reservation reservation = reservationDao.findByReservationCode(code)
-                .orElseThrow(() -> ApiException.notFound("Reservation not found: " + code));
-        ReservationStatus status = reservation.getStatus();
-        if (status == ReservationStatus.SEATED || status == ReservationStatus.CANCELLED) {
-            throw new ApiException(409, "RESOURCE_CONFLICT",
-                    "Reservation " + code + " cannot be transferred: " + status.getDescription());
-        }
-        if (orderDao.findByOrderCode(reservation.getReservationCode()).isPresent()) {
-            throw new ApiException(409, "RESOURCE_CONFLICT", "An order already exists for reservation " + code);
-        }
+        IPosOrderTarget target;
+        Order order;
+        // Checking for an existing order and saving the new one are one step: one booking, one order.
+        synchronized (this) {
+            Reservation reservation = reservationDao.findByReservationCode(code)
+                    .orElseThrow(() -> ApiException.notFound("Reservation not found: " + code));
+            ReservationStatus status = reservation.getStatus();
+            if (status == ReservationStatus.SEATED || status == ReservationStatus.CANCELLED) {
+                throw new ApiException(409, "RESOURCE_CONFLICT",
+                        "Reservation " + code + " cannot be transferred: " + status.getDescription());
+            }
+            if (orderDao.findByOrderCode(reservation.getReservationCode()).isPresent()) {
+                throw new ApiException(409, "RESOURCE_CONFLICT", "An order already exists for reservation " + code);
+            }
 
-        IPosOrderTarget target = new ReservationToOrderAdapter(reservation);
-        Order order = target.toPosOrder();
-        if (!orderDao.save(order)) {
-            throw new ApiException(500, "INTERNAL_SERVER_ERROR", "Could not save the POS order for " + code);
-        }
-        if (reservation.getId() != null) {
-            reservationDao.updateStatus(reservation.getId(), ReservationStatus.SEATED);
-        }
-        int tableId = target.getAssignedTableId();
-        if (tableId > 0) {
-            tableDao.findById(tableId).ifPresent(table ->
-                    tableDao.updateStatus(tableId, TableStatus.OCCUPIED, Math.min(reservation.getGuests(), table.getSeats())));
+            target = new ReservationToOrderAdapter(reservation);
+            order = target.toPosOrder();
+            if (!orderDao.save(order)) {
+                throw new ApiException(500, "INTERNAL_SERVER_ERROR", "Could not save the POS order for " + code);
+            }
+            if (reservation.getId() != null) {
+                reservationDao.updateStatus(reservation.getId(), ReservationStatus.SEATED);
+            }
+            int tableId = target.getAssignedTableId();
+            if (tableId > 0) {
+                tableDao.findById(tableId).ifPresent(table ->
+                        tableDao.updateStatus(tableId, TableStatus.OCCUPIED, Math.min(reservation.getGuests(), table.getSeats())));
+            }
         }
         sendOk(exchange, 200, orderJson(order, target.getCustomerIdentifier()), "Reservation " + code + " transferred to POS");
     }

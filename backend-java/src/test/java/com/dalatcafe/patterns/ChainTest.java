@@ -10,9 +10,13 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 import java.time.*;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ChainTest {
+    private static final ZoneId CAFE_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+    // Midnight at the café on the day every fixture booking falls on, so all of them lie ahead.
+    private static final Clock CLOCK = clockAt("00:00");
     private final SystemConfigManager config = SystemConfigManager.getInstance();
     private CountingTables tables;
     private CountingReservations reservations;
@@ -23,7 +27,12 @@ class ChainTest {
         config.resetToDefaults();
         tables = new CountingTables();
         reservations = new CountingReservations();
-        chain = ReservationValidationChainFactory.create(tables, reservations);
+        chain = chainAt(CLOCK);
+    }
+
+    private ReservationValidatorHandler chainAt(Clock clock) {
+        return ReservationValidationChainFactory.create(
+                tables, reservations, TableAvailabilityValidator.DEFAULT_DURATION, clock);
     }
 
     @AfterEach
@@ -137,7 +146,7 @@ class ChainTest {
     @Test
     void supportsCustomDurationAndIgnoresCurrentTableStatus() {
         reservations.entries.add(booking("12:00"));
-        chain = ReservationValidationChainFactory.create(tables, reservations, Duration.ofHours(1));
+        chain = ReservationValidationChainFactory.create(tables, reservations, Duration.ofHours(1), CLOCK);
         assertTrue(chain.validate(booking("13:00")).isValid());
         tables.table.setStatus(TableStatus.OCCUPIED);
         assertTrue(chain.validate(booking("15:00")).isValid());
@@ -214,7 +223,7 @@ class ChainTest {
                 return checkNext(reservation);
             }
         };
-        OperatingHoursValidator head = new OperatingHoursValidator();
+        OperatingHoursValidator head = new OperatingHoursValidator(CLOCK);
         head.setNext(tail);
         ValidationResult invalid = head.validate(booking("06:00"));
         assertFalse(invalid.isValid());
@@ -228,10 +237,76 @@ class ChainTest {
         assertTrue(head.validate(booking("12:00")).isValid());
     }
 
+    @Test
+    void rejectsBookingsThatAlreadyStartedBeyondTheGraceWindow() {
+        chain = chainAt(clockAt("12:00"));
+        ValidationResult late = chain.validate(booking("11:44:59"));
+        assertFalse(late.isValid());
+        assertTrue(late.getErrorMessage().contains("đã qua"));
+        assertEquals(0, tables.reads);
+        assertEquals(0, reservations.reads);
+        assertTrue(chain.validate(booking("11:45")).isValid());
+        assertTrue(chain.validate(booking("12:00")).isValid());
+    }
+
+    @Test
+    void defaultClockIsTheSystemClock() {
+        Reservation longAgo = booking("12:00");
+        longAgo.setDateTime(Instant.parse("2020-01-01T05:00:00Z"));
+        assertFalse(new OperatingHoursValidator().validate(longAgo).isValid());
+        assertFalse(ReservationValidationChainFactory.create(tables, reservations).validate(longAgo).isValid());
+        Reservation ahead = booking("12:00");
+        ahead.setDateTime(Instant.now().plus(Duration.ofDays(1)).atZone(CAFE_ZONE)
+                .with(LocalTime.NOON).toInstant());
+        assertTrue(new OperatingHoursValidator().validate(ahead).isValid());
+        assertThrows(NullPointerException.class, () -> new OperatingHoursValidator(null));
+    }
+
+    @Test
+    void openingHoursAreReadAsOnePairWhileSettingsChange() throws InterruptedException {
+        // 12:30 is outside both 07:00-12:00 and 13:00-22:00, so every answer must be a refusal
+        // that quotes one of those two pairs, never a mix of an old and a new value.
+        Set<String> consistent = Set.of(
+                "Quán chỉ nhận đặt bàn trong giờ mở cửa (07:00 - 12:00).",
+                "Quán chỉ nhận đặt bàn trong giờ mở cửa (13:00 - 22:00).");
+        config.setOpeningTime(LocalTime.of(7, 0));
+        config.setClosingTime(LocalTime.of(12, 0));
+        AtomicBoolean stop = new AtomicBoolean();
+        Thread admin = new Thread(() -> {
+            for (int i = 0; !stop.get(); i++) {
+                LocalTime opening = i % 2 == 0 ? LocalTime.of(13, 0) : LocalTime.of(7, 0);
+                LocalTime closing = i % 2 == 0 ? LocalTime.of(22, 0) : LocalTime.of(12, 0);
+                synchronized (config) { // the critical section ConfigHandler.update runs
+                    config.setOpeningTime(opening);
+                    config.setClosingTime(closing);
+                }
+            }
+        });
+        admin.start();
+        try {
+            long deadline = System.nanoTime() + Duration.ofSeconds(2).toNanos();
+            while (System.nanoTime() < deadline) {
+                ValidationResult result = chain.validate(booking("12:30"));
+                assertFalse(result.isValid(), "12:30 is closed under both settings");
+                assertTrue(consistent.contains(result.getErrorMessage()), result.getErrorMessage());
+            }
+        } finally {
+            stop.set(true);
+            admin.join();
+        }
+    }
+
+    private static Clock clockAt(String time) {
+        return Clock.fixed(at(time), ZoneOffset.UTC);
+    }
+
+    private static Instant at(String time) {
+        return LocalDate.of(2026, 10, 16).atTime(LocalTime.parse(time)).atZone(CAFE_ZONE).toInstant();
+    }
+
     private static Reservation booking(String time) {
         Reservation reservation = new Reservation();
-        reservation.setDateTime(LocalDate.of(2026, 10, 16).atTime(LocalTime.parse(time))
-                .atZone(ZoneId.of("Asia/Ho_Chi_Minh")).toInstant());
+        reservation.setDateTime(at(time));
         reservation.setTableId(1);
         reservation.setGuests(2);
         return reservation;

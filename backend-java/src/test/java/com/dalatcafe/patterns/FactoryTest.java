@@ -10,6 +10,7 @@ import com.dalatcafe.patterns.factory.PaymentResult;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.stream.Stream;
@@ -38,6 +39,18 @@ class FactoryTest {
 
         assertTrue(result.isSuccess());
         assertTrue(result.getTransactionId().startsWith("MOMO-"));
+    }
+
+    @ParameterizedTest
+    @EnumSource(PaymentMethod.class)
+    void everyProcessorRefusesAnInvalidAmountOrReference(PaymentMethod method) {
+        IPaymentProcessor processor = PaymentProcessorFactory.createProcessor(method);
+
+        for (double amount : new double[] {0, -1, Double.NaN, Double.POSITIVE_INFINITY}) {
+            assertThrows(IllegalArgumentException.class, () -> processor.processPayment(amount, "ORDER-001"));
+        }
+        assertThrows(IllegalArgumentException.class, () -> processor.processPayment(75_000, null));
+        assertThrows(IllegalArgumentException.class, () -> processor.processPayment(75_000, "  "));
     }
 
     private static Stream<Arguments> paymentProcessors() {

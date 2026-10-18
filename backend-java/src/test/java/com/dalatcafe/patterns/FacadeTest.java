@@ -79,6 +79,7 @@ class FacadeTest {
         assertTrue(completed.isEmpty());
         assertEquals(PaymentStatus.PAID, order.getPaymentStatus());
         assertEquals(3, order.getTableId());
+        assertEquals(DRINK_ID, order.getItems().get(0).getMenuItemId(), "line keeps its menu item");
         assertNotNull(order.getId());
         assertTrue(orderDao.findById(order.getId()).isPresent());
         assertEquals(8, stock());
@@ -141,6 +142,53 @@ class FacadeTest {
         assertNull(result.getOrder());
         assertNotNull(result.getPaymentResult());
         assertEquals(10, stock());
+    }
+
+    @Test
+    void stockSoldElsewhereAfterTheCheckIsNotOversold() {
+        // Another counter sells 9 of the 10 drinks right after this checkout has read the stock.
+        IMenuDao racingDao = new InMemoryMenuDao(InMemoryDatabase.getInstance()) {
+            @Override
+            public java.util.Optional<MenuItem> findById(int id) {
+                MenuItem live = super.findById(id).orElseThrow();
+                MenuItem seen = new MenuItem(live.getId(), live.getName(), live.getCategory(),
+                        live.getSellPrice(), live.getCostPrice(), live.getStockQty());
+                seen.setInStock(live.isInStock());
+                super.updateStock(id, -9);
+                return java.util.Optional.of(seen);
+            }
+        };
+        PosCheckoutFacade racing = new PosCheckoutFacade(orderDao, racingDao, subject);
+
+        CheckoutResult result = racing.checkout(request(5, PaymentMethod.CASH, Set.of(), false));
+
+        assertFalse(result.isSuccess());
+        assertEquals(CheckoutResult.FailureType.OUT_OF_STOCK, result.getFailureType());
+        assertNull(result.getPaymentResult(), "no payment is taken");
+        assertEquals(1, stock(), "the one drink left is still there");
+        assertTrue(orderDao.findAll().stream().noneMatch(o -> o.getTableId() != null && o.getTableId() == 3));
+    }
+
+    @Test
+    void takenOrderCodeIsReplacedBeforePaymentIsTaken() {
+        List<String> looked = new ArrayList<>();
+        Order existing = new Order(null, "AC-TAKEN-1", "Walk-in", null, OrderType.PICKUP);
+        IOrderDao codesDao = new InMemoryOrderDao(InMemoryDatabase.getInstance()) {
+            @Override
+            public java.util.Optional<Order> findByOrderCode(String code) {
+                looked.add(code);
+                // The first random code is already on an older order.
+                return looked.size() == 1 ? java.util.Optional.of(existing) : super.findByOrderCode(code);
+            }
+        };
+        PosCheckoutFacade unique = new PosCheckoutFacade(codesDao, menuDao, subject);
+
+        CheckoutResult result = unique.checkout(request(1, PaymentMethod.CASH, Set.of(), false));
+
+        assertTrue(result.isSuccess(), result.getMessage());
+        assertTrue(looked.size() >= 2, "the code is checked and drawn again: " + looked);
+        assertNotEquals(looked.get(0), result.getOrder().getOrderCode());
+        assertEquals(looked.get(looked.size() - 1), result.getOrder().getOrderCode());
     }
 
     @Test

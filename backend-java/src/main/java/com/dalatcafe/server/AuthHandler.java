@@ -100,7 +100,10 @@ public class AuthHandler extends ApiHandler {
     private void login(HttpExchange exchange) throws IOException {
         Map<String, Object> body = readJsonBody(exchange);
         String email = UserAccount.normalizeEmail(requireStr(body, "email"));
-        String password = requireStr(body, "password");
+        String password = presentedPassword(body, "password");
+        if (password == null || password.isEmpty()) {
+            throw ApiException.badRequest("Field 'password' is required");
+        }
         if (throttle.isLocked(email)) {
             throw new ApiException(429, "TOO_MANY_ATTEMPTS", "Too many failed sign-ins for this email; try again later");
         }
@@ -170,7 +173,7 @@ public class AuthHandler extends ApiHandler {
         }
         Map<String, Object> body = readJsonBody(exchange);
         String next = password(body, "newPassword");
-        if (user.getPasswordHash() != null && !hasher.verify(str(body, "currentPassword"), user.getPasswordHash())) {
+        if (user.getPasswordHash() != null && !hasher.verify(presentedPassword(body, "currentPassword"), user.getPasswordHash())) {
             throw new ApiException(401, "INVALID_CREDENTIALS", "The current password is wrong");
         }
         user.setPasswordHash(hasher.hash(next));
@@ -222,6 +225,15 @@ public class AuthHandler extends ApiHandler {
                     + " characters with at least one letter and one digit");
         }
         return password;
+    }
+
+    /** A password to check, exactly as typed: {@link #password} stores new ones untrimmed. */
+    private static String presentedPassword(Map<String, Object> body, String key) {
+        Object raw = body.get(key);
+        if (raw != null && !(raw instanceof String)) {
+            throw ApiException.badRequest("Field '" + key + "' must be a string");
+        }
+        return (String) raw;
     }
 
     static Map<String, Object> toJson(UserAccount user) {

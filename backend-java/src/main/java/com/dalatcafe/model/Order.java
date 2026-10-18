@@ -212,17 +212,18 @@ public class Order implements Serializable {
         this.completedAt = completedAt;
     }
 
+    /** Keyed on orderCode alone (unique in `orders.order_code`) so equals and hashCode agree; without one, only itself. */
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         Order order = (Order) o;
-        return Objects.equals(id, order.id) || Objects.equals(orderCode, order.orderCode);
+        return orderCode != null && orderCode.equals(order.orderCode);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(id, orderCode);
+        return Objects.hashCode(orderCode);
     }
 
     @Override

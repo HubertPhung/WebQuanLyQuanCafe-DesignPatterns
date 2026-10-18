@@ -5,6 +5,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -78,7 +79,7 @@ public class JdbcDatabase {
             throw new SQLException("DATABASE_URL environment variable is not configured or contains placeholder.");
         }
 
-        return parseAndConnect(rawUrl);
+        return parseAndConnect(rawUrl.strip());
     }
 
     private static Connection parseAndConnect(String rawUrl) throws SQLException {
@@ -87,31 +88,35 @@ public class JdbcDatabase {
         }
 
         // Parse uri format: postgresql://user:password@host:port/database
+        String cleanUrl = rawUrl.replace("postgresql://", "http://").replace("postgres://", "http://");
+        URI uri;
         try {
-            String cleanUrl = rawUrl.replace("postgresql://", "http://").replace("postgres://", "http://");
-            URI uri = URI.create(cleanUrl);
-
-            String host = uri.getHost();
-            int port = uri.getPort() == -1 ? 5432 : uri.getPort();
-            String path = uri.getPath();
-            String database = (path != null && path.length() > 1) ? path.substring(1) : "postgres";
-
-            String userInfo = uri.getUserInfo();
-            String user = "";
-            String password = "";
-            if (userInfo != null && userInfo.contains(":")) {
-                String[] parts = userInfo.split(":", 2);
-                user = parts[0];
-                password = parts[1];
-            } else if (userInfo != null) {
-                user = userInfo;
-            }
-
-            String jdbcUrl = String.format("jdbc:postgresql://%s:%d/%s?sslmode=require", host, port, database);
-            return DriverManager.getConnection(jdbcUrl, user, password);
-        } catch (Exception e) {
-            throw new SQLException("Failed to parse PostgreSQL DATABASE_URL: " + e.getMessage(), e);
+            uri = new URI(cleanUrl);
+        } catch (URISyntaxException e) {
+            // The URL carries the password, so neither it nor the parser's message (which quotes it) is reported.
+            throw new SQLException("DATABASE_URL is not a valid postgresql:// URL (character " + e.getIndex()
+                    + "); characters such as spaces, @ or # in the password must be percent-encoded");
         }
+
+        String host = uri.getHost();
+        int port = uri.getPort() == -1 ? 5432 : uri.getPort();
+        String path = uri.getPath();
+        String database = (path != null && path.length() > 1) ? path.substring(1) : "postgres";
+
+        String userInfo = uri.getUserInfo();
+        String user = "";
+        String password = "";
+        if (userInfo != null && userInfo.contains(":")) {
+            String[] parts = userInfo.split(":", 2);
+            user = parts[0];
+            password = parts[1];
+        } else if (userInfo != null) {
+            user = userInfo;
+        }
+
+        // The password goes to the driver as its own argument, so driver errors cannot echo it.
+        String jdbcUrl = String.format("jdbc:postgresql://%s:%d/%s?sslmode=require", host, port, database);
+        return DriverManager.getConnection(jdbcUrl, user, password);
     }
 
     private static boolean isUsable(Connection physical) {

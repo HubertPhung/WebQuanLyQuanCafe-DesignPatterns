@@ -1,214 +1,117 @@
 'use client'
 
-import { useState } from 'react'
-import {
-  AlertCircle,
-  ArrowRight,
-  CheckCircle2,
-  Clock,
-  Eye,
-  Globe,
-  MapPin,
-  Package,
-  Phone,
-  RotateCcw,
-  Search,
-  Truck,
-  User,
-  UtensilsCrossed,
-  XCircle,
-} from 'lucide-react'
+import { useState, useTransition } from 'react'
+import { Banknote, Eye, Globe, Package, Search, Truck } from 'lucide-react'
+import { toast } from 'sonner'
+import { markOrderPaid, updateOrderStatus } from '@/app/admin/actions'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { toast } from 'sonner'
+import type { OnlineOrderView } from '@/lib/admin/queries'
+import type { OrderStatus } from '@/lib/db/schema'
 import { cn } from '@/lib/utils'
 
-export type OnlineOrderStatus = 'Chờ xác nhận' | 'Đang chuẩn bị' | 'Đang giao' | 'Hoàn thành' | 'Đã hủy'
+// Storefront orders as the kitchen and Java see them. Each step goes through the same server
+// actions as the KDS board; Java only completes an order that is paid, so cash on delivery is
+// marked paid first.
 
-interface OnlineOrderItem {
-  name: string
-  options: string
-  qty: number
-  price: number
+const nextStatus: Partial<Record<OrderStatus, OrderStatus>> = { pending: 'brewing', brewing: 'ready', ready: 'completed' }
+
+function statusLabel(order: OnlineOrderView) {
+  if (order.status === 'pending') return 'Chờ pha chế'
+  if (order.status === 'brewing') return 'Đang pha chế'
+  if (order.status === 'ready') return order.contact.fulfilment === 'delivery' ? 'Đang giao' : 'Chờ khách lấy'
+  return 'Hoàn thành'
 }
 
-interface OnlineOrder {
-  id: string
-  orderCode: string
-  customer: string
-  phone: string
-  address: string
-  type: 'Giao hàng' | 'Tự lấy'
-  status: OnlineOrderStatus
-  pointsUsed: number
-  shippingFee: number
-  subtotal: number
-  total: number
-  createdAt: string
-  items: OnlineOrderItem[]
+function nextStepLabel(order: OnlineOrderView) {
+  if (order.status === 'pending') return 'Bắt đầu pha chế'
+  if (order.status === 'brewing') return order.contact.fulfilment === 'delivery' ? 'Bàn giao shipper' : 'Báo khách đến lấy'
+  if (order.status === 'ready') return order.contact.fulfilment === 'delivery' ? 'Đã giao xong' : 'Khách đã nhận'
+  return null
 }
 
-const initialOrders: OnlineOrder[] = [
-  {
-    id: '27',
-    orderCode: '#27',
-    customer: 'Phùng Hoài Bo',
-    phone: '0908 123 456',
-    address: '123 Đường Nguyễn Huệ, P. Bến Nghé, Q.1, TP. Hồ Chí Minh',
-    type: 'Giao hàng',
-    status: 'Chờ xác nhận',
-    pointsUsed: 20,
-    shippingFee: 15000,
-    subtotal: 130000,
-    total: 125000,
-    createdAt: 'Hôm nay · 14:15',
-    items: [
-      { name: 'Cà phê Latte Vani Mịn', options: 'Sữa tươi thanh trùng · Ít ngọt', qty: 2, price: 55000 },
-      { name: 'Bánh Croissant bơ Pháp', options: 'Nướng nóng giòn', qty: 1, price: 45000 },
-    ],
-  },
-  {
-    id: '26',
-    orderCode: '#26',
-    customer: 'Nguyễn Thị Lan',
-    phone: '0911 223 344',
-    address: 'Nhận tại quầy chi nhánh Trung tâm',
-    type: 'Tự lấy',
-    status: 'Đang chuẩn bị',
-    pointsUsed: 0,
-    shippingFee: 0,
-    subtotal: 95000,
-    total: 95000,
-    createdAt: 'Hôm nay · 13:50',
-    items: [
-      { name: 'Cold Brew Cam Vàng', options: 'Ủ lạnh nguyên bản', qty: 1, price: 55000 },
-      { name: 'Bánh mì thịt xông khói giòn', options: 'Nhiều dưa leo', qty: 1, price: 40000 },
-    ],
-  },
-  {
-    id: '25',
-    orderCode: '#25',
-    customer: 'Lê Hoàng Hải',
-    phone: '0978 999 888',
-    address: 'Tòa nhà Bitexco, 2 Hải Triều, Q.1, TP. Hồ Chí Minh',
-    type: 'Giao hàng',
-    status: 'Đang giao',
-    pointsUsed: 10,
-    shippingFee: 15000,
-    subtotal: 155000,
-    total: 160000,
-    createdAt: 'Hôm nay · 12:30',
-    items: [
-      { name: 'Cà phê Muối Đặc Biệt', options: 'Đá riêng', qty: 2, price: 45000 },
-      { name: 'Cơm chiên hoàng bào', options: 'Không cay', qty: 1, price: 65000 },
-    ],
-  },
-  {
-    id: '24',
-    orderCode: '#24',
-    customer: 'Trần Minh Quân',
-    phone: '0903 555 444',
-    address: '45 Lê Duẩn, P. Bến Nghé, Q.1, TP. Hồ Chí Minh',
-    type: 'Giao hàng',
-    status: 'Hoàn thành',
-    pointsUsed: 0,
-    shippingFee: 15000,
-    subtotal: 90000,
-    total: 105000,
-    createdAt: 'Hôm nay · 10:15',
-    items: [
-      { name: 'Nước cam tươi nguyên chất', options: 'Không đá', qty: 1, price: 45000 },
-      { name: 'Bạc Xỉu Sữa Tươi Sài Gòn', options: 'Đá riêng', qty: 1, price: 45000 },
-    ],
-  },
-  {
-    id: '23',
-    orderCode: '#23',
-    customer: 'Vũ Mạnh Cường',
-    phone: '0945 666 777',
-    address: '72 Nguyễn Thị Minh Khai, Q.3, TP. Hồ Chí Minh',
-    type: 'Giao hàng',
-    status: 'Đã hủy',
-    pointsUsed: 30,
-    shippingFee: 15000,
-    subtotal: 100000,
-    total: 85000,
-    createdAt: 'Hôm qua · 17:40',
-    items: [
-      { name: 'Cà phê Latte Vani Mịn', options: 'Sữa yến mạch', qty: 1, price: 55000 },
-    ],
-  },
+const statusStyles: Record<OrderStatus, string> = {
+  pending: 'bg-amber-50/90 text-amber-950 border-amber-300/80',
+  brewing: 'bg-purple-50/90 text-purple-950 border-purple-300/80',
+  ready: 'bg-blue-50/90 text-blue-950 border-blue-300/80',
+  completed: 'bg-emerald-50/90 text-emerald-900 border-emerald-300/80',
+}
+
+const filters: { id: 'all' | OrderStatus; label: string }[] = [
+  { id: 'all', label: 'Tất cả' },
+  { id: 'pending', label: 'Chờ pha chế' },
+  { id: 'brewing', label: 'Đang pha chế' },
+  { id: 'ready', label: 'Đang giao / chờ lấy' },
+  { id: 'completed', label: 'Hoàn thành' },
 ]
 
-export function OnlineOrders() {
-  const [orders, setOrders] = useState<OnlineOrder[]>(initialOrders)
-  const [statusFilter, setStatusFilter] = useState<string>('all')
+const paymentLabels: Record<string, string> = { qr: 'VietQR', card: 'Thẻ', cash: 'Tiền mặt khi nhận' }
+
+const time = (value: Date | string) =>
+  new Date(value).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })
+
+export function OnlineOrders({ orders }: { orders: OnlineOrderView[] }) {
   const [search, setSearch] = useState('')
-  const [selectedOrder, setSelectedOrder] = useState<OnlineOrder | null>(null)
+  const [statusFilter, setStatusFilter] = useState<'all' | OrderStatus>('all')
+  const [selectedCode, setSelectedCode] = useState<string | null>(null)
+  const [pending, startTransition] = useTransition()
 
-  const filtered = orders.filter((o) => {
-    const matchStatus = statusFilter === 'all' || o.status === statusFilter
-    const matchSearch =
-      o.orderCode.toLowerCase().includes(search.toLowerCase()) ||
-      o.customer.toLowerCase().includes(search.toLowerCase()) ||
-      o.phone.includes(search)
-    return matchStatus && matchSearch
-  })
+  const selected = orders.find((order) => order.orderCode === selectedCode) ?? null
+  const query = search.trim().toLowerCase()
+  const filtered = orders.filter(
+    (order) =>
+      (statusFilter === 'all' || order.status === statusFilter) &&
+      (!query ||
+        order.orderCode.toLowerCase().includes(query) ||
+        order.customer.toLowerCase().includes(query) ||
+        order.contact.phone.includes(query.replace(/\D/g, '') || query)),
+  )
 
-  const handleUpdateStatus = (id: string, nextStatus: OnlineOrderStatus) => {
-    setOrders(
-      orders.map((o) => (o.id === id ? { ...o, status: nextStatus } : o))
-    )
-    if (selectedOrder && selectedOrder.id === id) {
-      setSelectedOrder({ ...selectedOrder, status: nextStatus })
-    }
-    toast.success(`Đã cập nhật đơn #${id} sang trạng thái: "${nextStatus}"`)
+  function advance(order: OnlineOrderView) {
+    const next = nextStatus[order.status]
+    if (!next) return
+    startTransition(async () => {
+      const result = await updateOrderStatus(order.id, next)
+      if (result.ok) toast.success(`Đơn ${order.orderCode}: ${nextStepLabel(order)}`)
+      else toast.error(result.error)
+    })
   }
 
-  const handleCancelOrder = (order: OnlineOrder) => {
-    setOrders(
-      orders.map((o) => (o.id === order.id ? { ...o, status: 'Đã hủy' } : o))
-    )
-    if (selectedOrder && selectedOrder.id === order.id) {
-      setSelectedOrder({ ...selectedOrder, status: 'Đã hủy' })
-    }
-    toast.warning(`Đã hủy đơn ${order.orderCode} và hoàn trả ${order.pointsUsed} điểm thưởng cho khách hàng!`)
+  function collectCash(order: OnlineOrderView) {
+    startTransition(async () => {
+      const result = await markOrderPaid(order.id)
+      if (result.ok) toast.success(`Đã thu tiền đơn ${order.orderCode}`)
+      else toast.error(result.error)
+    })
   }
 
   return (
     <div className="space-y-6 font-sans text-stone-900">
-      {/* 1. Bộ lọc trạng thái đơn */}
-      <div className="rounded-xl border border-stone-200/90 bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.04)] space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="relative flex-1 max-w-md min-w-0">
-            <Search className="absolute left-3.5 top-3 size-4 text-stone-400 pointer-events-none" />
+      <div className="space-y-4 rounded-xl border border-stone-200/90 bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
+        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+          <div className="relative min-w-0 max-w-md flex-1">
+            <Search className="pointer-events-none absolute left-3.5 top-3 size-4 text-stone-400" aria-hidden="true" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Tìm mã ĐH, khách hàng, SĐT..."
-              className="w-full h-10 pl-10 pr-4 rounded-lg border border-stone-200/90 bg-white text-xs md:text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:border-[#5A3E2B] shadow-xs truncate"
+              aria-label="Tìm đơn online"
+              className="h-10 w-full truncate rounded-lg border border-stone-200/90 bg-white pl-10 pr-4 text-xs text-stone-900 placeholder:text-stone-400 focus:border-[#5A3E2B] focus:outline-none md:text-sm"
             />
           </div>
-
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {[
-              { id: 'all', label: 'Tất cả' },
-              { id: 'Chờ xác nhận', label: 'Chờ xác nhận' },
-              { id: 'Đang chuẩn bị', label: 'Đang chuẩn bị' },
-              { id: 'Đang giao', label: 'Đang giao' },
-              { id: 'Hoàn thành', label: 'Hoàn thành' },
-              { id: 'Đã hủy', label: 'Đã hủy' },
-            ].map((tab) => (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {filters.map((tab) => (
               <button
                 key={tab.id}
                 type="button"
+                aria-pressed={statusFilter === tab.id}
                 onClick={() => setStatusFilter(tab.id)}
                 className={cn(
-                  'px-3.5 py-2 rounded-lg text-xs font-bold transition-colors cursor-pointer border',
+                  'cursor-pointer rounded-lg border px-3.5 py-2 text-xs font-bold transition-colors',
                   statusFilter === tab.id
-                    ? 'bg-[#5A3E2B] text-white border-[#5A3E2B] shadow-xs'
-                    : 'bg-stone-100/90 text-stone-700 border-stone-200/90 hover:text-stone-950 hover:bg-stone-200/60'
+                    ? 'border-[#5A3E2B] bg-[#5A3E2B] text-white shadow-xs'
+                    : 'border-stone-200/90 bg-stone-100/90 text-stone-700 hover:bg-stone-200/60 hover:text-stone-950',
                 )}
               >
                 {tab.label}
@@ -217,211 +120,162 @@ export function OnlineOrders() {
           </div>
         </div>
 
-        {/* 2. Bảng đơn hàng online */}
         <div className="overflow-x-auto rounded-lg border border-stone-200/90 bg-white">
           <table className="w-full text-left text-xs md:text-sm">
             <thead>
-              <tr className="border-b border-stone-200/90 bg-stone-50/60 text-stone-500 font-semibold uppercase tracking-wider text-xs">
-                <th className="py-3 px-3">Mã ĐH</th>
-                <th className="py-3 px-3">Khách hàng</th>
-                <th className="py-3 px-3">Loại đơn</th>
-                <th className="py-3 px-3">Trạng thái</th>
-                <th className="py-3 px-3 text-right">Tổng tiền</th>
-                <th className="py-3 px-3">Thời gian đặt</th>
-                <th className="py-3 px-3 text-right">Thao tác</th>
+              <tr className="border-b border-stone-200/90 bg-stone-50/60 text-xs font-semibold uppercase tracking-wider text-stone-500">
+                <th className="px-3 py-3">Mã ĐH</th>
+                <th className="px-3 py-3">Khách hàng</th>
+                <th className="px-3 py-3">Loại đơn</th>
+                <th className="px-3 py-3">Trạng thái</th>
+                <th className="px-3 py-3 text-right">Tổng tiền</th>
+                <th className="px-3 py-3">Thời gian đặt</th>
+                <th className="px-3 py-3 text-right">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100">
               {filtered.map((order) => (
-                <tr key={order.id} className="hover:bg-stone-50/60 transition-colors">
-                  <td className="py-3.5 px-3 font-mono font-bold text-[#5A3E2B]">
-                    {order.orderCode}
+                <tr key={order.orderCode} className="transition-colors hover:bg-stone-50/60">
+                  <td className="px-3 py-3.5 font-mono font-bold text-[#5A3E2B]">{order.orderCode}</td>
+                  <td className="px-3 py-3.5">
+                    <strong className="block font-bold text-stone-900">{order.customer}</strong>
+                    <span className="font-mono text-[11px] text-stone-500">{order.contact.phone}</span>
                   </td>
-                  <td className="py-3.5 px-3">
-                    <strong className="text-stone-900 block font-bold">{order.customer}</strong>
-                    <span className="text-[11px] font-mono text-stone-500">{order.phone}</span>
-                  </td>
-                  <td className="py-3.5 px-3">
+                  <td className="px-3 py-3.5">
                     <span
                       className={cn(
-                        'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border',
-                        order.type === 'Giao hàng'
-                          ? 'bg-blue-50/90 text-blue-900 border-blue-200'
-                          : 'bg-stone-100/90 text-stone-800 border-stone-200'
+                        'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold',
+                        order.contact.fulfilment === 'delivery' ? 'border-blue-200 bg-blue-50/90 text-blue-900' : 'border-stone-200 bg-stone-100/90 text-stone-800',
                       )}
                     >
-                      {order.type === 'Giao hàng' ? <Truck className="size-3" /> : <Package className="size-3" />}
-                      <span>{order.type}</span>
+                      {order.contact.fulfilment === 'delivery' ? <Truck className="size-3" aria-hidden="true" /> : <Package className="size-3" aria-hidden="true" />}
+                      {order.contact.fulfilment === 'delivery' ? 'Giao hàng' : 'Tự lấy'}
                     </span>
                   </td>
-                  <td className="py-3.5 px-3">
-                    <span
-                      className={cn(
-                        'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border',
-                        order.status === 'Chờ xác nhận' && 'bg-amber-50/90 text-amber-950 border-amber-300/80',
-                        order.status === 'Đang chuẩn bị' && 'bg-purple-50/90 text-purple-950 border-purple-300/80',
-                        order.status === 'Đang giao' && 'bg-blue-50/90 text-blue-950 border-blue-300/80',
-                        order.status === 'Hoàn thành' && 'bg-emerald-50/90 text-emerald-900 border-emerald-300/80',
-                        order.status === 'Đã hủy' && 'bg-rose-50/90 text-rose-950 border-rose-300/80'
-                      )}
-                    >
-                      {order.status}
+                  <td className="px-3 py-3.5">
+                    <span className={cn('inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-bold', statusStyles[order.status])}>
+                      {statusLabel(order)}
                     </span>
+                    {order.paymentStatus !== 'paid' && <span className="ml-1.5 text-[11px] font-semibold text-amber-800">· chưa thu tiền</span>}
                   </td>
-                  <td className="py-3.5 px-3 text-right font-black text-[#5A3E2B] tabular-nums text-sm">
-                    {order.total.toLocaleString('vi-VN')} đ
-                  </td>
-                  <td className="py-3.5 px-3 text-xs text-stone-500 font-mono">
-                    {order.createdAt}
-                  </td>
-                  <td className="py-3.5 px-3 text-right">
+                  <td className="px-3 py-3.5 text-right text-sm font-black tabular-nums text-[#5A3E2B]">{order.total.toLocaleString('vi-VN')} đ</td>
+                  <td className="px-3 py-3.5 font-mono text-xs text-stone-500">{time(order.createdAt)}</td>
+                  <td className="px-3 py-3.5 text-right">
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => setSelectedOrder(order)}
-                      className="h-8 px-2.5 rounded-md text-xs border-stone-200 bg-white hover:bg-stone-50 text-stone-700 gap-1.5 shadow-2xs"
+                      onClick={() => setSelectedCode(order.orderCode)}
+                      className="h-8 gap-1.5 rounded-md border-stone-200 bg-white px-2.5 text-xs text-stone-700 shadow-2xs hover:bg-stone-50"
                     >
-                      <Eye className="size-3.5" />
-                      <span>Chi tiết</span>
+                      <Eye className="size-3.5" aria-hidden="true" />
+                      Chi tiết
                     </Button>
                   </td>
                 </tr>
               ))}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="py-10 text-center text-sm text-stone-500">
+                    {orders.length === 0 ? 'Chưa có đơn đặt online nào.' : 'Không có đơn nào khớp với bộ lọc.'}
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* MODAL: CHI TIẾT ĐƠN HÀNG ONLINE & XỬ LÝ TRẠNG THÁI */}
-      <Dialog open={!!selectedOrder} onOpenChange={(open) => !open && setSelectedOrder(null)}>
-        {selectedOrder && (
-          <DialogContent className="max-w-lg rounded-xl border-stone-200 bg-white text-stone-900 p-6 font-sans shadow-2xl">
+      <Dialog open={!!selected} onOpenChange={(open) => !open && setSelectedCode(null)}>
+        {selected && (
+          <DialogContent className="max-w-lg rounded-xl border-stone-200 bg-white p-6 font-sans text-stone-900 shadow-2xl">
             <DialogHeader>
-              <div className="flex items-center justify-between">
-                <DialogTitle className="text-xl font-bold text-stone-900 flex items-center gap-2">
-                  <Globe className="size-5 text-[#5A3E2B]" />
-                  <span>Chi tiết đơn online {selectedOrder.orderCode}</span>
+              <div className="flex items-center justify-between gap-2">
+                <DialogTitle className="flex items-center gap-2 text-xl font-bold text-stone-900">
+                  <Globe className="size-5 text-[#5A3E2B]" aria-hidden="true" />
+                  Đơn online {selected.orderCode}
                 </DialogTitle>
-                <Badge className="bg-[#5A3E2B] text-white text-xs rounded-full px-2.5 py-0.5">{selectedOrder.status}</Badge>
+                <Badge className="rounded-full bg-[#5A3E2B] px-2.5 py-0.5 text-xs text-white">{statusLabel(selected)}</Badge>
               </div>
               <DialogDescription className="text-xs text-stone-500">
-                Đặt lúc {selectedOrder.createdAt} · Phương thức: {selectedOrder.type}
+                Đặt lúc {time(selected.createdAt)} · {selected.contact.fulfilment === 'delivery' ? 'Giao hàng tận nơi' : 'Khách tự đến lấy'} ·{' '}
+                {paymentLabels[selected.paymentMethod] ?? selected.paymentMethod} ({selected.paymentStatus === 'paid' ? 'đã thanh toán' : 'chưa thu tiền'})
               </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-4 pt-2 text-xs">
-              {/* Thông tin người nhận */}
-              <div className="rounded-lg border border-stone-200/90 bg-[#F9F7F4] p-3.5 space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-stone-500">Khách hàng:</span>
-                  <strong className="text-stone-900">{selectedOrder.customer}</strong>
+              <dl className="space-y-2 rounded-lg border border-stone-200/90 bg-[#F9F7F4] p-3.5">
+                <div className="flex justify-between gap-3">
+                  <dt className="text-stone-500">Khách hàng</dt>
+                  <dd className="font-bold text-stone-900">{selected.customer}</dd>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-stone-500">Số điện thoại:</span>
-                  <span className="font-mono text-stone-800">{selectedOrder.phone}</span>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-stone-500">Số điện thoại</dt>
+                  <dd>
+                    <a href={`tel:${selected.contact.phone}`} className="font-mono text-stone-800 underline-offset-2 hover:underline">
+                      {selected.contact.phone}
+                    </a>
+                  </dd>
                 </div>
-                <div className="flex items-start justify-between gap-3">
-                  <span className="text-stone-500 shrink-0">Địa chỉ giao:</span>
-                  <span className="text-stone-800 text-right">{selectedOrder.address}</span>
-                </div>
-              </div>
-
-              {/* Danh sách món trong đơn */}
-              <div>
-                <h4 className="font-bold text-xs text-stone-900 mb-2 flex items-center gap-1.5">
-                  <UtensilsCrossed className="size-4 text-[#5A3E2B]" />
-                  <span>Danh sách món đặt ({selectedOrder.items.length} món)</span>
-                </h4>
-                <div className="rounded-lg border border-stone-200/90 bg-white divide-y divide-stone-100 shadow-2xs">
-                  {selectedOrder.items.map((it, idx) => (
-                    <div key={idx} className="p-3 flex items-center justify-between text-xs">
-                      <div>
-                        <strong className="text-stone-900 block">{it.name}</strong>
-                        <span className="text-stone-500 text-[11px] block">{it.options}</span>
-                        <span className="text-stone-400 text-[10px]">Số lượng: x{it.qty}</span>
-                      </div>
-                      <span className="font-bold text-stone-900 tabular-nums">
-                        {(it.price * it.qty).toLocaleString('vi-VN')} đ
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Tính toán thanh toán */}
-              <div className="rounded-lg border border-stone-200/90 bg-[#F9F7F4] p-3.5 space-y-1.5">
-                <div className="flex justify-between text-stone-600">
-                  <span>Tạm tính tiền món:</span>
-                  <span className="font-mono tabular-nums">{selectedOrder.subtotal.toLocaleString('vi-VN')} đ</span>
-                </div>
-                <div className="flex justify-between text-stone-600">
-                  <span>Phí giao hàng:</span>
-                  <span className="font-mono tabular-nums">+{selectedOrder.shippingFee.toLocaleString('vi-VN')} đ</span>
-                </div>
-                {selectedOrder.pointsUsed > 0 && (
-                  <div className="flex justify-between text-emerald-800 font-semibold">
-                    <span>Khấu trừ điểm thưởng ({selectedOrder.pointsUsed} điểm):</span>
-                    <span className="font-mono tabular-nums">-{ (selectedOrder.pointsUsed * 1000).toLocaleString('vi-VN') } đ</span>
+                {selected.contact.email && (
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-stone-500">Email</dt>
+                    <dd className="break-all text-stone-800">{selected.contact.email}</dd>
                   </div>
                 )}
-                <div className="pt-2 border-t border-stone-200 flex justify-between font-bold text-sm text-stone-900">
-                  <span>Tổng tiền thanh toán:</span>
-                  <span className="text-base text-[#5A3E2B] tabular-nums font-black">{selectedOrder.total.toLocaleString('vi-VN')} đ</span>
-                </div>
-              </div>
+                {selected.contact.address && (
+                  <div className="flex items-start justify-between gap-3">
+                    <dt className="shrink-0 text-stone-500">Địa chỉ giao</dt>
+                    <dd className="text-right text-stone-800">{selected.contact.address}</dd>
+                  </div>
+                )}
+                {selected.contact.note && (
+                  <div className="flex items-start justify-between gap-3">
+                    <dt className="shrink-0 text-stone-500">Ghi chú</dt>
+                    <dd className="text-right text-stone-800">{selected.contact.note}</dd>
+                  </div>
+                )}
+              </dl>
 
-              {/* Nút chuyển trạng thái quy trình */}
-              <div className="space-y-2 pt-1">
-                <label className="font-bold text-stone-700 text-xs block">Cập nhật tiến độ đơn hàng:</label>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Button
-                    size="sm"
-                    onClick={() => handleUpdateStatus(selectedOrder.id, 'Đang chuẩn bị')}
-                    className="rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs h-9 px-3 gap-1 shadow-2xs"
-                  >
-                    <span>Chuẩn bị món</span>
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => handleUpdateStatus(selectedOrder.id, 'Đang giao')}
-                    className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs h-9 px-3 gap-1 shadow-2xs"
-                  >
-                    <span>Giao hàng</span>
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => handleUpdateStatus(selectedOrder.id, 'Hoàn thành')}
-                    className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-9 px-3 gap-1 shadow-2xs"
-                  >
-                    <CheckCircle2 className="size-3.5" />
-                    <span>Hoàn thành đơn</span>
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleCancelOrder(selectedOrder)}
-                    className="rounded-lg border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 text-xs h-9 px-3 gap-1 ml-auto shadow-2xs"
-                  >
-                    <XCircle className="size-3.5" />
-                    <span>Hủy & Hoàn điểm</span>
-                  </Button>
-                </div>
+              <ul className="divide-y divide-stone-100 rounded-lg border border-stone-200/90">
+                {selected.items.map((item, index) => (
+                  <li key={index} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                    <span>
+                      <strong className="text-stone-900">{item.name}</strong> × {item.qty}
+                      {item.variation && <span className="block text-[11px] text-stone-500">{item.variation}</span>}
+                    </span>
+                    <span className="font-semibold tabular-nums">{(item.price * item.qty).toLocaleString('vi-VN')} đ</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="flex justify-between border-t border-stone-200/80 pt-2 text-sm font-bold">
+                <span>Tổng thanh toán (gồm VAT)</span>
+                <span className="tabular-nums text-[#5A3E2B]">{selected.total.toLocaleString('vi-VN')} đ</span>
               </div>
             </div>
 
-            <DialogFooter className="pt-2">
-              <Button
-                variant="ghost"
-                onClick={() => setSelectedOrder(null)}
-                className="h-10 rounded-lg text-xs text-stone-500 hover:text-stone-800"
-              >
-                Đóng
-              </Button>
+            <DialogFooter className="flex-wrap gap-2 pt-2">
+              {selected.paymentStatus !== 'paid' && (
+                <Button variant="outline" disabled={pending} onClick={() => collectCash(selected)} className="gap-1.5 text-xs font-semibold">
+                  <Banknote className="size-4" aria-hidden="true" />
+                  Đã thu tiền
+                </Button>
+              )}
+              {nextStepLabel(selected) && (
+                <Button
+                  disabled={pending || (selected.status === 'ready' && selected.paymentStatus !== 'paid')}
+                  onClick={() => advance(selected)}
+                  className="bg-[#5A3E2B] text-xs font-bold text-white hover:bg-[#684732]"
+                >
+                  {nextStepLabel(selected)}
+                </Button>
+              )}
             </DialogFooter>
+            {selected.status === 'ready' && selected.paymentStatus !== 'paid' && (
+              <p className="text-right text-[11px] text-amber-800">Thu tiền trước khi hoàn tất đơn thanh toán khi nhận.</p>
+            )}
           </DialogContent>
         )}
       </Dialog>
     </div>
   )
 }
-export default OnlineOrders

@@ -154,17 +154,18 @@ public class Reservation implements Serializable {
         this.createdAt = createdAt;
     }
 
+    /** Keyed on reservationCode alone (unique in `reservations.reservation_code`) so equals and hashCode agree; without one, only itself. */
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         Reservation that = (Reservation) o;
-        return Objects.equals(id, that.id) || Objects.equals(reservationCode, that.reservationCode);
+        return reservationCode != null && reservationCode.equals(that.reservationCode);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(id, reservationCode);
+        return Objects.hashCode(reservationCode);
     }
 
     @Override

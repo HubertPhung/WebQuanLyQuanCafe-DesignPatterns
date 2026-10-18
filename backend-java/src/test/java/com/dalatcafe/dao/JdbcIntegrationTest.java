@@ -1,5 +1,7 @@
 package com.dalatcafe.dao;
 
+import com.dalatcafe.model.Customer;
+import com.dalatcafe.model.CustomerRank;
 import com.dalatcafe.model.MenuItem;
 import com.dalatcafe.model.Order;
 import com.dalatcafe.model.OrderItem;
@@ -30,6 +32,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -181,6 +184,29 @@ class JdbcIntegrationTest {
     }
 
     @Test
+    void reseatingAnOccupiedTableKeepsWhenTheGuestsSatDown() throws Exception {
+        assertTrue(tables.updateStatus(9, TableStatus.AVAILABLE, 0));
+        assertTrue(tables.updateStatus(9, TableStatus.OCCUPIED, 2));
+        try (Connection conn = JdbcDatabase.getConnection();
+             Statement st = conn.createStatement()) {
+            st.executeUpdate("UPDATE tables SET occupied_since = now() - interval '40 minutes' WHERE id = 9");
+        }
+        Instant seatedAt = tables.findById(9).orElseThrow().getOccupiedSince();
+
+        // A second paid order (or a guest-count change) on the same party must not restart the clock.
+        assertTrue(tables.updateStatus(9, TableStatus.OCCUPIED, 3));
+        assertEquals(seatedAt, tables.findById(9).orElseThrow().getOccupiedSince());
+        assertEquals(3, tables.findById(9).orElseThrow().getGuestCount());
+
+        assertTrue(tables.updateStatus(9, TableStatus.CLEANING, 0));
+        assertNull(tables.findById(9).orElseThrow().getOccupiedSince());
+        assertTrue(tables.updateStatus(9, TableStatus.OCCUPIED, 1));
+        Instant nextParty = tables.findById(9).orElseThrow().getOccupiedSince();
+        assertNotNull(nextParty);
+        assertTrue(nextParty.isAfter(seatedAt), "a new party starts a new clock");
+    }
+
+    @Test
     void userAccountsRoundTripAndStayUnique() {
         JdbcUserDao users = new JdbcUserDao();
         UserAccount staff = new UserAccount(null, "Barista@DalatCafe.vn", "Barista", UserRole.STAFF);
@@ -205,6 +231,109 @@ class JdbcIntegrationTest {
         sameGoogle.setGoogleSubject("google-42");
         assertFalse(users.save(sameGoogle), "Google ids are unique");
         assertTrue(users.findAll().size() >= 1);
+    }
+
+    @Test
+    void concurrentEarnAndRedeemOnOneMemberKeepEveryChange() throws Exception {
+        JdbcCustomerDao customers = new JdbcCustomerDao();
+        int workers = JdbcDatabase.POOL_SIZE / 2;
+        int rounds = 50;
+        Customer member = new Customer(null, "Khach dong thoi", "0988000111", null);
+        assertTrue(customers.save(member));
+        int id = member.getId();
+        int opening = workers * rounds;
+        assertTrue(customers.addOrderRecord(id, 0, opening));
+
+        List<Runnable> tasks = new ArrayList<>();
+        for (int w = 0; w < workers; w++) {
+            tasks.add(() -> {
+                for (int i = 0; i < rounds; i++) {
+                    assertTrue(customers.addOrderRecord(id, 1_000, 1));
+                }
+            });
+            tasks.add(() -> {
+                for (int i = 0; i < rounds; i++) {
+                    assertTrue(customers.redeemPoints(id, 1));
+                }
+            });
+        }
+        Concurrently.run(tasks);
+
+        Customer after = customers.findById(id).orElseThrow();
+        assertEquals(opening, after.getLoyaltyPoints(), "every earned and redeemed point is counted");
+        assertEquals(1 + workers * rounds, after.getTotalOrders());
+        assertEquals(workers * rounds * 1_000.0, after.getTotalSpent());
+    }
+
+    @Test
+    void stockIsNeverDeductedBelowWhatIsLeft() throws Exception {
+        MenuItem item = new MenuItem(null, "Ca phe trung", "Coffee", 45_000, 15_000, 10);
+        assertTrue(menu.save(item));
+        int id = item.getId();
+
+        assertFalse(menu.deductStockIfAvailable(id, 11));
+        assertEquals(10.0, menu.findById(id).orElseThrow().getStockQty());
+        assertFalse(menu.deductStockIfAvailable(id, 0));
+        assertFalse(menu.deductStockIfAvailable(999_999, 1), "unknown item");
+        assertTrue(menu.deductStockIfAvailable(id, 10));
+        assertFalse(menu.deductStockIfAvailable(id, 1));
+
+        int stock = 60;
+        assertTrue(menu.updateStock(id, stock));
+        java.util.concurrent.atomic.AtomicInteger sold = new java.util.concurrent.atomic.AtomicInteger();
+        List<Runnable> tasks = new ArrayList<>();
+        for (int w = 0; w < JdbcDatabase.POOL_SIZE / 2; w++) {
+            tasks.add(() -> {
+                for (int i = 0; i < 20; i++) {
+                    if (menu.deductStockIfAvailable(id, 1)) {
+                        sold.incrementAndGet();
+                    }
+                }
+            });
+        }
+        Concurrently.run(tasks);
+
+        assertEquals(stock, sold.get(), "exactly the stock on hand is sold");
+        assertEquals(0.0, menu.findById(id).orElseThrow().getStockQty());
+    }
+
+    @Test
+    void redeemingMoreThanTheBalanceChangesNothing() {
+        JdbcCustomerDao customers = new JdbcCustomerDao();
+        Customer member = new Customer(null, "Khach it diem", "0988000222", null);
+        assertTrue(customers.save(member));
+        assertTrue(customers.addOrderRecord(member.getId(), 600_000, 10));
+
+        assertFalse(customers.redeemPoints(member.getId(), 11));
+        assertFalse(customers.redeemPoints(member.getId(), 0));
+        assertFalse(customers.redeemPoints(999_999, 1), "unknown member");
+        assertFalse(customers.addOrderRecord(999_999, 1_000, 1), "unknown member");
+
+        Customer after = customers.findById(member.getId()).orElseThrow();
+        assertEquals(10, after.getLoyaltyPoints());
+        assertEquals(1, after.getTotalOrders());
+        assertEquals(CustomerRank.SILVER, after.getRank(), "rank follows lifetime spend");
+        assertTrue(customers.redeemPoints(member.getId(), 10));
+        assertEquals(0, customers.findById(member.getId()).orElseThrow().getLoyaltyPoints());
+    }
+
+    @Test
+    void restoringPointsGivesThemBackWithoutCountingAVisit() {
+        JdbcCustomerDao customers = new JdbcCustomerDao();
+        Customer member = new Customer(null, "Khach hoan diem", "0988000444", null);
+        assertTrue(customers.save(member));
+        assertTrue(customers.addOrderRecord(member.getId(), 600_000, 30));
+        assertTrue(customers.redeemPoints(member.getId(), 30));
+
+        assertTrue(customers.restorePoints(member.getId(), 12));
+        assertFalse(customers.restorePoints(member.getId(), 0));
+        assertFalse(customers.restorePoints(999_999, 1), "unknown member");
+
+        Customer after = customers.findById(member.getId()).orElseThrow();
+        assertEquals(12, after.getLoyaltyPoints());
+        assertEquals(1, after.getTotalOrders());
+        assertEquals(600_000.0, after.getTotalSpent());
+        assertEquals(CustomerRank.SILVER, after.getRank());
     }
 
     @Test

@@ -43,7 +43,7 @@ Cột *Frontend* là `frontend-nextjs/`, cột *Java* là `backend-java/`. Cột
 | Mã | Tính năng | Pattern | Frontend | Java | Tích hợp |
 | :--- | :--- | :---: | :---: | :---: | :---: |
 | `FEAT-POS-01` | Lên đơn nhanh, chọn bàn hoặc mang đi | **Builder** | 🟢 `pos-terminal.tsx` | 🟢 `OrderBuilder` | 🟢 |
-| `FEAT-POS-02` | Nhập tiền khách đưa, tính tiền thừa | — | 🟢 `pos-terminal.tsx` | 🟢 `changeDue` | ⚪ |
+| `FEAT-POS-02` | Nhập tiền khách đưa, tính tiền thừa | — | 🟢 `pos-terminal.tsx` | 🟢 `changeDue` | 🟢 gửi `tenderedAmount` (tuỳ chọn) |
 | `FEAT-POS-03` | VAT 8% trên phần sau giảm giá | — | 🟢 `lib/admin/format.ts` | 🟢 `Order.recalculateTotals` | 🟢 |
 | `FEAT-POS-04` | Tra cứu thành viên & đổi điểm trừ vào hoá đơn | **Singleton, Strategy** | 🟢 `pos-terminal.tsx` + `lookupMember` | 🟢 `PointRedemptionDiscountStrategy`, `GET /api/customers` | 🟢 gửi `customerPhone`, `useLoyaltyPoints` |
 | `FEAT-POS-05` | Chốt đơn & thanh toán đa kênh (Tiền mặt / QR / Thẻ) | **Facade, Factory** | 🟢 `createOrder` | 🟢 `POST /api/checkout` | 🟢 Chỉ đơn đã thanh toán |

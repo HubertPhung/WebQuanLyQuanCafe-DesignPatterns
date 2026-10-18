@@ -175,6 +175,41 @@ class AuthTest {
     }
 
     @Test
+    void passwordsWithSurroundingSpacesWorkExactlyAsTyped() throws Exception {
+        assertEquals(201, call("POST", "/api/auth/register", null,
+                "{\"email\":\"space@example.com\",\"name\":\"Space\",\"password\":\" Coffee2026 \"}").statusCode());
+        String token = login("space@example.com", " Coffee2026 ");
+        assertEquals(401, call("POST", "/api/auth/login", null,
+                "{\"email\":\"space@example.com\",\"password\":\"Coffee2026\"}").statusCode(), "the trimmed password is a different one");
+
+        assertEquals(200, call("POST", "/api/auth/password", token,
+                "{\"currentPassword\":\" Coffee2026 \",\"newPassword\":\"Latte2026 \"}").statusCode());
+        login("space@example.com", "Latte2026 ");
+    }
+
+    @Test
+    void lookalikePathsDoNotSkipTheRoleCheck() throws Exception {
+        String admin = login(ADMIN_EMAIL, ADMIN_PASSWORD);
+        createUser(admin, "barista@dalatcafe.vn", "staff");
+        String staff = login("barista@dalatcafe.vn", "Staff1234");
+
+        // HttpServer hands "/api/usersX" to the "/api/users" handler; the filter must not let it through.
+        assertEquals(404, call("GET", "/api/usersX", staff, null).statusCode());
+        assertEquals(404, call("POST", "/api/usersX", staff,
+                "{\"email\":\"evil@dalatcafe.vn\",\"name\":\"Evil\",\"password\":\"Staff1234\",\"role\":\"admin\"}").statusCode());
+        assertEquals(401, call("POST", "/api/auth/login", null,
+                "{\"email\":\"evil@dalatcafe.vn\",\"password\":\"Staff1234\"}").statusCode(), "no admin was created");
+        assertEquals(404, call("PUT", "/api/configX", staff, "{\"maxReservationGuests\":5}").statusCode());
+        assertEquals(404, call("POST", "/api/menuX", staff,
+                "{\"name\":\"Lookalike\",\"category\":\"coffee\",\"price\":10000}").statusCode());
+        assertEquals(404, call("POST", "/api/reservationsX", null, "{}").statusCode());
+        // The real paths, with or without a trailing slash, keep their rules.
+        assertEquals(403, call("PUT", "/api/config/", staff, "{\"maxReservationGuests\":5}").statusCode());
+        assertEquals(200, call("GET", "/api/users/", admin, null).statusCode());
+        assertEquals(200, call("GET", "/api/menu", null, null).statusCode());
+    }
+
+    @Test
     void lastAdminCannotBeDemotedOrDisabled() throws Exception {
         String admin = login(ADMIN_EMAIL, ADMIN_PASSWORD);
         int adminId = ((Number) data(call("GET", "/api/auth/me", admin, null)).get("id")).intValue();
@@ -187,6 +222,37 @@ class AuthTest {
         assertEquals(409, call("PATCH", "/api/users/" + adminId, admin, "{\"role\":\"manager\"}").statusCode());
         assertEquals(200, call("PATCH", "/api/users/" + adminId, other, "{\"role\":\"manager\"}").statusCode());
         assertEquals(409, call("PATCH", "/api/users/" + second, other, "{\"active\":false}").statusCode());
+    }
+
+    @Test
+    void storefrontServiceKeyMayOnlyPlaceAndSyncOrders() throws Exception {
+        String checkout = "{\"lines\":[{\"menuItemId\":1,\"qty\":1}],\"orderType\":\"pickup\",\"paymentMethod\":\"qr\",\"customer\":\"Khach online\"}";
+        assertEquals(401, call("POST", "/api/checkout", null, checkout).statusCode(), "a guest without the key");
+        assertEquals(401, call("POST", "/api/checkout", null, checkout, "X-Service-Key", "guess").statusCode());
+        HttpResponse<String> placed = call("POST", "/api/checkout", null, checkout, "X-Service-Key", SERVICE_KEY);
+        assertEquals(200, placed.statusCode(), placed.body());
+
+        String sync = "{\"orders\":[{\"orderCode\":\"AC-SVC0-001\",\"customer\":\"Khach COD\",\"orderType\":\"pickup\","
+                + "\"paymentMethod\":\"cash\",\"paid\":false,\"status\":\"pending\",\"createdAt\":\"2026-10-18T02:00:00Z\","
+                + "\"total\":48600,\"lines\":[{\"menuItemId\":1,\"name\":\"Ca phe Muoi\",\"qty\":1,\"price\":45000}]}]}";
+        HttpResponse<String> synced = call("POST", "/api/orders/sync", null, sync, "X-Service-Key", SERVICE_KEY);
+        assertEquals(200, synced.statusCode(), synced.body());
+        assertEquals(1, ((Number) data(synced).get("created")).intValue(), synced.body());
+
+        // The key is not a staff login: every other staff endpoint still needs a signed-in account.
+        assertEquals(401, call("GET", "/api/orders", null, null, "X-Service-Key", SERVICE_KEY).statusCode());
+        assertEquals(401, call("PATCH", "/api/orders/AC-SVC0-001/status", null, "{\"status\":\"brewing\"}", "X-Service-Key", SERVICE_KEY).statusCode());
+        assertEquals(401, call("GET", "/api/customers", null, null, "X-Service-Key", SERVICE_KEY).statusCode(),
+                "the key may look up one phone, not list every member");
+        assertEquals(401, call("GET", "/api/customers?phone=", null, null, "X-Service-Key", SERVICE_KEY).statusCode());
+        HttpResponse<String> member = call("GET", "/api/customers?phone=0901234567", null, null, "X-Service-Key", SERVICE_KEY);
+        assertEquals(200, member.statusCode(), "the account page reads the buyer's own points");
+        assertEquals(401, call("GET", "/api/customers/1?phone=0901234567", null, null, "X-Service-Key", SERVICE_KEY).statusCode());
+        // A signed-in customer's own token cannot place a staff checkout, with or without the key.
+        String customer = (String) data(call("POST", "/api/auth/register", null,
+                "{\"email\":\"khach.online@example.com\",\"name\":\"Khach\",\"password\":\"Khach1234\"}")).get("token");
+        assertEquals(403, call("POST", "/api/checkout", customer, checkout).statusCode());
+        assertEquals(403, call("POST", "/api/checkout", customer, checkout, "X-Service-Key", SERVICE_KEY).statusCode());
     }
 
     @Test

@@ -121,15 +121,22 @@ public class JdbcTableDao implements ITableDao {
 
     @Override
     public boolean updateStatus(int id, TableStatus status, int guestCount) {
-        String sql = "UPDATE tables SET status = ?, guest_count = ?, occupied_since = ?, updated_at = ? WHERE id = ?";
+        // A table that is already occupied keeps its seating time, like Table#setStatus does in memory.
+        String sql = """
+            UPDATE tables SET status = ?, guest_count = ?,
+                occupied_since = CASE WHEN ? THEN COALESCE(occupied_since, ?) END,
+                updated_at = ?
+            WHERE id = ?
+        """;
         try (Connection conn = JdbcDatabase.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
+            Timestamp now = Timestamp.from(Instant.now());
             ps.setString(1, status != null ? status.name() : TableStatus.AVAILABLE.name());
             ps.setInt(2, guestCount);
-            Timestamp occupiedSince = (status == TableStatus.OCCUPIED) ? Timestamp.from(Instant.now()) : null;
-            ps.setTimestamp(3, occupiedSince);
-            ps.setTimestamp(4, Timestamp.from(Instant.now()));
-            ps.setInt(5, id);
+            ps.setBoolean(3, status == TableStatus.OCCUPIED);
+            ps.setTimestamp(4, now);
+            ps.setTimestamp(5, now);
+            ps.setInt(6, id);
             return ps.executeUpdate() > 0;
         } catch (SQLException e) {
             LOGGER.log(Level.SEVERE, "Error updateStatus table via JDBC: " + e.getMessage(), e);

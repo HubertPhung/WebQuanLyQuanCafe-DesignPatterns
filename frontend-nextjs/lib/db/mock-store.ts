@@ -1,5 +1,13 @@
 import type { FloorTable, MenuItem, Order, OrderStatus, TableStatus, Variation, OrderItem, PaymentMethod, OrderType } from './schema'
 import { customizationSurcharge, describeCustomizations, type PosCustomization } from '../admin/customizations'
+import {
+  DEFAULT_CLOSING_TIME,
+  DEFAULT_MAX_RESERVATION_GUESTS,
+  DEFAULT_OPENING_TIME,
+  hasReservationTimePassed,
+  isWithinDefaultOperatingHours,
+  reservationSlotsOverlap,
+} from '../reservation-rules'
 
 const TAX_RATE = 0.08
 
@@ -743,6 +751,15 @@ export function setMockItemInStock(itemId: number, inStock: boolean): { ok: bool
   return { ok: true }
 }
 
+// Stock received (positive) or written off (negative); never below zero.
+export function changeMockStock(itemId: number, change: number): { ok: boolean; error?: string } {
+  const item = getStore().menuItems.find((m) => m.id === itemId)
+  if (!item) return { ok: false, error: 'Item not found.' }
+  if (item.stockQty + change < 0) return { ok: false, error: `Only ${item.stockQty} ${item.unit} of ${item.name} left.` }
+  item.stockQty = Math.round((item.stockQty + change) * 100) / 100
+  return { ok: true }
+}
+
 export type NewMockOrderInput = {
   lines: { menuItemId: number; qty: number; variation?: string; customizations?: PosCustomization[] }[]
   customer: string
@@ -754,6 +771,35 @@ export type NewMockOrderInput = {
   orderCode?: string
   // Set when the Java backend priced the order (member discount, redeemed points).
   totals?: { subtotal: number; total: number }
+  // Cash the customer handed over; optional, but when given a paid cash order must be covered.
+  tenderedAmount?: number
+  // Set when Java already sold the order from its own stock: the local copy follows, even if short.
+  javaSold?: boolean
+}
+
+// Lines of one item are added up, so two lines cannot each take the last unit.
+export function shortStockError(
+  menu: Pick<MenuItem, 'id' | 'name' | 'unit' | 'stockQty'>[],
+  quantities: Map<number, number>,
+): string | null {
+  for (const item of menu) {
+    const wanted = quantities.get(item.id) ?? 0
+    if (wanted > item.stockQty) return `Only ${Math.max(0, item.stockQty)} ${item.unit} of ${item.name} left.`
+  }
+  return null
+}
+
+export function quantitiesOf(lines: NewMockOrderInput['lines']) {
+  const quantities = new Map<number, number>()
+  for (const line of lines) quantities.set(line.menuItemId, (quantities.get(line.menuItemId) ?? 0) + line.qty)
+  return quantities
+}
+
+// The local stand-in for the Java Facade rule: cash tendered below the total is refused.
+export function cashTenderError(input: Pick<NewMockOrderInput, 'paid' | 'paymentMethod' | 'tenderedAmount'>, total: number): string | null {
+  if (!input.paid || input.paymentMethod !== 'cash' || input.tenderedAmount === undefined) return null
+  if (input.tenderedAmount >= total) return null
+  return `Cash tendered ${input.tenderedAmount.toLocaleString('vi-VN')} đ does not cover the total ${total.toLocaleString('vi-VN')} đ.`
 }
 
 export function createMockOrder(input: NewMockOrderInput): { ok: boolean; message?: string; error?: string } {
@@ -761,6 +807,7 @@ export function createMockOrder(input: NewMockOrderInput): { ok: boolean; messag
   const byId = new Map(store.menuItems.map((item) => [item.id, item]))
 
   const items: OrderItem[] = []
+  const sold: { item: MenuItem; qty: number }[] = []
   for (const line of input.lines) {
     const item = byId.get(line.menuItemId)
     if (!item || item.kind !== 'menu' || !item.inStock) {
@@ -774,12 +821,17 @@ export function createMockOrder(input: NewMockOrderInput): { ok: boolean; messag
       price: item.sellPrice + (variation?.price ?? 0) + customizationSurcharge(customizations),
       variation: [variation?.name, describeCustomizations(customizations)].filter(Boolean).join(' · ') || undefined,
     })
-    // Deduct stock
-    item.stockQty = Math.max(0, item.stockQty - line.qty)
+    sold.push({ item, qty: line.qty })
   }
 
   const subtotal = input.totals?.subtotal ?? Math.round(items.reduce((s, it) => s + it.price * it.qty, 0) * 100) / 100
   const total = input.totals?.total ?? Math.round(subtotal * (1 + TAX_RATE) * 100) / 100
+  const tenderError = cashTenderError(input, total)
+  if (tenderError) return { ok: false, error: tenderError }
+  const shortStock = input.javaSold ? null : shortStockError([...new Set(sold.map(({ item }) => item))], quantitiesOf(input.lines))
+  if (shortStock) return { ok: false, error: shortStock }
+  // Stock is deducted only once the order is sure to be recorded.
+  for (const { item, qty } of sold) item.stockQty = Math.max(0, item.stockQty - qty)
   const nextId = store.orders.reduce((max, o) => Math.max(max, o.id), 0) + 1
 
   const newOrder: Order = {
@@ -816,13 +868,25 @@ export type NewMockReservationInput = Omit<MockReservation, 'code' | 'status' | 
   tableId: number
 }
 
-// Local stand-in for POST /api/reservations while the Java backend is offline.
-// Only the checks that need no backend state run here; the full Chain of Responsibility lives in Java.
+// Local stand-in for POST /api/reservations while the Java backend is offline. It repeats the Java
+// Chain of Responsibility (time, opening hours, guests, table availability) with the Java defaults,
+// so a booking stored here would also pass Java.
 export function createMockReservation(input: NewMockReservationInput): { ok: boolean; code?: string; error?: string } {
   const store = getStore()
+  if (hasReservationTimePassed(input.dateTime)) return { ok: false, error: 'Không thể đặt bàn cho thời điểm đã qua.' }
+  if (!isWithinDefaultOperatingHours(input.dateTime)) {
+    return { ok: false, error: `Quán chỉ nhận đặt bàn trong giờ mở cửa (${DEFAULT_OPENING_TIME} - ${DEFAULT_CLOSING_TIME}).` }
+  }
+  if (input.guests > DEFAULT_MAX_RESERVATION_GUESTS) {
+    return { ok: false, error: `Mỗi phiếu nhận tối đa ${DEFAULT_MAX_RESERVATION_GUESTS} khách.` }
+  }
   const table = store.tables.find((t) => t.id === input.tableId)
   if (!table) return { ok: false, error: 'Table not found.' }
   if (input.guests > table.seats) return { ok: false, error: `${table.name} seats at most ${table.seats} guests.` }
+  const taken = store.reservations.some(
+    (r) => r.tableId === input.tableId && r.status !== 'Đã hủy' && reservationSlotsOverlap(r.dateTime, input.dateTime),
+  )
+  if (taken) return { ok: false, error: 'Bàn đã được đặt trong khung giờ này.' }
 
   const localCount = store.reservations.filter((r) => r.code.startsWith('RES-L')).length
   // The L marks a local booking so it is never mistaken for a backend-issued RES-0001.

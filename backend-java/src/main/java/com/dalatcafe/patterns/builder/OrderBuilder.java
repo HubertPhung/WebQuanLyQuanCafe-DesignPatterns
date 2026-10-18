@@ -12,8 +12,11 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Predicate;
 
 public class OrderBuilder {
+    private static final int CODE_ATTEMPTS = 10;
+
     private String customerName = "Walk-in";
     private Integer tableId;
     private OrderType orderType = OrderType.DINE_IN;
@@ -22,6 +25,7 @@ public class OrderBuilder {
     private PaymentMethod paymentMethod = PaymentMethod.CASH;
     private PaymentStatus paymentStatus = PaymentStatus.UNPAID;
     private double discountAmount;
+    private Predicate<String> codeTaken = code -> false;
 
     public OrderBuilder forCustomer(String customerName) {
         this.customerName = customerName == null || customerName.isBlank() ? "Walk-in" : customerName.trim();
@@ -42,6 +46,11 @@ public class OrderBuilder {
     }
 
     public OrderBuilder addItem(IBeverage beverage, int quantity) {
+        return addItem(null, beverage, quantity);
+    }
+
+    /** Keeps the menu item behind the drink, so stock and sales can be traced back to it. */
+    public OrderBuilder addItem(Integer menuItemId, IBeverage beverage, int quantity) {
         Objects.requireNonNull(beverage, "Beverage must not be null");
         if (quantity <= 0) {
             throw new IllegalArgumentException("Quantity must be greater than zero");
@@ -50,7 +59,7 @@ public class OrderBuilder {
         if (!Double.isFinite(cost) || cost < 0) {
             throw new IllegalArgumentException("Beverage cost must be a non-negative finite value");
         }
-        items.add(new OrderItem(beverage.getDescription(), quantity, cost));
+        items.add(new OrderItem(menuItemId, beverage.getDescription(), quantity, cost, null, null));
         return this;
     }
 
@@ -73,18 +82,34 @@ public class OrderBuilder {
         return this;
     }
 
+    /** The short random code can repeat, so build() draws again while the store already holds it. */
+    public OrderBuilder avoidingCodes(Predicate<String> codeTaken) {
+        this.codeTaken = Objects.requireNonNull(codeTaken, "Code check must not be null");
+        return this;
+    }
+
     public Order build() {
         if (items.isEmpty()) {
             throw new IllegalStateException("Order must contain at least one item");
         }
 
-        Order order = new Order(null, generateOrderCode(), customerName, tableId, orderType);
+        Order order = new Order(null, uniqueOrderCode(), customerName, tableId, orderType);
         order.setItems(items);
         order.setNote(note);
         order.setPaymentMethod(paymentMethod);
         order.setPaymentStatus(paymentStatus);
         order.setDiscountAmount(discountAmount);
         return order;
+    }
+
+    private String uniqueOrderCode() {
+        for (int attempt = 0; attempt < CODE_ATTEMPTS; attempt++) {
+            String code = generateOrderCode();
+            if (!codeTaken.test(code)) {
+                return code;
+            }
+        }
+        throw new IllegalStateException("Could not find a free order code after " + CODE_ATTEMPTS + " attempts");
     }
 
     private String generateOrderCode() {

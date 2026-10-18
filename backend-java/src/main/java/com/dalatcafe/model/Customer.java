@@ -68,6 +68,15 @@ public class Customer implements Serializable {
         return false;
     }
 
+    /** Gives back points redeemed earlier; unlike {@link #addOrderRecord} it records no visit. */
+    public boolean restorePoints(int points) {
+        if (points > 0) {
+            this.loyaltyPoints += points;
+            return true;
+        }
+        return false;
+    }
+
     public Integer getId() {
         return id;
     }
@@ -141,17 +150,18 @@ public class Customer implements Serializable {
         this.lastVisit = lastVisit;
     }
 
+    /** Keyed on phone alone (unique in `customers.phone`) so equals and hashCode agree; without one, only itself. */
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         Customer customer = (Customer) o;
-        return Objects.equals(id, customer.id) || Objects.equals(phone, customer.phone);
+        return phone != null && phone.equals(customer.phone);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(id, phone);
+        return Objects.hashCode(phone);
     }
 
     @Override

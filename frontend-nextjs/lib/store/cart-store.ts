@@ -16,6 +16,13 @@ export const formatMoneyVND = (m?: Money | { amount: string; currencyCode?: stri
   return `${val.toLocaleString('vi-VN')} đ`
 }
 
+// Ordering needs an account; the guest comes back to the menu after signing in.
+export function redirectToSignIn() {
+  toast.info('Vui lòng đăng nhập để đặt món.')
+  const back = `${window.location.pathname}${window.location.search}#menu`
+  window.location.assign(`/login?next=${encodeURIComponent(back)}`)
+}
+
 export interface CartStoreState {
   cart: Cart | null
   isOpen: boolean
@@ -73,6 +80,10 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
         }),
       })
       const data = await res.json()
+      if (res.status === 401 && data.loginRequired) {
+        redirectToSignIn()
+        return false
+      }
       if (!res.ok) throw new Error(data.error || 'Không thể thêm món vào giỏ hàng')
       set({ cart: data, isOpen: true })
       toast.success(`Đã thêm "${product.title}" vào túi cà phê!`)

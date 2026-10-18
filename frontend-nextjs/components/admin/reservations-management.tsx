@@ -38,10 +38,12 @@ export function ReservationsManagement({
   reservations: initial,
   tables,
   javaOnline,
+  maxGuests,
 }: {
   reservations: ReservationView[]
   tables: FloorTable[]
   javaOnline: boolean
+  maxGuests: number
 }) {
   const router = useRouter()
   const [reservations, setReservations] = useState<Reservation[]>(initial)
@@ -246,9 +248,9 @@ export function ReservationsManagement({
                         {r.source === 'java' ? '· Java' : '· Cục bộ'}
                       </span>
                     </span>
-                    <strong className="font-bold text-stone-900 text-sm">{r.customer}</strong>
+                    <strong className="block font-bold text-stone-900 text-sm leading-snug">{r.customer}</strong>
                     {r.preOrders.length > 0 && (
-                      <span className="inline-flex items-center gap-1 text-[10px] text-amber-800 font-semibold mt-0.5">
+                      <span className="flex items-center gap-1 text-[10px] text-amber-800 font-semibold mt-0.5">
                         <UtensilsCrossed className="size-3" /> {r.preOrders.length} món đặt trước
                       </span>
                     )}
@@ -455,7 +457,7 @@ export function ReservationsManagement({
             </label>
             <label className="space-y-1">
               <span className="font-semibold text-stone-600">Số khách</span>
-              <input required type="number" min={1} max={20} aria-label="Số khách" value={form.guests} onChange={(e) => setForm({ ...form, guests: e.target.value })} className="w-full h-9 rounded-lg border border-stone-200 px-2.5 tabular-nums focus:outline-none focus:border-[#5A3E2B]" />
+              <input required type="number" min={1} max={maxGuests} aria-label="Số khách" value={form.guests} onChange={(e) => setForm({ ...form, guests: e.target.value })} className="w-full h-9 rounded-lg border border-stone-200 px-2.5 tabular-nums focus:outline-none focus:border-[#5A3E2B]" />
             </label>
             <label className="col-span-2 space-y-1">
               <span className="font-semibold text-stone-600">Ghi chú</span>

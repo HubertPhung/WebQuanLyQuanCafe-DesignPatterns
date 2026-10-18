@@ -110,27 +110,20 @@ public class OrderHandler extends ApiHandler {
     private void updateStatus(HttpExchange exchange, String code) throws IOException {
         Map<String, Object> body = readJsonBody(exchange);
         OrderStatus target = parseStatus(requireStr(body, "status"));
-        Order order = find(code);
-        OrderStatus current = order.getStatus();
-        if (current == target) {
+        Order order;
+        boolean changed;
+        // Same lock as pay(): a cancel read before a payment must not write the order back unpaid.
+        synchronized (this) {
+            order = find(code);
+            changed = order.getStatus() != target;
+            if (changed) {
+                applyStatus(order, code, target);
+            }
+        }
+        if (!changed) {
             sendOk(exchange, 200, toJson(order), "Order " + code + " is already " + label(target));
             return;
         }
-        if (current == OrderStatus.COMPLETED || current == OrderStatus.CANCELLED) {
-            throw conflict("Order " + code + " is closed (" + label(current) + ")");
-        }
-        if (target != OrderStatus.CANCELLED && FLOW.indexOf(target) < FLOW.indexOf(current)) {
-            throw conflict("Order " + code + " cannot go back from " + label(current) + " to " + label(target));
-        }
-        if (target == OrderStatus.COMPLETED && order.getPaymentStatus() != PaymentStatus.PAID) {
-            throw conflict("Order " + code + " must be paid before it is completed");
-        }
-
-        order.setStatus(target);
-        if (target == OrderStatus.CANCELLED && order.getPaymentStatus() == PaymentStatus.PAID) {
-            order.setPaymentStatus(PaymentStatus.REFUNDED);
-        }
-        save(order);
 
         List<String> warnings = new ArrayList<>();
         if (target == OrderStatus.COMPLETED) {
@@ -146,6 +139,25 @@ public class OrderHandler extends ApiHandler {
         sendOk(exchange, 200, data, "Order " + code + " is now " + label(target));
     }
 
+    private void applyStatus(Order order, String code, OrderStatus target) {
+        OrderStatus current = order.getStatus();
+        if (current == OrderStatus.COMPLETED || current == OrderStatus.CANCELLED) {
+            throw conflict("Order " + code + " is closed (" + label(current) + ")");
+        }
+        if (target != OrderStatus.CANCELLED && FLOW.indexOf(target) < FLOW.indexOf(current)) {
+            throw conflict("Order " + code + " cannot go back from " + label(current) + " to " + label(target));
+        }
+        if (target == OrderStatus.COMPLETED && order.getPaymentStatus() != PaymentStatus.PAID) {
+            throw conflict("Order " + code + " must be paid before it is completed");
+        }
+
+        order.setStatus(target);
+        if (target == OrderStatus.CANCELLED && order.getPaymentStatus() == PaymentStatus.PAID) {
+            order.setPaymentStatus(PaymentStatus.REFUNDED);
+        }
+        save(order);
+    }
+
     private void pay(HttpExchange exchange, String code) throws IOException {
         Map<String, Object> body = readJsonBody(exchange);
         if (!databaseHealthy.getAsBoolean()) {
@@ -157,7 +169,9 @@ public class OrderHandler extends ApiHandler {
 
         Order order;
         PaymentResult payment;
-        // One payment per order even when two cashiers press "pay" at once.
+        List<String> warnings = new ArrayList<>();
+        // One payment per order even when two cashiers press "pay" at once. The paid event is sent
+        // under the same lock, so a cancel or completion cannot slip in before its side effects.
         synchronized (this) {
             order = find(code);
             if (order.getPaymentStatus() == PaymentStatus.PAID) {
@@ -180,18 +194,17 @@ public class OrderHandler extends ApiHandler {
             order.setPaymentMethod(method);
             order.setPaymentStatus(PaymentStatus.PAID);
             save(order);
-        }
 
-        List<String> warnings = new ArrayList<>();
-        try {
-            eventSubject.notifyOrderPaid(order);
-            if (customer != null) {
-                // Per-request observer called directly: the shared subject stays untouched.
-                new LoyaltyPointObserver(customerDao, customer.getId()).onOrderPaid(order);
+            try {
+                eventSubject.notifyOrderPaid(order);
+                if (customer != null) {
+                    // Per-request observer called directly: the shared subject stays untouched.
+                    new LoyaltyPointObserver(customerDao, customer.getId()).onOrderPaid(order);
+                }
+            } catch (RuntimeException e) {
+                LOGGER.log(Level.WARNING, "Order paid observer failed: " + e.getMessage(), e);
+                warnings.add("Order event observer failed: " + e.getMessage());
             }
-        } catch (RuntimeException e) {
-            LOGGER.log(Level.WARNING, "Order paid observer failed: " + e.getMessage(), e);
-            warnings.add("Order event observer failed: " + e.getMessage());
         }
         Map<String, Object> data = toJson(order);
         data.put("transactionId", payment.getTransactionId());
@@ -267,13 +280,9 @@ public class OrderHandler extends ApiHandler {
                 orderType(str(input, "orderType")));
         order.setPaymentMethod(paymentMethod(Objects.requireNonNullElse(str(input, "paymentMethod"), "cash")));
         order.setNote(str(input, "note"));
-        String createdAt = str(input, "createdAt");
+        Instant createdAt = instant(input, "createdAt");
         if (createdAt != null) {
-            try {
-                order.setCreatedAt(Instant.parse(createdAt));
-            } catch (DateTimeParseException e) {
-                throw ApiException.badRequest("createdAt must be an ISO-8601 instant");
-            }
+            order.setCreatedAt(createdAt);
         }
 
         List<Object> lines = list(input, "lines");
@@ -305,11 +314,34 @@ public class OrderHandler extends ApiHandler {
 
         order.setPaymentStatus(bool(input, "paid", false) ? PaymentStatus.PAID : PaymentStatus.UNPAID);
         String status = str(input, "status");
-        order.setStatus(status == null ? OrderStatus.PENDING : parseStatus(status));
+        OrderStatus target = status == null ? OrderStatus.PENDING : parseStatus(status);
+        if (target == OrderStatus.COMPLETED) {
+            // Kept as recorded offline; without it setStatus stamps the sync time.
+            Instant completedAt = instant(input, "completedAt");
+            if (completedAt != null && completedAt.isBefore(order.getCreatedAt())) {
+                // A skewed clock must not leave a sold order stuck in the queue: import it, and say so.
+                warnings.add("Order " + code + " was completed before it was created; completion time set to the creation time");
+                completedAt = order.getCreatedAt();
+            }
+            order.setCompletedAt(completedAt);
+        }
+        order.setStatus(target);
         if (order.getStatus() == OrderStatus.COMPLETED && order.getPaymentStatus() != PaymentStatus.PAID) {
             throw ApiException.badRequest("Order " + code + " is completed but not paid");
         }
         return order;
+    }
+
+    private static Instant instant(Map<String, Object> input, String key) {
+        String raw = str(input, key);
+        if (raw == null) {
+            return null;
+        }
+        try {
+            return Instant.parse(raw);
+        } catch (DateTimeParseException e) {
+            throw ApiException.badRequest(key + " must be an ISO-8601 instant");
+        }
     }
 
     /** The sale already happened offline, so stock is taken even when it goes below what is left. */

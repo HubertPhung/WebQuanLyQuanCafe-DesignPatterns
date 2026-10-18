@@ -8,6 +8,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Predicate;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -158,22 +159,57 @@ public class JdbcCustomerDao implements ICustomerDao {
 
     @Override
     public boolean addOrderRecord(int id, double orderAmount, int earnedPoints) {
-        Optional<Customer> opt = findById(id);
-        if (opt.isEmpty()) return false;
-        Customer c = opt.get();
-        c.addOrderRecord(orderAmount, earnedPoints);
-        return save(c);
+        return changeLocked(id, c -> {
+            c.addOrderRecord(orderAmount, earnedPoints);
+            return true;
+        });
     }
 
     @Override
     public boolean redeemPoints(int id, int points) {
-        Optional<Customer> opt = findById(id);
-        if (opt.isEmpty()) return false;
-        Customer c = opt.get();
-        if (c.redeemPoints(points)) {
-            return save(c);
+        return changeLocked(id, c -> c.redeemPoints(points));
+    }
+
+    @Override
+    public boolean restorePoints(int id, int points) {
+        return changeLocked(id, c -> c.restorePoints(points));
+    }
+
+    /**
+     * Applies a points or spend change while the row is locked, so a checkout redeeming points and a
+     * payment earning them cannot read the same balance and overwrite each other's result.
+     * Only the counters are written back; profile edits made meanwhile are kept.
+     */
+    private boolean changeLocked(int id, Predicate<Customer> change) {
+        String select = "SELECT id, name, phone, email, total_orders, total_spent, loyalty_points, rank, last_visit FROM customers WHERE id = ? FOR UPDATE";
+        String update = "UPDATE customers SET total_orders = ?, total_spent = ?, loyalty_points = ?, rank = ?, last_visit = ? WHERE id = ?";
+        try (Connection conn = JdbcDatabase.getConnection()) {
+            conn.setAutoCommit(false);
+            Customer c;
+            try (PreparedStatement ps = conn.prepareStatement(select)) {
+                ps.setInt(1, id);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (!rs.next()) return false;
+                    c = mapResultSetToCustomer(rs);
+                }
+            }
+            // Returning without commit rolls back and releases the lock when the connection goes back to the pool.
+            if (!change.test(c)) return false;
+            try (PreparedStatement ps = conn.prepareStatement(update)) {
+                ps.setInt(1, c.getTotalOrders());
+                ps.setDouble(2, c.getTotalSpent());
+                ps.setInt(3, c.getLoyaltyPoints());
+                ps.setString(4, c.getRank() != null ? c.getRank().name() : CustomerRank.BRONZE.name());
+                ps.setTimestamp(5, Timestamp.from(c.getLastVisit() != null ? c.getLastVisit() : Instant.now()));
+                ps.setInt(6, id);
+                ps.executeUpdate();
+            }
+            conn.commit();
+            return true;
+        } catch (SQLException e) {
+            LOGGER.log(Level.SEVERE, "Error updating customer points via JDBC: " + e.getMessage(), e);
+            return false;
         }
-        return false;
     }
 
     @Override

@@ -1,9 +1,11 @@
 package com.dalatcafe.patterns;
 
 import com.dalatcafe.dao.ICustomerDao;
+import com.dalatcafe.dao.IOrderDao;
 import com.dalatcafe.dao.ITableDao;
 import com.dalatcafe.dao.InMemoryCustomerDao;
 import com.dalatcafe.dao.InMemoryDatabase;
+import com.dalatcafe.dao.InMemoryOrderDao;
 import com.dalatcafe.dao.InMemoryTableDao;
 import com.dalatcafe.model.Customer;
 import com.dalatcafe.model.MenuItem;
@@ -144,6 +146,35 @@ class ObserverTest {
     }
 
     @Test
+    void completedOrderLeavesTableSeatedWhileAnotherOrderThereIsOpen() {
+        IOrderDao orderDao = new InMemoryOrderDao(InMemoryDatabase.getInstance());
+        Order done = order(true, true);
+        Order stillBrewing = order(true, true);
+        stillBrewing.setStatus(OrderStatus.BREWING);
+        Order cancelled = order(true, true);
+        cancelled.setStatus(OrderStatus.CANCELLED);
+        orderDao.save(done);
+        orderDao.save(stillBrewing);
+        orderDao.save(cancelled);
+        OrderEventSubject subject = new OrderEventSubject();
+        subject.attach(new TableStatusSyncObserver(tableDao, orderDao));
+
+        subject.notifyOrderCompleted(done);
+
+        Table seated = tableDao.findById(table.getId()).orElseThrow();
+        assertEquals(TableStatus.OCCUPIED, seated.getStatus());
+        assertEquals(2, seated.getGuestCount());
+
+        stillBrewing.setStatus(OrderStatus.COMPLETED);
+        orderDao.save(stillBrewing);
+        subject.notifyOrderCompleted(stillBrewing);
+
+        Table cleared = tableDao.findById(table.getId()).orElseThrow();
+        assertEquals(TableStatus.CLEANING, cleared.getStatus());
+        assertEquals(0, cleared.getGuestCount());
+    }
+
+    @Test
     void unknownCustomerFailsLoudly() {
         OrderEventSubject subject = new OrderEventSubject();
         subject.attach(new LoyaltyPointObserver(customerDao, 9_999));
@@ -163,6 +194,28 @@ class ObserverTest {
     }
 
     @Test
+    void failingObserverDoesNotStopTheOthersAndIsStillReported() {
+        Order order = paidOrder();
+        order.setTableId(9_999);
+        List<String> kitchen = new ArrayList<>();
+        OrderEventSubject subject = new OrderEventSubject();
+        subject.attach(new TableStatusSyncObserver(tableDao));
+        subject.attach(IOrderObserver.whenPaid(paid -> {
+            throw new IllegalStateException("second observer down");
+        }));
+        subject.attach(new KitchenNotificationObserver(kitchen::add));
+        subject.attach(new LoyaltyPointObserver(customerDao, customer.getId()));
+
+        IllegalStateException failure = assertThrows(IllegalStateException.class, () -> subject.notifyOrderPaid(order));
+
+        assertTrue(failure.getMessage().contains("9999"), failure.getMessage());
+        assertEquals(1, failure.getSuppressed().length);
+        assertEquals("second observer down", failure.getSuppressed()[0].getMessage());
+        assertEquals(1, kitchen.size());
+        assertEquals(1, customerDao.findById(customer.getId()).orElseThrow().getTotalOrders());
+    }
+
+    @Test
     void rejectsInvalidArguments() {
         OrderEventSubject subject = new OrderEventSubject();
 
@@ -171,6 +224,7 @@ class ObserverTest {
         assertThrows(NullPointerException.class, () -> subject.notifyOrderPaid(null));
         assertThrows(IllegalArgumentException.class, () -> new LoyaltyPointObserver(customerDao, 0));
         assertThrows(NullPointerException.class, () -> new TableStatusSyncObserver(null));
+        assertThrows(NullPointerException.class, () -> new TableStatusSyncObserver(tableDao, null));
     }
 
     @Test

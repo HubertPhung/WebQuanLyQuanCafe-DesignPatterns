@@ -1,18 +1,17 @@
 'use client'
 
 import { useEffect, useState, useTransition } from 'react'
+import { DemoNotice } from '@/components/admin/shared'
 import {
   Armchair,
   CheckCircle2,
   Clock,
   DollarSign,
-  Edit,
   Grid,
   LayoutGrid,
   List,
   MapPin,
   Plus,
-  Trash2,
   Users,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -45,17 +44,21 @@ interface AreaType {
   tableCount: number
 }
 
-const initialAreas: AreaType[] = [
-  { id: 1, name: 'Tầng 1 - Khu A', sub: 'Sảnh chính thoáng mát', tableCount: 4 },
-  { id: 2, name: 'Tầng 1 - Khu B', sub: 'Góc đọc sách yên tĩnh', tableCount: 3 },
-  { id: 3, name: 'Tầng 2 VIP', sub: 'Phòng máy lạnh sofa', tableCount: 2 },
-  { id: 4, name: 'Sân vườn ngoài trời', sub: 'Không gian mở nhiều cây xanh', tableCount: 2 },
-  { id: 5, name: 'Phòng họp riêng', sub: 'Trang bị máy chiếu', tableCount: 1 },
-]
+// Zones are the ones the tables really belong to, with their table and seat counts.
+function areasOf(tables: FloorTable[]): AreaType[] {
+  const zones = new Map<string, { tables: number; seats: number }>()
+  for (const table of tables) {
+    const entry = zones.get(table.zone) ?? { tables: 0, seats: 0 }
+    entry.tables += 1
+    entry.seats += table.seats
+    zones.set(table.zone, entry)
+  }
+  return [...zones].map(([name, count], index) => ({ id: index + 1, name, sub: `${count.seats} chỗ ngồi`, tableCount: count.tables }))
+}
 
 export function FloorPlan({ tables: initialTables, openOrders }: { tables: FloorTable[]; openOrders: Order[] }) {
   const [tables, setTables] = useState<FloorTable[]>(initialTables)
-  const [areas, setAreas] = useState<AreaType[]>(initialAreas)
+  const [areas, setAreas] = useState<AreaType[]>(() => areasOf(initialTables))
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards')
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [pending, startTransition] = useTransition()
@@ -65,7 +68,7 @@ export function FloorPlan({ tables: initialTables, openOrders }: { tables: Floor
   const [isAddAreaOpen, setIsAddAreaOpen] = useState(false)
   const [newTableName, setNewTableName] = useState('Bàn 13')
   const [newTableSeats, setNewTableSeats] = useState('4')
-  const [newTableZone, setNewTableZone] = useState('Tầng 1 - Khu A')
+  const [newTableZone, setNewTableZone] = useState(initialTables[0]?.zone ?? '')
   const [newAreaName, setNewAreaName] = useState('')
   const [newAreaSub, setNewAreaSub] = useState('')
 
@@ -172,8 +175,11 @@ export function FloorPlan({ tables: initialTables, openOrders }: { tables: Floor
             <h3 className="font-bold text-base text-stone-900 flex items-center gap-2">
               <MapPin className="size-4.5 text-[#5A3E2B]" />
               <span>Quản lý sơ đồ khu vực quán</span>
+              <DemoNotice compact />
             </h3>
-            <p className="text-xs text-stone-500">Danh sách phân vùng sảnh, phòng VIP và không gian ngoài trời</p>
+            <p className="text-xs text-stone-500">
+              Danh sách phân vùng sảnh, phòng VIP và không gian ngoài trời. Thêm, sửa, xoá khu vực chưa được lưu.
+            </p>
           </div>
           <Button
             onClick={() => setIsAddAreaOpen(true)}
@@ -192,25 +198,6 @@ export function FloorPlan({ tables: initialTables, openOrders }: { tables: Floor
             >
               <div className="flex items-center justify-between">
                 <span className="size-2 rounded-full bg-[#5A3E2B]" />
-                <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100">
-                  <button
-                    type="button"
-                    onClick={() => toast.info(`Chỉnh sửa khu vực: ${a.name}`)}
-                    className="p-1 hover:text-[#5A3E2B] text-stone-500"
-                  >
-                    <Edit className="size-3" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAreas(areas.filter((x) => x.id !== a.id))
-                      toast.success(`Đã xóa khu vực ${a.name}`)
-                    }}
-                    className="p-1 hover:text-rose-600 text-stone-500"
-                  >
-                    <Trash2 className="size-3" />
-                  </button>
-                </div>
               </div>
               <div>
                 <h4 className="font-bold text-sm text-stone-900">{a.name}</h4>
@@ -262,6 +249,7 @@ export function FloorPlan({ tables: initialTables, openOrders }: { tables: Floor
           >
             <Plus className="size-4 stroke-[2.5]" />
             <span>+ Thêm bàn mới</span>
+            <DemoNotice compact />
           </Button>
         </div>
 

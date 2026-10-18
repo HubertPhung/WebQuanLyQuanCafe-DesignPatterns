@@ -26,8 +26,9 @@ export default function CartPage() {
   const lineItems = cart?.lines?.nodes ?? []
   const subtotal = Number(cart?.cost?.subtotalAmount?.amount ?? '0')
   const isDiscounted = cart?.discountCodes?.some((d) => d.applicable)
-  const discountAmount = isDiscounted ? subtotal * 0.1 : 0
-  const total = Math.max(0, subtotal - discountAmount)
+  // The cart API prices the voucher (with its cap), like checkout and Java.
+  const total = Number(cart?.cost?.totalAmount?.amount ?? subtotal)
+  const discountAmount = Math.max(0, subtotal - total)
 
   const handleApplyPromo = async (e: React.FormEvent) => {
     e.preventDefault()

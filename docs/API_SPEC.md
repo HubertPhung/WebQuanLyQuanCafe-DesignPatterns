@@ -37,7 +37,7 @@ Ngoại lệ: một đường dẫn nằm ngoài các nhóm đã đăng ký (`/a
 | 409 | `RESOURCE_CONFLICT` | Hết hàng, không giữ được tồn kho, trùng tên món, chuyển trạng thái đơn / phiếu không hợp lệ, đơn đã thanh toán |
 | 413 | `INVALID_INPUT` | Body vượt 1 MB |
 | 500 | `INTERNAL_SERVER_ERROR` | Lỗi không mong đợi |
-| 503 | `DATABASE_UNAVAILABLE` | Chế độ JDBC mất kết nối khi checkout hoặc khi thanh toán đơn (`/pay`). Không thu tiền, không ghi đơn. |
+| 503 | `DATABASE_UNAVAILABLE` | Chế độ JDBC mất kết nối khi checkout hoặc khi thanh toán đơn (`/pay`), hoặc không trừ được điểm khách muốn đổi. Không thu tiền, không ghi đơn. |
 
 ### 1.3. Xác thực, phân quyền & CORS
 - **Xác thực:** gửi `Authorization: Bearer <token>`, với token lấy từ `/api/auth/login`, `/api/auth/register` hoặc `/api/auth/google` (mục 3.19). Token là JWT HS256 có `sub` (id tài khoản), `email`, `name`, `role`, `exp` (mặc định 8 giờ), ký bằng `AUTH_JWT_SECRET`. Frontend dùng cùng khoá để kiểm cookie phiên.
@@ -47,6 +47,9 @@ Ngoại lệ: một đường dẫn nằm ngoài các nhóm đã đăng ký (`/a
 - **Chỉ ADMIN:** `/api/users`, `PUT | PATCH /api/config`.
 - **Cần MANAGER hoặc ADMIN:** `POST /api/menu`, `GET /api/analytics/overview`.
 - **Cần STAFF, MANAGER hoặc ADMIN:** mọi endpoint còn lại. `SimpleAuthFilter` từ chối theo mặc định, nên một endpoint mới không bao giờ vô tình thành công khai.
+- Chỉ chính đường dẫn gốc của nhóm và đường dẫn con của nó mới thuộc nhóm đó: `/api/users`, `/api/users/7` là của `/api/users`, còn `/api/usersX` trả 404 `NOT_FOUND`. (`HttpServer` chọn handler theo tiền tố chuỗi, nên nếu không chặn, `/api/usersX` sẽ tới handler tài khoản mà chỉ cần quyền STAFF.)
+- Mật khẩu ở `login` và `currentPassword` ở `/api/auth/password` được so **đúng như đã gõ**, không cắt khoảng trắng, giống lúc đăng ký và đổi mật khẩu.
+- **Đơn online của khách (server tới server):** không có Bearer token, header `X-Service-Key: <AUTH_SERVICE_KEY>` được coi là một caller STAFF, nhưng **chỉ** ở `POST /api/checkout` và `POST /api/orders/sync`. Frontend dùng khoá này khi khách (vãng lai hoặc đã đăng nhập) đặt hàng ở `/checkout`, và khi đó không gửi token của khách. Ở mọi endpoint khác khoá này không có tác dụng (vẫn 401). Java phải chạy với cùng `AUTH_SERVICE_KEY` như frontend.
 - Thiếu token hoặc token sai trả 401 `UNAUTHORIZED`; vai trò không đủ trả 403 `FORBIDDEN`. Header `X-User-Role` tự khai **chỉ** được chấp nhận khi server chạy với `AUTH_ALLOW_ROLE_HEADER=true` (dành cho phát triển và bộ test REST cũ); khi có Bearer token thì token luôn thắng.
 - **CORS:** `Access-Control-Allow-Origin: *`. Cho phép các phương thức GET, POST, PUT, PATCH, DELETE và OPTIONS. Preflight `OPTIONS` trả 204, không cần token.
 
@@ -124,11 +127,12 @@ Danh sách phiếu: `id` (mã `RES-xxxx`), `customer`, `contact`, `email`, `date
 {
   "customer": "Nguyễn Văn An", "contact": "0912345678", "email": "an@example.com",
   "dateTime": "2026-10-20T05:00:00Z", "tableId": 9, "guests": 3, "note": "Sinh nhật",
-  "preOrders": [{ "name": "Cà phê Latte Vani Mịn", "qty": 2, "price": 55000 }]
+  "preOrders": [{ "menuItemId": 2, "qty": 2 }]
 }
 ```
+- Mỗi món đặt trước phải có `menuItemId` của một món trong menu. Tên và giá lấy từ menu tại thời điểm đặt; `name` và `price` do client gửi bị bỏ qua (endpoint công khai). Món không tồn tại hoặc thiếu `menuItemId` trả **400** `INVALID_INPUT`. `menuItemId` được giữ trên đơn POS khi `transfer-pos`.
 - Chỉ định bàn bằng `tableId`, hoặc bằng tên bàn trong trường `table` (ví dụ `"Bàn 09"`). `dateTime` phải là một thời điểm ISO-8601.
-- Phiếu đi qua chuỗi `OperatingHoursValidator` (07:00–22:00 giờ Việt Nam) → `CapacityGuestValidator` (1–20 khách, không vượt số ghế) → `TableAvailabilityValidator` (không giao nhau trong khung 2 giờ trên cùng bàn).
+- Phiếu đi qua chuỗi `OperatingHoursValidator` (giờ đến không sớm hơn hiện tại quá 15 phút, trong 07:00–22:00 giờ Việt Nam) → `CapacityGuestValidator` (1–20 khách, không vượt số ghế) → `TableAvailabilityValidator` (không giao nhau trong khung 2 giờ trên cùng bàn).
 - Hợp lệ trả **201**: `{ "ok": true, "data": { "id": "RES-0010", "status": "Chờ xác nhận" } }`.
 - Không qua chuỗi trả **400** `CHAIN_VALIDATION_FAILED`, thông báo lấy từ mắt xích đầu tiên thất bại.
 
@@ -147,8 +151,9 @@ Danh sách phiếu: `id` (mã `RES-xxxx`), `customer`, `contact`, `email`, `date
 - Mỗi dòng có thể kèm `size` (`S`, `M`, `L`; chỉ `L` tính phụ thu), `toppings` (chứa "pearl" / "trân châu" hoặc "cheese" / "foam" / "phô mai") hoặc `customizations` (`SIZE_L`, `CHEESE_FOAM`, `WHITE_PEARL`).
 - **Giảm giá:**
   - `voucherCode` chỉ nhận `WELCOME10`: giảm 10%, tối đa 50.000đ.
-  - Không có voucher nhưng `customerPhone` khớp một khách đã lưu: giảm theo hạng thành viên. Khách đó cũng được cộng điểm qua `LoyaltyPointObserver`.
-  - **Đổi điểm:** `useLoyaltyPoints` (số nguyên) cần `customerPhone` của một thành viên và không vượt số điểm đang có (nếu vượt: 400 `INSUFFICIENT_POINTS`). `PointRedemptionDiscountStrategy` cộng giá trị điểm (1 điểm = 1.000đ) lên trên voucher hoặc giảm theo hạng, và chỉ dùng số điểm mà phần tiền còn lại hấp thụ được. Số điểm thực dùng bị trừ sau khi thanh toán thành công.
+  - Không có voucher nhưng `customerPhone` khớp một khách đã lưu: giảm theo hạng thành viên. Khách đó cũng được cộng điểm qua `LoyaltyPointObserver`, gọi trực tiếp trên đúng đơn của lần checkout này (không gắn lên subject dùng chung, nên đơn của quầy khác thanh toán cùng lúc không cộng nhầm cho khách).
+  - **Đổi điểm:** `useLoyaltyPoints` (số nguyên) cần `customerPhone` của một thành viên và không vượt số điểm đang có (nếu vượt: 400 `INSUFFICIENT_POINTS`). `PointRedemptionDiscountStrategy` cộng giá trị điểm (1 điểm = 1.000đ) lên trên voucher hoặc giảm theo hạng, và chỉ dùng số điểm mà phần tiền còn lại hấp thụ được. Số điểm yêu cầu bị giữ (trừ khỏi số dư) **trước** khi thu tiền; nếu không giữ được thì trả 503 `DATABASE_UNAVAILABLE`, không thu tiền, không ghi đơn. Sau khi Facade chạy xong, số điểm strategy không dùng tới được hoàn lại; checkout thất bại thì hoàn đủ.
+- **Kiểm tra trước khi thu tiền:** `tableId` phải là một bàn có thật, nếu không trả **404** `NOT_FOUND`. Với `paymentMethod = cash`, nếu có gửi `tenderedAmount` thì số đó phải ≥ tổng tiền sau giảm giá và VAT, nếu không trả **400** `INVALID_INPUT`; `tenderedAmount` âm cũng trả 400. Hai trường hợp này không trừ kho và không lưu đơn. Không gửi `tenderedAmount` thì không kiểm. Trường này tuỳ chọn: POS gửi nó khi thu ngân nhập ô "Tiền khách đưa", và khoá nút thanh toán khi số đó thiếu so với tổng tạm tính; khi Java tắt, bản lưu cục bộ (`cashTenderError` trong `mock-store.ts`) áp cùng quy tắc.
 - **Sau khi thu tiền:** đơn được lưu với `paymentStatus = paid`, `status = pending` (chờ quầy pha chế), rồi `OrderEventSubject.notifyOrderPaid` chạy: cộng điểm, bàn ăn tại chỗ chuyển `OCCUPIED`, KDS nhận phiếu. Bàn chỉ chuyển `CLEANING` khi KDS báo đơn `completed` (mục 3.9).
 - **Mã đơn** do Java sinh theo dạng `AC-XXXX-XXX`. Phản hồi 200:
 ```json
@@ -203,7 +208,7 @@ Danh sách đơn, mới nhất trước. Lọc bằng `?status=pending|brewing|r
 { "status": "brewing" }
 ```
 - Chỉ đi tiến theo `pending → brewing → ready → completed` (được nhảy bước). `cancelled` được phép khi đơn chưa đóng; huỷ một đơn đã thu tiền đặt `paymentStatus = refunded`.
-- `completed` cần đơn đã thanh toán. Khi tới `completed`, `notifyOrderCompleted` chạy: bàn chuyển `CLEANING` với 0 khách, KDS gỡ phiếu.
+- `completed` cần đơn đã thanh toán. Khi tới `completed`, `notifyOrderCompleted` chạy: bàn chuyển `CLEANING` với 0 khách, KDS gỡ phiếu. Nếu bàn còn đơn khác chưa `completed` hoặc `cancelled`, bàn giữ nguyên `OCCUPIED`, và chỉ sang `CLEANING` khi đơn mở cuối cùng hoàn tất.
 - Gửi lại đúng trạng thái hiện tại trả 200 và không đổi gì.
 - **Lỗi:** 400 trạng thái lạ; 404 không có đơn; 409 đi lùi, đơn đã đóng, hoặc hoàn tất khi chưa thanh toán.
 
@@ -228,7 +233,7 @@ Bắt buộc `name`, `category`, `sellPrice`; số tiền và số lượng khô
 ```json
 { "change": -3, "inStock": true }
 ```
-`change` cộng / trừ tồn kho, `stockQty` đặt số tồn tuyệt đối, `inStock` bật / tắt món. Cần ít nhất một trong ba trường; không được gửi cùng lúc `change` và `stockQty`. Trừ quá số tồn trả 409. Trả về món sau khi cập nhật.
+`change` cộng / trừ tồn kho, `stockQty` đặt số tồn tuyệt đối, `inStock` bật / tắt món. Cần ít nhất một trong ba trường; không được gửi cùng lúc `change` và `stockQty`. Trừ quá số tồn trả 409. Với `change` âm, DAO trừ kho có điều kiện (`deductStockIfAvailable`: chỉ trừ khi còn đủ, một câu `UPDATE ... WHERE stock_qty >= ?` ở JDBC), nên một lần bán xen vào giữa lúc đọc và lúc ghi cũng cho 409 thay vì kẹp kho về 0. Trả về món sau khi cập nhật.
 
 ### 3.13. `PATCH /api/reservations/{code}/status`
 ```json
@@ -268,12 +273,13 @@ Nhận lại các đơn frontend đã ghi khi Java mất kết nối. **Không t
 {
   "orders": [{
     "orderCode": "AC-K2Q7F3-X9A", "customer": "Khách tại bàn", "tableId": 12, "orderType": "dine-in",
-    "paymentMethod": "cash", "paid": true, "status": "pending", "createdAt": "2026-10-17T02:00:00Z", "total": 97200,
+    "paymentMethod": "cash", "paid": true, "status": "pending", "createdAt": "2026-10-17T02:00:00Z", "completedAt": null, "total": 97200,
     "lines": [{ "menuItemId": 1, "name": "Cà phê Muối Đặc Biệt", "qty": 2, "price": 45000, "variation": null }]
   }]
 }
 ```
 - Tối đa 200 đơn mỗi lần. Mỗi đơn được xử lý riêng: `created`, `exists` (đã có mã này, không làm gì, nên gửi lại cả lô vẫn an toàn) hoặc `failed` kèm `error` (dòng sai, đơn `completed` mà chưa trả tiền…).
+- `completedAt` (ISO-8601, tuỳ chọn) chỉ được đọc khi `status` là `completed`: Java giữ đúng thời điểm hoàn tất ghi lúc offline, để thời gian phục vụ trong `/api/analytics` không tính cả lúc mất kết nối. Thiếu trường này thì lấy thời điểm đồng bộ. Sai định dạng thì đơn `failed`. Sớm hơn `createdAt` (đồng hồ lệch) thì đơn vẫn được nhập, `completedAt` lấy bằng `createdAt`, kèm một cảnh báo trong `warnings`.
 - Tồn kho chỉ bị trừ sau khi đơn đã lưu, cho những dòng có `menuItemId` Java biết (được phép về 0 vì món đã bán thật; có cảnh báo). Bàn không tồn tại thì đơn được nhập không kèm bàn.
 - Đơn đã trả tiền và còn mở phát `notifyOrderPaid` (bàn → `OCCUPIED`, phiếu KDS). Sau đó đơn đi tiếp theo vòng đời ở mục 3.9.
 - Phản hồi: `{ "created": 1, "existing": 0, "failed": 0, "results": [{ "orderCode": "…", "result": "created", "warnings": [] }] }`. 503 `DATABASE_UNAVAILABLE` khi chế độ JDBC mất kết nối.

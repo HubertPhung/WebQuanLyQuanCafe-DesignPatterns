@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
+import { DemoNotice } from '@/components/admin/shared'
 import {
   AlertTriangle,
   Armchair,
@@ -146,7 +147,8 @@ export function DashboardOperationalView({
   initialOrders,
 }: DashboardOperationalViewProps) {
   // Normalize tables with zone mapping
-  const normalizedTables = (initialTables && initialTables.length > 0 ? initialTables : defaultTables).map((t) => {
+  // Sample data only when the page passed nothing at all; an empty list is a real, quiet shop.
+  const normalizedTables = (initialTables ?? defaultTables).map((t) => {
     let zone = t.zone
     if (zone === 'Coffee Bar') zone = 'Quầy Bar'
     if (zone === 'Main Floor') zone = 'Phòng lạnh'
@@ -155,7 +157,7 @@ export function DashboardOperationalView({
   })
 
   const [tables, setTables] = useState<FloorTable[]>(normalizedTables)
-  const [orders, setOrders] = useState<Order[]>(initialOrders && initialOrders.length > 0 ? initialOrders : defaultOrders)
+  const [orders, setOrders] = useState<Order[]>(initialOrders ?? defaultOrders)
   const [selectedZone, setSelectedZone] = useState<string>('all')
   const [activeTableDetail, setActiveTableDetail] = useState<FloorTable | null>(null)
   const [isShiftModalOpen, setIsShiftModalOpen] = useState(false)
@@ -175,6 +177,8 @@ export function DashboardOperationalView({
   const reservedCount = tables.filter((t) => t.status === 'reserved').length
 
   const filteredTables = selectedZone === 'all' ? tables : tables.filter((t) => t.zone === selectedZone)
+  // Zone tabs follow the zones the floor plan really has.
+  const zones = [...new Set(tables.map((t) => t.zone))]
 
   // Handle live ticket progression
   const handleAdvanceOrder = (orderId: number, nextStatus: OrderStatus) => {
@@ -273,6 +277,7 @@ export function DashboardOperationalView({
           >
             <Printer className="size-3.5" />
             <span>Chốt ca & in báo cáo</span>
+            <DemoNotice compact />
           </Button>
         </div>
       </div>
@@ -333,45 +338,20 @@ export function DashboardOperationalView({
               >
                 Tất cả khu vực ({tables.length})
               </button>
-              <button
-                type="button"
-                onClick={() => setSelectedZone('Quầy Bar')}
-                className={cn(
-                  'px-3.5 py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5',
-                  selectedZone === 'Quầy Bar'
-                    ? 'bg-white text-[#5A3E2B] shadow-2xs'
-                    : 'text-stone-600 hover:text-stone-900'
-                )}
-              >
-                <span>☕ Quầy Bar</span>
-                <span className="text-[10px] text-stone-400">({tables.filter((t) => t.zone === 'Quầy Bar').length})</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedZone('Phòng lạnh')}
-                className={cn(
-                  'px-3.5 py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5',
-                  selectedZone === 'Phòng lạnh'
-                    ? 'bg-white text-[#5A3E2B] shadow-2xs'
-                    : 'text-stone-600 hover:text-stone-900'
-                )}
-              >
-                <span>❄️ Phòng lạnh</span>
-                <span className="text-[10px] text-stone-400">({tables.filter((t) => t.zone === 'Phòng lạnh').length})</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedZone('Sân vườn')}
-                className={cn(
-                  'px-3.5 py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5',
-                  selectedZone === 'Sân vườn'
-                    ? 'bg-white text-[#5A3E2B] shadow-2xs'
-                    : 'text-stone-600 hover:text-stone-900'
-                )}
-              >
-                <span>🌿 Sân vườn</span>
-                <span className="text-[10px] text-stone-400">({tables.filter((t) => t.zone === 'Sân vườn').length})</span>
-              </button>
+              {zones.map((zone) => (
+                <button
+                  key={zone}
+                  type="button"
+                  onClick={() => setSelectedZone(zone)}
+                  className={cn(
+                    'px-3.5 py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5',
+                    selectedZone === zone ? 'bg-white text-[#5A3E2B] shadow-2xs' : 'text-stone-600 hover:text-stone-900'
+                  )}
+                >
+                  <span>{zone}</span>
+                  <span className="text-[10px] text-stone-400">({tables.filter((t) => t.zone === zone).length})</span>
+                </button>
+              ))}
             </div>
 
             {/* Table Floor Cards Grid */}
@@ -464,14 +444,14 @@ export function DashboardOperationalView({
 
           {/* Section B: Hàng đợi pha chế Barista thời gian thực (Live Barista Fulfillment Queue) */}
           <div className="bg-white rounded-xl border border-stone-200/80 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] p-5 md:p-6 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-stone-200/50">
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-2">
-                  <Coffee className="size-5 text-[#5A3E2B]" />
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-stone-200/50">
+              <div className="space-y-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+                  <Coffee className="size-5 text-[#5A3E2B] shrink-0" />
                   <h3 className="text-base font-bold text-stone-900 tracking-tight">
                     Hàng đợi pha chế Barista (Live Fulfillment Queue)
                   </h3>
-                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-amber-100 font-bold text-amber-950 tabular-nums">
+                  <span className="inline-flex items-center text-xs px-2.5 py-0.5 rounded-full bg-amber-100 font-bold text-amber-950 tabular-nums whitespace-nowrap shrink-0">
                     {orders.filter((o) => o.status !== 'completed').length} vé đang xử lý
                   </span>
                 </div>
@@ -482,10 +462,10 @@ export function DashboardOperationalView({
 
               <Link
                 href="/admin/pos?tab=kitchen"
-                className="h-8 text-xs font-semibold text-[#5A3E2B] hover:text-[#684732] hover:bg-stone-100 px-2.5 flex items-center gap-1 rounded-md transition-colors"
+                className="h-8 text-xs font-semibold text-[#5A3E2B] hover:text-[#684732] hover:bg-stone-100 px-3 inline-flex items-center gap-1.5 rounded-lg border border-stone-200/60 shadow-2xs transition-colors whitespace-nowrap shrink-0 self-start lg:self-center"
               >
                 <span>Màn hình Bếp/Bar đầy đủ</span>
-                <ArrowRight className="size-3.5" />
+                <ArrowRight className="size-3.5 shrink-0" />
               </Link>
             </div>
 
@@ -580,7 +560,7 @@ export function DashboardOperationalView({
                             disabled={pending}
                             className="w-full h-8.5 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 text-xs font-semibold cursor-pointer shadow-xs"
                           >
-                            Giao món & Thu tất
+                            Giao món & Hoàn tất
                           </Button>
                         )}
                       </div>
@@ -599,8 +579,8 @@ export function DashboardOperationalView({
           <div className="bg-white rounded-xl border border-stone-200/80 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] p-5 space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500">
-                  Dòng tiền ca trực
+                <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500 flex items-center gap-1.5">
+                  Dòng tiền ca trực <DemoNotice compact />
                 </h4>
                 <div className="flex items-baseline gap-2 mt-1">
                   <span className="text-2xl font-black text-stone-900 tabular-nums">
@@ -671,7 +651,7 @@ export function DashboardOperationalView({
             <div className="flex items-center justify-between">
               <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500 flex items-center gap-1.5">
                 <AlertTriangle className="size-3.5 text-rose-600" />
-                Cảnh báo kho nguyên liệu
+                Cảnh báo kho nguyên liệu <DemoNotice compact />
               </h4>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-900">
                 3 mục
@@ -760,7 +740,7 @@ export function DashboardOperationalView({
             <div className="flex items-center justify-between">
               <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500 flex items-center gap-1.5">
                 <Flame className="size-3.5 text-[#C88A58]" />
-                Top món bán chạy ca trực
+                Top món bán chạy ca trực <DemoNotice compact />
               </h4>
               <span className="text-[10px] text-stone-400 font-semibold">Theo số lượng</span>
             </div>
@@ -793,8 +773,8 @@ export function DashboardOperationalView({
           {/* Card 4: Lịch đặt bàn tiếp theo (Upcoming Reservations) */}
           <div className="bg-white rounded-xl border border-stone-200/80 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] p-5 space-y-3">
             <div className="flex items-center justify-between">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500">
-                Lịch khách đặt sắp tới
+              <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500 flex items-center gap-1.5">
+                Lịch khách đặt sắp tới <DemoNotice compact />
               </h4>
               <Link href="/admin/reservations" className="text-[11px] font-semibold text-[#5A3E2B] hover:underline">
                 Xem tất cả
@@ -926,7 +906,7 @@ export function DashboardOperationalView({
           <DialogContent className="max-w-md rounded-xl bg-white p-6 shadow-2xl">
             <DialogHeader className="space-y-1">
               <DialogTitle className="text-lg font-bold text-stone-900">
-                Chốt ca làm việc & In báo cáo Z-Report
+                Chốt ca làm việc & In báo cáo Z-Report <DemoNotice compact />
               </DialogTitle>
               <DialogDescription className="text-xs text-stone-500">
                 Ca sáng: 06:30 - 14:30 · Quản lý: Nguyễn Hoàng Nam

@@ -66,7 +66,10 @@ public class InMemoryCustomerDao implements ICustomerDao {
     public boolean addOrderRecord(int id, double orderAmount, int earnedPoints) {
         Customer customer = db.getCustomers().get(id);
         if (customer == null) return false;
-        customer.addOrderRecord(orderAmount, earnedPoints);
+        // The live row is shared by every request, so a change must not interleave with another.
+        synchronized (customer) {
+            customer.addOrderRecord(orderAmount, earnedPoints);
+        }
         return true;
     }
 
@@ -74,7 +77,18 @@ public class InMemoryCustomerDao implements ICustomerDao {
     public boolean redeemPoints(int id, int points) {
         Customer customer = db.getCustomers().get(id);
         if (customer == null) return false;
-        return customer.redeemPoints(points);
+        synchronized (customer) {
+            return customer.redeemPoints(points);
+        }
+    }
+
+    @Override
+    public boolean restorePoints(int id, int points) {
+        Customer customer = db.getCustomers().get(id);
+        if (customer == null) return false;
+        synchronized (customer) {
+            return customer.restorePoints(points);
+        }
     }
 
     @Override

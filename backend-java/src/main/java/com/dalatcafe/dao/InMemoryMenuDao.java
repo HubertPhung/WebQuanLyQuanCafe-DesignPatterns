@@ -65,8 +65,21 @@ public class InMemoryMenuDao implements IMenuDao {
     public boolean updateStock(int id, double quantityChange) {
         MenuItem item = db.getMenuItems().get(id);
         if (item == null) return false;
-        double newQty = item.getStockQty() + quantityChange;
-        item.setStockQty(Math.max(0, newQty));
+        // The live item is shared by every request, so a change must not interleave with another.
+        synchronized (item) {
+            item.setStockQty(Math.max(0, item.getStockQty() + quantityChange));
+        }
+        return true;
+    }
+
+    @Override
+    public boolean deductStockIfAvailable(int id, double quantity) {
+        MenuItem item = db.getMenuItems().get(id);
+        if (item == null || quantity <= 0) return false;
+        synchronized (item) {
+            if (item.getStockQty() < quantity) return false;
+            item.setStockQty(item.getStockQty() - quantity);
+        }
         return true;
     }
 

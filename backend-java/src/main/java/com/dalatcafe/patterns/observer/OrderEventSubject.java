@@ -4,6 +4,7 @@ import com.dalatcafe.model.Order;
 
 import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 
 /**
  * Subject of the Observer pattern. The list is copy-on-write because checkout attaches a
@@ -23,15 +24,33 @@ public class OrderEventSubject {
 
     public void notifyOrderPaid(Order order) {
         Objects.requireNonNull(order, "Order must not be null");
-        for (IOrderObserver observer : observers) {
-            observer.onOrderPaid(order);
-        }
+        notifyAll(observer -> observer.onOrderPaid(order));
     }
 
     public void notifyOrderCompleted(Order order) {
         Objects.requireNonNull(order, "Order must not be null");
+        notifyAll(observer -> observer.onOrderCompleted(order));
+    }
+
+    /**
+     * Every observer hears the event even when an earlier one fails: a missing table must not
+     * cost the kitchen its ticket. The first failure is rethrown afterwards, the rest suppressed.
+     */
+    private void notifyAll(Consumer<IOrderObserver> event) {
+        RuntimeException failure = null;
         for (IOrderObserver observer : observers) {
-            observer.onOrderCompleted(order);
+            try {
+                event.accept(observer);
+            } catch (RuntimeException e) {
+                if (failure == null) {
+                    failure = e;
+                } else {
+                    failure.addSuppressed(e);
+                }
+            }
+        }
+        if (failure != null) {
+            throw failure;
         }
     }
 }

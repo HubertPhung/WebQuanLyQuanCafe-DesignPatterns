@@ -8,6 +8,8 @@ import com.sun.net.httpserver.Filter;
 import com.sun.net.httpserver.HttpExchange;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
@@ -24,6 +26,10 @@ import java.util.Optional;
  * Rules: a few endpoints are public; account endpoints need any signed-in user; changing store
  * settings and managing accounts need ADMIN; creating menu items and analytics need MANAGER+;
  * every other endpoint needs STAFF+, so a new endpoint is never public by accident.
+ *
+ * The storefront places guests' online orders server to server: without a Bearer token, the
+ * frontend's {@code X-Service-Key} (AUTH_SERVICE_KEY) counts as a STAFF caller on exactly
+ * {@code POST /api/checkout} and {@code POST /api/orders/sync}, and nowhere else.
  */
 public class SimpleAuthFilter extends Filter {
     /** Request attribute holding the authenticated {@link UserAccount} (absent on public calls). */
@@ -43,19 +49,33 @@ public class SimpleAuthFilter extends Filter {
     private final TokenService tokens;
     private final IUserDao users;
     private final boolean allowRoleHeader;
+    private final String serviceKey;
 
     public SimpleAuthFilter(TokenService tokens, IUserDao users, boolean allowRoleHeader) {
+        this(tokens, users, allowRoleHeader, null);
+    }
+
+    public SimpleAuthFilter(TokenService tokens, IUserDao users, boolean allowRoleHeader, String serviceKey) {
         this.tokens = Objects.requireNonNull(tokens, "Token service must not be null");
         this.users = Objects.requireNonNull(users, "User DAO must not be null");
         this.allowRoleHeader = allowRoleHeader;
+        this.serviceKey = serviceKey == null || serviceKey.isBlank() ? null : serviceKey;
     }
 
     @Override
     public void doFilter(HttpExchange exchange, Chain chain) throws IOException {
         String method = exchange.getRequestMethod().toUpperCase(Locale.ROOT);
-        Access access = required(method, exchange.getRequestURI().getPath());
+        String path = exchange.getRequestURI().getPath();
+        // HttpServer picks a context by plain prefix, so "/api/usersX" reaches the "/api/users"
+        // handler while the rules below would only ask STAFF for it.
+        if (!withinContext(path, exchange.getHttpContext().getPath())) {
+            reject(exchange, 404, "NOT_FOUND", "Unknown resource: " + path);
+            return;
+        }
+        Access access = required(method, path);
 
-        Identity identity = identify(exchange);
+        Identity identity = identify(exchange, isServiceRoute(method, path)
+                || isServiceLookup(method, path, exchange.getRequestURI().getRawQuery()));
         if (identity.user() != null) {
             exchange.setAttribute(USER_ATTRIBUTE, identity.user());
         }
@@ -84,7 +104,7 @@ public class SimpleAuthFilter extends Filter {
         static final Identity ANONYMOUS = new Identity(null, null);
     }
 
-    private Identity identify(HttpExchange exchange) {
+    private Identity identify(HttpExchange exchange, boolean serviceRoute) {
         String authorization = exchange.getRequestHeaders().getFirst("Authorization");
         if (authorization != null && !authorization.isBlank()) {
             if (!authorization.regionMatches(true, 0, "Bearer ", 0, 7)) {
@@ -100,6 +120,9 @@ public class SimpleAuthFilter extends Filter {
             }
             return new Identity(account.get(), null);
         }
+        if (serviceRoute && presentsServiceKey(exchange)) {
+            return new Identity(new UserAccount(null, "storefront@service.local", "Storefront service", UserRole.STAFF), null);
+        }
         if (allowRoleHeader) {
             UserRole role = parseRole(exchange.getRequestHeaders().getFirst("X-User-Role"));
             if (role != null) {
@@ -107,6 +130,37 @@ public class SimpleAuthFilter extends Filter {
             }
         }
         return Identity.ANONYMOUS;
+    }
+
+    private boolean presentsServiceKey(HttpExchange exchange) {
+        String presented = exchange.getRequestHeaders().getFirst("X-Service-Key");
+        return serviceKey != null && presented != null
+                && MessageDigest.isEqual(serviceKey.getBytes(StandardCharsets.UTF_8), presented.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /** True when the path is the context path itself or a sub-path of it. */
+    static boolean withinContext(String path, String context) {
+        String base = context.endsWith("/") ? context : context + "/";
+        return path.equals(context) || path.startsWith(base);
+    }
+
+    /** The only calls the storefront service key may make: placing and syncing online orders. */
+    static boolean isServiceRoute(String method, String path) {
+        String p = path.replaceAll("/+$", "");
+        return method.equals("POST") && (p.equals("/api/checkout") || p.equals("/api/orders/sync"));
+    }
+
+    /** The storefront may look up one member by phone (the account page), never list them all. */
+    static boolean isServiceLookup(String method, String path, String rawQuery) {
+        if (!method.equals("GET") || !path.replaceAll("/+$", "").equals("/api/customers") || rawQuery == null) {
+            return false;
+        }
+        for (String pair : rawQuery.split("&")) {
+            if (pair.startsWith("phone=") && pair.length() > "phone=".length()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void reject(HttpExchange exchange, int status, String code, String message) throws IOException {

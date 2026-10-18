@@ -127,10 +127,23 @@ class ServerTest {
     }
 
     @Test
+    void reservationInThePastFailsTheChainAndIsNotStored() throws Exception {
+        String when = LocalDate.now().minusDays(2).atTime(LocalTime.of(15, 0)).toInstant(ZoneOffset.ofHours(7)).toString();
+        String body = "{\"customer\":\"An\",\"contact\":\"0912345678\",\"dateTime\":\"" + when
+                + "\",\"tableId\":1,\"guests\":2}";
+        HttpResponse<String> response = call("POST", "/api/reservations", null, body);
+        assertEquals(400, response.statusCode());
+        assertEquals("CHAIN_VALIDATION_FAILED", json(response).get("code"));
+        HttpResponse<String> stored = call("GET", "/api/reservations", "STAFF", null);
+        assertEquals(200, stored.statusCode());
+        assertFalse(stored.body().contains(when));
+    }
+
+    @Test
     void validReservationIsCreated() throws Exception {
         String when = LocalDate.now().plusDays(2).atTime(LocalTime.of(15, 0)).toInstant(ZoneOffset.ofHours(7)).toString();
         String body = "{\"customer\":\"An\",\"contact\":\"0912345678\",\"dateTime\":\"" + when
-                + "\",\"tableId\":1,\"guests\":2,\"preOrders\":[{\"name\":\"Latte\",\"qty\":2,\"price\":55000}]}";
+                + "\",\"tableId\":1,\"guests\":2,\"preOrders\":[{\"menuItemId\":2,\"qty\":2}]}";
         HttpResponse<String> response = call("POST", "/api/reservations", null, body);
         assertEquals(201, response.statusCode(), response.body());
         assertEquals(Boolean.TRUE, json(response).get("ok"));
@@ -140,7 +153,7 @@ class ServerTest {
     private String createReservation(int tableId, int guests) throws Exception {
         String when = LocalDate.now().plusDays(2).atTime(LocalTime.of(10, 0)).toInstant(ZoneOffset.ofHours(7)).toString();
         String body = "{\"customer\":\"Binh\",\"contact\":\"0911222333\",\"dateTime\":\"" + when + "\",\"tableId\":" + tableId
-                + ",\"guests\":" + guests + ",\"preOrders\":[{\"name\":\"Latte\",\"qty\":2,\"price\":55000}]}";
+                + ",\"guests\":" + guests + ",\"preOrders\":[{\"menuItemId\":2,\"qty\":2}]}";
         HttpResponse<String> created = call("POST", "/api/reservations", null, body);
         assertEquals(201, created.statusCode(), created.body());
         @SuppressWarnings("unchecked")
@@ -168,6 +181,42 @@ class ServerTest {
         Table table = daos.getTableDao().findById(9).orElseThrow();
         assertEquals(TableStatus.OCCUPIED, table.getStatus());
         assertEquals(3, table.getGuestCount());
+    }
+
+    @Test
+    void preOrdersArePricedFromTheMenuNotFromTheClient() throws Exception {
+        String when = LocalDate.now().plusDays(2).atTime(LocalTime.of(11, 0)).toInstant(ZoneOffset.ofHours(7)).toString();
+        String body = "{\"customer\":\"Chi\",\"contact\":\"0911000444\",\"dateTime\":\"" + when + "\",\"tableId\":11,\"guests\":2,"
+                + "\"preOrders\":[{\"menuItemId\":2,\"name\":\"Free latte\",\"qty\":10,\"price\":0}]}";
+        HttpResponse<String> created = call("POST", "/api/reservations", null, body);
+        assertEquals(201, created.statusCode(), created.body());
+        @SuppressWarnings("unchecked")
+        String code = (String) ((Map<String, Object>) json(created).get("data")).get("id");
+
+        HttpResponse<String> transfer = call("POST", "/api/reservations/" + code + "/transfer-pos", "STAFF", null);
+        assertEquals(200, transfer.statusCode(), transfer.body());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> order = (Map<String, Object>) json(transfer).get("data");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> line = (Map<String, Object>) ((List<?>) order.get("items")).get(0);
+        assertEquals(2, ((Number) line.get("menuItemId")).intValue());
+        assertEquals("Cà phê Latte Vani Mịn", line.get("name"));
+        assertEquals(55_000.0, ((Number) line.get("price")).doubleValue());
+        assertEquals(550_000.0, ((Number) order.get("subtotal")).doubleValue());
+    }
+
+    @Test
+    void preOrdersMustNameAnExistingMenuItem() throws Exception {
+        String when = LocalDate.now().plusDays(2).atTime(LocalTime.of(12, 0)).toInstant(ZoneOffset.ofHours(7)).toString();
+        String prefix = "{\"customer\":\"Dung\",\"contact\":\"0911000555\",\"dateTime\":\"" + when + "\",\"tableId\":5,\"guests\":2,";
+
+        HttpResponse<String> unknown = call("POST", "/api/reservations", null, prefix + "\"preOrders\":[{\"menuItemId\":9999,\"qty\":1}]}");
+        assertEquals(400, unknown.statusCode(), unknown.body());
+        HttpResponse<String> byName = call("POST", "/api/reservations", null,
+                prefix + "\"preOrders\":[{\"name\":\"Latte\",\"qty\":1,\"price\":1}]}");
+        assertEquals(400, byName.statusCode(), byName.body());
+        assertFalse(call("GET", "/api/reservations", "STAFF", null).body().contains("0911000555"));
+        assertEquals(201, call("POST", "/api/reservations", null, prefix + "\"preOrders\":[{\"menuItemId\":1,\"qty\":1}]}").statusCode());
     }
 
     @Test
@@ -207,6 +256,31 @@ class ServerTest {
         assertEquals("INVALID_VOUCHER", json(voucher).get("code"));
         assertEquals(400, call("POST", "/api/checkout", "STAFF", "{\"paymentMethod\":\"cash\",\"lines\":[]}").statusCode());
         assertEquals(405, call("GET", "/api/checkout", "STAFF", null).statusCode());
+    }
+
+    @Test
+    void checkoutAtAnUnknownTableIsRejectedBeforeTakingPayment() throws Exception {
+        int ordersBefore = DaoFactory.getInstance().getOrderDao().findAll().size();
+        HttpResponse<String> response = call("POST", "/api/checkout", "STAFF", "{\"tableId\":999,\"paymentMethod\":\"cash\","
+                + "\"lines\":[{\"menuItemId\":" + DRINK_ID + ",\"qty\":1}]}");
+
+        assertEquals(404, response.statusCode(), response.body());
+        assertEquals(10.0, DaoFactory.getInstance().getMenuDao().findById(DRINK_ID).orElseThrow().getStockQty());
+        assertEquals(ordersBefore, DaoFactory.getInstance().getOrderDao().findAll().size());
+    }
+
+    @Test
+    void cashShortOfTheTotalIsRejectedBeforeTakingPayment() throws Exception {
+        int ordersBefore = DaoFactory.getInstance().getOrderDao().findAll().size();
+        HttpResponse<String> response = call("POST", "/api/checkout", "STAFF", "{\"paymentMethod\":\"cash\","
+                + "\"tenderedAmount\":1000,\"lines\":[{\"menuItemId\":" + DRINK_ID + ",\"qty\":1}]}");
+
+        assertEquals(400, response.statusCode(), response.body());
+        assertEquals("INVALID_INPUT", json(response).get("code"));
+        assertEquals(10.0, DaoFactory.getInstance().getMenuDao().findById(DRINK_ID).orElseThrow().getStockQty());
+        assertEquals(ordersBefore, DaoFactory.getInstance().getOrderDao().findAll().size());
+        assertEquals(400, call("POST", "/api/checkout", "STAFF", "{\"paymentMethod\":\"cash\",\"tenderedAmount\":-5,"
+                + "\"lines\":[{\"menuItemId\":" + DRINK_ID + ",\"qty\":1}]}").statusCode());
     }
 
     @Test
@@ -293,6 +367,37 @@ class ServerTest {
         assertEquals(409, setOrderStatus(code, "brewing").statusCode());
         assertEquals(400, setOrderStatus(code, "lost").statusCode());
         assertEquals(404, setOrderStatus("AC-NOPE", "ready").statusCode());
+    }
+
+    @Test
+    void completingOneOrderKeepsTheTableSeatedWhileAnotherOrderIsOpen() throws Exception {
+        DaoFactory daos = DaoFactory.getInstance();
+        String first = checkoutAtTable(3, "");
+        String second = checkoutAtTable(3, "");
+        String cancelled = checkoutAtTable(3, "");
+        assertEquals(200, setOrderStatus(cancelled, "cancelled").statusCode());
+
+        assertEquals(200, setOrderStatus(first, "completed").statusCode());
+        assertEquals(TableStatus.OCCUPIED, daos.getTableDao().findById(3).orElseThrow().getStatus());
+
+        assertEquals(200, setOrderStatus(second, "completed").statusCode());
+        Table table = daos.getTableDao().findById(3).orElseThrow();
+        assertEquals(TableStatus.CLEANING, table.getStatus());
+        assertEquals(0, table.getGuestCount());
+    }
+
+    @Test
+    void anUnpaidOpenTabKeepsTheTableSeated() throws Exception {
+        // Seed: table 7 is occupied by guests whose tab AC-0052-C3D is still unpaid.
+        DaoFactory daos = DaoFactory.getInstance();
+        String extra = checkoutAtTable(7, "");
+        assertEquals(200, setOrderStatus(extra, "completed").statusCode());
+        assertEquals(TableStatus.OCCUPIED, daos.getTableDao().findById(7).orElseThrow().getStatus());
+
+        HttpResponse<String> paid = call("POST", "/api/orders/AC-0052-C3D/pay", "STAFF", "{\"paymentMethod\":\"cash\"}");
+        assertEquals(200, paid.statusCode(), paid.body());
+        assertEquals(200, setOrderStatus("AC-0052-C3D", "completed").statusCode());
+        assertEquals(TableStatus.CLEANING, daos.getTableDao().findById(7).orElseThrow().getStatus());
     }
 
     @Test
@@ -530,6 +635,16 @@ class ServerTest {
         assertEquals(SimpleAuthFilter.Access.STAFF, SimpleAuthFilter.required("PATCH", "/api/menu/1/stock"));
         assertEquals(SimpleAuthFilter.Access.ADMIN, SimpleAuthFilter.required("GET", "/api/users"));
         assertEquals(SimpleAuthFilter.Access.SIGNED_IN, SimpleAuthFilter.required("GET", "/api/auth/me"));
+    }
+
+    @Test
+    void onlyTheContextPathAndItsSubPathsBelongToAContext() {
+        assertTrue(SimpleAuthFilter.withinContext("/api/users", "/api/users"));
+        assertTrue(SimpleAuthFilter.withinContext("/api/users/", "/api/users"));
+        assertTrue(SimpleAuthFilter.withinContext("/api/users/7", "/api/users"));
+        assertFalse(SimpleAuthFilter.withinContext("/api/usersX", "/api/users"));
+        assertFalse(SimpleAuthFilter.withinContext("/api/users-admin/7", "/api/users"));
+        assertFalse(SimpleAuthFilter.withinContext("/api/configX", "/api/config"));
     }
 
     @Test

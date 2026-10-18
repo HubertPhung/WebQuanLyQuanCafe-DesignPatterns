@@ -6,11 +6,8 @@ import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowRight,
-  Check,
-  Copy,
   Minus,
   Plus,
-  QrCode,
   ShoppingBag,
   Trash2,
   X,
@@ -27,14 +24,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { Badge } from '@/components/ui/badge'
 import { useCartStore, formatMoneyVND } from '@/lib/store/cart-store'
 
 export interface CartSheetProps {
@@ -62,8 +51,6 @@ export function CartSheet({
   const [promoCode, setPromoCode] = useState('')
   const [orderNote, setOrderNote] = useState(cart?.note ?? '')
   const [promoNotice, setPromoNotice] = useState('')
-  const [isQrModalOpen, setIsQrModalOpen] = useState(false)
-  const [isCopied, setIsCopied] = useState(false)
 
   const lineItems = cart?.lines?.nodes ?? []
   const totalAmount = cart?.cost?.totalAmount
@@ -117,34 +104,23 @@ export function CartSheet({
     }
   }
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-    setIsCopied(true)
-    toast.success('Đã sao chép số tài khoản vào bộ nhớ tạm!')
-    setTimeout(() => setIsCopied(false), 2000)
-  }
-
-  const handleConfirmQrPayment = () => {
-    setIsQrModalOpen(false)
-    setIsOpen(false)
-    toast.success('Thanh toán VietQR thành công! Đơn hàng đã gửi tới Barista.')
-  }
-
   return (
-    <>
-      <Sheet open={isOpen} onOpenChange={setIsOpen}>
+    <Sheet open={isOpen} onOpenChange={setIsOpen}>
         <SheetContent className="flex w-full flex-col p-0 sm:max-w-md bg-[#FAF8F5] text-stone-900 border-l border-stone-200/80 font-sans">
-          <SheetHeader className="border-b border-stone-200/80 px-6 py-5 bg-white">
-            <SheetTitle className="font-sans text-xl font-bold text-stone-900 flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <ShoppingBag className="size-5 text-[#3E2723]" />
-                <span>Giỏ hàng của bạn</span>
+          <SheetHeader className="relative border-b border-stone-200/80 bg-white px-5 py-4">
+            <div className="flex items-center justify-between pr-8">
+              <SheetTitle className="flex items-center gap-2.5 !m-0 font-sans !text-base sm:!text-lg font-bold text-stone-900 leading-tight">
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-[#3E2723] ring-1 ring-amber-200/70">
+                  <ShoppingBag className="size-4.5" />
+                </span>
+                <span className="whitespace-nowrap">Giỏ hàng của bạn</span>
+              </SheetTitle>
+              <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-[#3E2723] px-3 py-1 text-xs font-semibold text-white tabular-nums shadow-2xs">
+                <span className="font-bold">{cart?.totalQuantity ?? 0}</span>
+                <span className="font-normal opacity-90">món</span>
               </span>
-              <span className="text-xs font-sans font-bold bg-[#3E2723] text-white px-2.5 py-0.5 rounded-full tabular-nums">
-                {cart?.totalQuantity ?? 0} món
-              </span>
-            </SheetTitle>
-            <SheetDescription className="text-xs text-stone-500 font-sans">
+            </div>
+            <SheetDescription className="mt-1 text-xs text-stone-500 font-sans">
               Tuyển tập cà phê hảo hạng · Rang mộc nguyên bản chuẩn vị.
             </SheetDescription>
           </SheetHeader>
@@ -152,27 +128,33 @@ export function CartSheet({
           {/* Cart Items List */}
           <div className="cart-body flex-1 overflow-y-auto px-6 py-4 space-y-4">
             {!lineItems.length ? (
-              <div className="empty-menu flex flex-col items-center justify-center py-16 text-center space-y-3">
-                <div className="size-20 rounded-full bg-stone-100 flex items-center justify-center text-stone-400">
-                  <ShoppingBag className="size-10 opacity-50" />
+              <div className="empty-menu flex flex-col items-center justify-center py-14 text-center space-y-3">
+                <div className="flex size-18 items-center justify-center rounded-full bg-stone-100 text-stone-400 ring-1 ring-stone-200/60">
+                  <ShoppingBag className="size-8 opacity-60 text-stone-500" />
                 </div>
-                <h3 className="font-sans text-lg font-bold text-stone-900">
+                <h3 className="font-display !text-xl font-semibold text-stone-900 leading-snug">
                   Túi cà phê của bạn đang trống
                 </h3>
-                <p className="text-xs text-stone-500 max-w-xs leading-relaxed">
+                <p className="max-w-xs text-xs leading-relaxed text-stone-500">
                   Hãy chọn một vài món cà phê thơm lừng từ thực đơn để nạp năng lượng cho ngày mới nhé!
                 </p>
-                <Button
-                  variant="outline"
+                <button
+                  type="button"
                   onClick={() => {
                     setIsOpen(false)
                     const el = document.getElementById('menu')
-                    if (el) el.scrollIntoView({ behavior: 'smooth' })
+                    if (el) {
+                      const headerOffset = 84
+                      const elementPosition = el.getBoundingClientRect().top
+                      const offsetPosition = elementPosition + (window.scrollY || window.pageYOffset || 0) - headerOffset
+                      window.scrollTo({ top: Math.max(0, offsetPosition), behavior: 'smooth' })
+                    }
                   }}
-                  className="rounded-xl border-stone-300 text-stone-800 hover:bg-stone-100 mt-2 font-semibold text-xs cursor-pointer"
+                  className="mt-3 inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-5 text-xs font-semibold text-stone-800 shadow-2xs transition-all hover:border-[#3E2723] hover:bg-stone-50 hover:text-[#3E2723] active:scale-95 cursor-pointer"
                 >
-                  Khám phá thực đơn
-                </Button>
+                  <Sparkles className="size-3.5 text-amber-600" />
+                  <span>Khám phá thực đơn</span>
+                </button>
               </div>
             ) : (
               <>
@@ -329,16 +311,6 @@ export function CartSheet({
                 <ArrowRight className="size-4" />
               </Button>
 
-              {/* VietQR Quick Payment Option */}
-              <Button
-                onClick={() => setIsQrModalOpen(true)}
-                variant="outline"
-                className="w-full h-10.5 rounded-xl border-[#005ba6]/40 text-[#005ba6] hover:bg-sky-50 font-semibold text-xs flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <QrCode className="size-4" />
-                <span>Thanh toán nhanh VietQR 24/7</span>
-              </Button>
-
               {/* Secondary CTA: Xem giỏ hàng */}
               <div className="flex justify-center pt-1">
                 <Link
@@ -357,94 +329,7 @@ export function CartSheet({
           )}
         </SheetContent>
       </Sheet>
-
-      {/* VietQR Payment Modal Simulation */}
-      <Dialog open={isQrModalOpen} onOpenChange={setIsQrModalOpen}>
-        <DialogContent className="max-w-md rounded-2xl border-stone-200 bg-white p-6 text-stone-900 shadow-xl font-sans">
-          <DialogHeader className="text-center sm:text-left">
-            <div className="flex items-center justify-between mb-1">
-              <Badge className="bg-[#005ba6] text-white text-xs px-2.5 py-0.5">
-                VietQR · Chuyển khoản tức thì
-              </Badge>
-              <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
-                <span className="size-2 rounded-full bg-emerald-500 animate-pulse" /> Đang chờ quét
-              </span>
-            </div>
-            <DialogTitle className="text-xl font-bold text-stone-900">
-              Quét mã QR để thanh toán
-            </DialogTitle>
-            <DialogDescription className="text-xs text-stone-500">
-              Mở ứng dụng ngân hàng bất kỳ (Vietcombank, MBBank, Techcombank, Momo, v.v.) và quét mã dưới đây:
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="flex flex-col items-center justify-center py-3">
-            {/* Simulated QR Box */}
-            <div className="relative rounded-2xl border-2 border-[#005ba6]/30 bg-slate-50 p-4 shadow-sm flex flex-col items-center">
-              <div className="size-48 bg-white border border-slate-200 rounded-xl p-2 flex items-center justify-center shadow-inner">
-                <svg className="size-full text-slate-800" viewBox="0 0 100 100" fill="currentColor">
-                  <path d="M10 10 h25 v25 h-25 z M15 15 v15 h15 v-15 z M19 19 h7 v7 h-7 z" />
-                  <path d="M65 10 h25 v25 h-25 z M70 15 v15 h15 v-15 z M74 19 h7 v7 h-7 z" />
-                  <path d="M10 65 h25 v25 h-25 z M15 70 v15 h15 v-15 z M19 74 h7 v7 h-7 z" />
-                  <rect x="42" y="10" width="16" height="6" />
-                  <rect x="42" y="22" width="6" height="18" />
-                  <rect x="52" y="24" width="8" height="8" />
-                  <rect x="10" y="42" width="8" height="16" />
-                  <rect x="24" y="42" width="16" height="6" />
-                  <rect x="42" y="42" width="16" height="16" />
-                  <rect x="65" y="42" width="10" height="12" />
-                  <rect x="80" y="42" width="10" height="24" />
-                  <rect x="42" y="65" width="8" height="25" />
-                  <rect x="56" y="70" width="14" height="8" />
-                  <rect x="56" y="82" width="24" height="8" />
-                </svg>
-              </div>
-
-              <div className="mt-3 text-center">
-                <p className="text-xs font-semibold text-stone-700">Ngân hàng TMCP Ngoại Thương (Vietcombank)</p>
-                <div className="mt-1 flex items-center justify-center gap-1.5">
-                  <span className="font-mono text-sm font-bold text-stone-900 tracking-wider">
-                    0123 4567 8999
-                  </span>
-                  <button
-                    onClick={() => copyToClipboard('012345678999')}
-                    className="p-1 hover:bg-stone-200 rounded text-stone-600 transition-colors"
-                    title="Sao chép số tài khoản"
-                  >
-                    {isCopied ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5" />}
-                  </button>
-                </div>
-                <p className="text-[11px] text-stone-500 mt-0.5">Chủ TK: CONG TY TNHH DA LAT CAFE</p>
-                <p className="mt-2 text-base font-extrabold text-[#3E2723] tabular-nums">
-                  {formatMoneyVND(totalAmount)}
-                </p>
-              </div>
-            </div>
-
-            <p className="mt-3 text-center text-[11px] text-stone-500">
-              Hệ thống sẽ tự động xác nhận đơn ngay khi giao dịch chuyển khoản thành công.
-            </p>
-          </div>
-
-          <div className="mt-2 flex flex-col gap-2">
-            <Button
-              onClick={handleConfirmQrPayment}
-              className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs"
-            >
-              Tôi đã chuyển khoản thành công
-            </Button>
-            <Button
-              variant="ghost"
-              onClick={() => setIsQrModalOpen(false)}
-              className="w-full text-xs text-stone-600"
-            >
-              Quay lại giỏ hàng
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </>
-  )
+    )
 }
 export default CartSheet
 

@@ -22,8 +22,23 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
+import type { AccountOrder, AccountOverview } from '@/lib/account/queries'
+import { nextRank, rankInfo } from '@/lib/account/loyalty'
+import { VOUCHERS } from '@/lib/storefront/vouchers'
 
 export type AccountUser = { name: string; email: string }
+
+const vnd = (amount: number) => `${Math.round(amount).toLocaleString('vi-VN')} đ`
+
+const dateTime = (iso: string) =>
+  new Date(iso).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+
+function orderStatus(order: AccountOrder) {
+  if (order.status === 'pending') return 'Chờ pha chế'
+  if (order.status === 'brewing') return 'Đang pha chế'
+  if (order.status === 'ready') return order.fulfilment === 'delivery' ? 'Đang giao' : 'Chờ bạn đến lấy'
+  return 'Đã hoàn thành'
+}
 
 function initials(name: string) {
   return name
@@ -35,14 +50,24 @@ function initials(name: string) {
     .toUpperCase()
 }
 
-// Customer account area. The signed-in user comes from the server page; orders, vouchers and
-// addresses are still sample data.
-export function AccountDashboard({ user, currentTab }: { user: AccountUser; currentTab: string }) {
+// Customer account area: the signed-in user, their online orders and addresses, and the
+// membership of the phone on their latest order (all loaded by the server page).
+export function AccountDashboard({
+  user,
+  currentTab,
+  overview,
+}: {
+  user: AccountUser
+  currentTab: string
+  overview: AccountOverview
+}) {
   const copyVoucher = (code: string) => {
     navigator.clipboard.writeText(code)
     toast.success(`Đã sao chép mã ưu đãi ${code}!`)
   }
-
+  const { member } = overview
+  const tier = member ? rankInfo(member.rank) : null
+  const upcoming = member ? nextRank(member.totalSpent) : null
 
   return (
     <div className="min-h-screen bg-[#FAF8F5] text-stone-900 font-sans pb-16">
@@ -81,20 +106,36 @@ export function AccountDashboard({ user, currentTab }: { user: AccountUser; curr
                 <p className="text-xs text-stone-500 break-all">{user.email}</p>
               </div>
 
-              {/* Loyalty Tier Box */}
+              {/* Loyalty Tier Box: Java ranks members by lifetime spend; points come from paid orders. */}
               <div className="rounded-xl bg-gradient-to-r from-amber-50 to-amber-100/60 p-3.5 border border-amber-200/70 text-left space-y-1.5">
-                <div className="flex items-center justify-between text-xs font-bold text-amber-900">
-                  <span className="flex items-center gap-1.5">
-                    <Award className="size-4 text-amber-700" />
-                    Hạng Vàng
-                  </span>
-                  <Badge className="bg-amber-600 text-white text-[10px] tabular-nums">
-                    350 Điểm
-                  </Badge>
-                </div>
-                <p className="text-[11px] text-amber-800">
-                  Tích thêm 150 điểm để nâng hạng Kim Cương và nhận ưu đãi giảm 15% trọn đời.
-                </p>
+                {member && tier ? (
+                  <>
+                    <div className="flex items-center justify-between text-xs font-bold text-amber-900">
+                      <span className="flex items-center gap-1.5">
+                        <Award className="size-4 text-amber-700" />
+                        {tier.label}
+                      </span>
+                      <Badge className="bg-amber-600 text-white text-[10px] tabular-nums">{member.points.toLocaleString('vi-VN')} điểm</Badge>
+                    </div>
+                    <p className="text-[11px] text-amber-800">
+                      {upcoming
+                        ? `Chi tiêu thêm ${vnd(upcoming.remaining)} để lên ${upcoming.label} (giảm ${Math.round(upcoming.discount * 100)}% khi thanh toán).`
+                        : `Bạn đang ở hạng cao nhất, giảm ${Math.round(tier.discount * 100)}% khi thanh toán.`}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
+                      <Award className="size-4 text-amber-700" />
+                      Chưa là hội viên
+                    </div>
+                    <p className="text-[11px] text-amber-800">
+                      {overview.memberUnknown
+                        ? 'Chưa đọc được điểm thành viên lúc này, hãy thử lại sau.'
+                        : 'Đơn online thanh toán trước (VietQR, thẻ) sẽ đăng ký hội viên theo số điện thoại và tích điểm. Đơn trả khi nhận hàng không tích điểm.'}
+                    </p>
+                  </>
+                )}
               </div>
             </div>
 
@@ -124,7 +165,7 @@ export function AccountDashboard({ user, currentTab }: { user: AccountUser; curr
                   <Gift className="size-4" />
                   <span>Voucher của tôi</span>
                 </div>
-                <Badge className="bg-amber-100 text-amber-800 text-[10px]">3 mã</Badge>
+                <Badge className="bg-amber-100 text-amber-800 text-[10px]">{VOUCHERS.length} mã</Badge>
               </Link>
 
               <Link
@@ -171,50 +212,42 @@ export function AccountDashboard({ user, currentTab }: { user: AccountUser; curr
                   <span>Lịch sử đơn hàng gần đây</span>
                 </h3>
 
-                <div className="space-y-3.5">
-                  {[
-                    {
-                      id: '#AC-0921',
-                      date: '13/10/2026 · 14:30',
-                      items: 'Vanilla Velvet Latte (x1), Croissant Bơ Hạnh Nhân (x1)',
-                      status: 'Đã hoàn thành',
-                      total: '100.000 đ',
-                    },
-                    {
-                      id: '#AC-0844',
-                      date: '10/10/2026 · 08:15',
-                      items: 'Cà phê Ủ Lạnh Nitro (x1)',
-                      status: 'Đã hoàn thành',
-                      total: '58.000 đ',
-                    },
-                    {
-                      id: '#AC-0712',
-                      date: '02/10/2026 · 16:45',
-                      items: 'Pour Over Guji Ethiopia (x1), Hạt House Blend 250g (x1)',
-                      status: 'Đã hoàn thành',
-                      total: '245.000 đ',
-                    },
-                  ].map((order) => (
-                    <div
-                      key={order.id}
-                      className="rounded-xl border border-stone-200/80 p-4 hover:border-amber-300 transition-all space-y-2 bg-stone-50/40"
-                    >
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-mono font-bold text-stone-900">{order.id}</span>
-                        <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold text-[11px]">
-                          {order.status}
-                        </Badge>
+                {overview.orders.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-stone-300 p-6 text-center text-xs text-stone-500">
+                    Bạn chưa có đơn online nào.{' '}
+                    <Link href="/#menu" className="font-semibold text-[#3E2723] underline underline-offset-2">
+                      Xem menu
+                    </Link>
+                  </p>
+                ) : (
+                  <div className="space-y-3.5">
+                    {overview.orders.map((order) => (
+                      <div
+                        key={order.orderCode}
+                        className="rounded-xl border border-stone-200/80 p-4 hover:border-amber-300 transition-all space-y-2 bg-stone-50/40"
+                      >
+                        <div className="flex items-center justify-between gap-2 text-xs">
+                          <span className="font-mono font-bold text-stone-900">#{order.orderCode}</span>
+                          <span className="flex items-center gap-1.5">
+                            <Badge variant="outline" className="text-[11px] font-semibold">
+                              {order.paid ? 'Đã thanh toán' : 'Trả khi nhận hàng'}
+                            </Badge>
+                            <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold text-[11px]">
+                              {orderStatus(order)}
+                            </Badge>
+                          </span>
+                        </div>
+                        <p className="text-xs text-stone-700 font-medium">{order.items}</p>
+                        <div className="flex items-center justify-between text-xs pt-1 border-t border-stone-200/60">
+                          <span className="text-stone-500">
+                            {dateTime(order.createdAt)} · {order.fulfilment === 'delivery' ? 'Giao hàng' : 'Tự đến lấy'}
+                          </span>
+                          <strong className="text-sm font-extrabold text-[#3E2723] tabular-nums">{vnd(order.total)}</strong>
+                        </div>
                       </div>
-                      <p className="text-xs text-stone-700 font-medium">{order.items}</p>
-                      <div className="flex items-center justify-between text-xs pt-1 border-t border-stone-200/60">
-                        <span className="text-stone-500">{order.date}</span>
-                        <strong className="text-sm font-extrabold text-[#3E2723] tabular-nums">
-                          {order.total}
-                        </strong>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -227,26 +260,7 @@ export function AccountDashboard({ user, currentTab }: { user: AccountUser; curr
                 </h3>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {[
-                    {
-                      code: 'WELCOME10',
-                      title: 'Giảm 10% đơn hàng đầu',
-                      desc: 'Áp dụng cho toàn bộ đồ uống trên menu',
-                      expiry: 'Hạn dùng: 31/12/2026',
-                    },
-                    {
-                      code: 'GOLDVIP',
-                      title: 'Giảm 20.000 đ',
-                      desc: 'Dành riêng cho khách hàng Hạng Vàng đơn từ 100k',
-                      expiry: 'Hạn dùng: 15/11/2026',
-                    },
-                    {
-                      code: 'FREESHIP',
-                      title: 'Miễn phí giao hàng hỏa tốc',
-                      desc: 'Bán kính 5km nội thành TP.HCM',
-                      expiry: 'Hạn dùng: 30/11/2026',
-                    },
-                  ].map((v) => (
+                  {VOUCHERS.map((v) => (
                     <div
                       key={v.code}
                       className="rounded-xl border border-amber-200/80 bg-amber-50/40 p-4 space-y-2 relative"
@@ -264,8 +278,7 @@ export function AccountDashboard({ user, currentTab }: { user: AccountUser; curr
                         </button>
                       </div>
                       <h4 className="text-xs font-bold text-stone-900">{v.title}</h4>
-                      <p className="text-[11px] text-stone-600">{v.desc}</p>
-                      <span className="text-[10px] text-stone-400 block pt-1">{v.expiry}</span>
+                      <p className="text-[11px] text-stone-600">{v.terms}</p>
                     </div>
                   ))}
                 </div>
@@ -280,28 +293,29 @@ export function AccountDashboard({ user, currentTab }: { user: AccountUser; curr
                   <span>Sổ địa chỉ nhận hàng</span>
                 </h3>
 
-                <div className="space-y-3">
-                  <div className="rounded-xl border-2 border-[#3E2723] p-4 bg-amber-50/20 space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-stone-900">Địa chỉ nhà riêng (Mặc định)</span>
-                      <Badge className="bg-[#3E2723] text-white text-[10px]">Mặc định</Badge>
-                    </div>
-                    <p className="text-xs text-stone-700 font-semibold">Phùng Hoài Bo · 0908 123 456</p>
-                    <p className="text-xs text-stone-500">
-                      123 Đường Nguyễn Huệ, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh
-                    </p>
+                {overview.addresses.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-stone-300 p-6 text-center text-xs text-stone-500">
+                    Địa chỉ bạn dùng khi đặt giao hàng sẽ hiện ở đây.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {overview.addresses.map((entry, index) => (
+                      <div
+                        key={entry.address}
+                        className={`rounded-xl p-4 space-y-1.5 ${index === 0 ? 'border-2 border-[#3E2723] bg-amber-50/20' : 'border border-stone-200'}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-stone-900">Dùng lần cuối {dateTime(entry.lastUsed)}</span>
+                          {index === 0 && <Badge className="bg-[#3E2723] text-white text-[10px]">Gần nhất</Badge>}
+                        </div>
+                        <p className="text-xs text-stone-700 font-semibold">
+                          {user.name} · {entry.phone}
+                        </p>
+                        <p className="text-xs text-stone-500">{entry.address}</p>
+                      </div>
+                    ))}
                   </div>
-
-                  <div className="rounded-xl border border-stone-200 p-4 space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-stone-900">Văn phòng công ty</span>
-                    </div>
-                    <p className="text-xs text-stone-700 font-semibold">Phùng Hoài Bo · 0908 123 456</p>
-                    <p className="text-xs text-stone-500">
-                      Tòa nhà Bitexco, 2 Hải Triều, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh
-                    </p>
-                  </div>
-                </div>
+                )}
               </div>
             )}
 
@@ -313,40 +327,24 @@ export function AccountDashboard({ user, currentTab }: { user: AccountUser; curr
                   <span>Cài đặt thông tin tài khoản</span>
                 </h3>
 
-                <div className="space-y-4 text-xs">
-                  <div>
-                    <label className="block text-stone-500 mb-1 font-medium">Họ và tên</label>
-                    <input
-                      type="text"
-                      defaultValue={user.name}
-                      className="w-full rounded-xl border border-stone-200 p-2.5 font-semibold text-stone-900 focus:outline-none focus:ring-1 focus:ring-[#3E2723]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-stone-500 mb-1 font-medium">Số điện thoại</label>
-                    <input
-                      type="text"
-                      defaultValue="0908 123 456"
-                      className="w-full rounded-xl border border-stone-200 p-2.5 font-semibold text-stone-900 tabular-nums focus:outline-none focus:ring-1 focus:ring-[#3E2723]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-stone-500 mb-1 font-medium">Email</label>
-                    <input
-                      type="email"
-                      defaultValue="hoaibo.phung@gmail.com"
-                      className="w-full rounded-xl border border-stone-200 p-2.5 font-semibold text-stone-900 focus:outline-none focus:ring-1 focus:ring-[#3E2723]"
-                    />
-                  </div>
-                  <div className="pt-2">
-                    <Button
-                      onClick={() => toast.success('Đã lưu thông tin tài khoản thành công!')}
-                      className="rounded-xl bg-[#3E2723] hover:bg-[#2b1b18] text-white font-semibold text-xs h-10 px-5 cursor-pointer"
-                    >
-                      Lưu thay đổi
-                    </Button>
-                  </div>
-                </div>
+                <dl className="space-y-4 text-xs">
+                  {[
+                    ['Họ và tên', user.name],
+                    ['Email đăng nhập', user.email],
+                    ['Số điện thoại tích điểm', overview.phone ?? 'Chưa có (lấy từ đơn online gần nhất)'],
+                  ].map(([label, value]) => (
+                    <div key={label}>
+                      <dt className="text-stone-500 mb-1 font-medium">{label}</dt>
+                      <dd className="rounded-xl border border-stone-200 bg-stone-50/60 p-2.5 font-semibold text-stone-900 break-all">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+                <p className="text-[11px] text-stone-500">
+                  Tên và email do tài khoản đăng nhập quản lý.{' '}
+                  <Link href="/account/security" className="font-semibold text-[#3E2723] underline underline-offset-2">
+                    Đổi mật khẩu
+                  </Link>
+                </p>
               </div>
             )}
           </div>

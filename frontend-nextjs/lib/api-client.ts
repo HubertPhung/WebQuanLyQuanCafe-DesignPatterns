@@ -101,6 +101,14 @@ export type CheckoutPayload = {
   // A registered member: earns points, gets the tier discount and may redeem points.
   customerPhone?: string
   useLoyaltyPoints?: number
+  // A paid storefront order signs a new phone up as a member (with this email), so it earns points.
+  enrollMember?: boolean
+  customerEmail?: string
+  // Cash handed over; Java refuses a cash sale it does not cover and returns the change.
+  tenderedAmount?: number
+  // VoucherCatalog code (Strategy) and a free-text note stored on the Java order.
+  voucherCode?: string
+  note?: string
 }
 
 export type CheckoutReceipt = {
@@ -109,6 +117,7 @@ export type CheckoutReceipt = {
   discountAmount: number
   vatAmount: number
   finalTotal: number
+  changeDue: number
   paymentStatus: string
   transactionId: string | null
   warnings: string[]
@@ -117,8 +126,22 @@ export type CheckoutReceipt = {
   pointsDiscountVnd: number
 }
 
-export function checkout(payload: CheckoutPayload): Promise<JavaResult<CheckoutReceipt>> {
-  return request<CheckoutReceipt>('/api/checkout', { method: 'POST', body: payload })
+// Guests' online orders are placed server to server: Java's SimpleAuthFilter takes the storefront
+// key as a STAFF caller on POST /api/checkout and /api/orders/sync only. The visitor's own token
+// is left out, since a customer's token would be refused there.
+type ServiceOption = { asService?: boolean }
+
+function storefrontService(): Pick<CallOptions, 'auth' | 'headers'> | null {
+  const key = process.env.AUTH_SERVICE_KEY?.trim()
+  return key ? { auth: false, headers: { 'X-Service-Key': key } } : null
+}
+
+const serviceKeyMissing = { ok: false, unreachable: true, error: 'AUTH_SERVICE_KEY is not configured.' } as const
+
+export function checkout(payload: CheckoutPayload, options: ServiceOption = {}): Promise<JavaResult<CheckoutReceipt>> {
+  const service = options.asService ? storefrontService() : undefined
+  if (service === null) return Promise.resolve(serviceKeyMissing)
+  return request<CheckoutReceipt>('/api/checkout', { method: 'POST', body: payload, ...service })
 }
 
 export type TableStatusPayload = { status: string; guestCount: number }
@@ -191,8 +214,11 @@ export type JavaCustomer = {
 }
 
 // GET /api/customers?phone=...: the POS member lookup.
-export function findCustomerByPhone(phone: string): Promise<JavaResult<JavaCustomer[]>> {
-  return request<JavaCustomer[]>(`/api/customers?phone=${encodeURIComponent(phone)}`, { method: 'GET' })
+// With asService, the storefront's key reads one phone (the account page), never the whole list.
+export function findCustomerByPhone(phone: string, options: ServiceOption = {}): Promise<JavaResult<JavaCustomer[]>> {
+  const service = options.asService ? storefrontService() : undefined
+  if (service === null) return Promise.resolve(serviceKeyMissing)
+  return request<JavaCustomer[]>(`/api/customers?phone=${encodeURIComponent(phone)}`, { method: 'GET', ...service })
 }
 
 export type JavaOrder = { orderCode: string; status: string; paymentStatus: string; total: number; warnings?: string[] }
@@ -242,6 +268,7 @@ export type SyncOrderPayload = {
   paid: boolean
   status: string
   createdAt: string
+  completedAt: string | null
   total: number
   lines: { menuItemId?: number; name: string; qty: number; price: number; variation?: string }[]
 }
@@ -254,8 +281,10 @@ export type SyncResult = {
 }
 
 // POST /api/orders/sync: imports orders recorded locally while Java was down (no payment is taken).
-export function syncJavaOrders(orders: SyncOrderPayload[]): Promise<JavaResult<SyncResult>> {
-  return request<SyncResult>('/api/orders/sync', { method: 'POST', body: { orders } })
+export function syncJavaOrders(orders: SyncOrderPayload[], options: ServiceOption = {}): Promise<JavaResult<SyncResult>> {
+  const service = options.asService ? storefrontService() : undefined
+  if (service === null) return Promise.resolve(serviceKeyMissing)
+  return request<SyncResult>('/api/orders/sync', { method: 'POST', body: { orders }, ...service })
 }
 
 export type JavaAnalytics = {

@@ -1,4 +1,4 @@
-import { PageHeading } from '@/components/admin/shared'
+import { DemoNotice, PageHeading } from '@/components/admin/shared'
 import { ScheduleManagement } from '@/components/admin/schedule-management'
 import { requirePageRole } from '@/lib/auth/session'
 
@@ -12,6 +12,7 @@ export default async function SchedulePage() {
         title="Lịch làm việc & Chấm công"
         description="Xếp lịch phân ca hàng tuần cho đội ngũ nhân viên, theo dõi trạng thái ca trực và chấm công chuyên nghiệp."
       />
+      <DemoNotice>Lịch phân ca và chấm công là dữ liệu minh hoạ. Thay đổi ca chỉ hiển thị trong trình duyệt và không được lưu.</DemoNotice>
       <ScheduleManagement />
     </>
   )

@@ -6,6 +6,7 @@ import com.dalatcafe.dao.IOrderDao;
 import com.dalatcafe.model.MenuItem;
 import com.dalatcafe.model.Order;
 import com.dalatcafe.model.OrderStatus;
+import com.dalatcafe.model.PaymentMethod;
 import com.dalatcafe.model.PaymentStatus;
 import com.dalatcafe.patterns.builder.OrderBuilder;
 import com.dalatcafe.patterns.decorator.BaseCoffee;
@@ -73,6 +74,11 @@ public class PosCheckoutFacade {
 
         // Steps 1-3: decorate drinks, build the order, apply the discount.
         Order order = buildOrder(request, menu);
+        Double tendered = request.getTenderedAmount();
+        if (request.getPaymentMethod() == PaymentMethod.CASH && tendered != null && tendered < order.getTotal()) {
+            return CheckoutResult.failure(CheckoutResult.FailureType.PAYMENT_FAILED,
+                    "Cash tendered " + tendered + " does not cover the total " + order.getTotal(), null);
+        }
         if (!reserveStock(demand)) {
             return CheckoutResult.failure(CheckoutResult.FailureType.OUT_OF_STOCK, "Could not reserve inventory", null);
         }
@@ -153,12 +159,13 @@ public class PosCheckoutFacade {
                 .forCustomer(request.getCustomer() == null ? null : request.getCustomer().getName())
                 .ofType(request.getOrderType())
                 .withNote(request.getNote())
-                .withPayment(request.getPaymentMethod(), false);
+                .withPayment(request.getPaymentMethod(), false)
+                .avoidingCodes(code -> orderDao.findByOrderCode(code).isPresent());
         if (request.getTableId() != null) {
             builder.atTable(request.getTableId());
         }
         for (CheckoutLine line : request.getLines()) {
-            builder.addItem(decorate(menu.get(line.getMenuItemId()), line), line.getQuantity());
+            builder.addItem(line.getMenuItemId(), decorate(menu.get(line.getMenuItemId()), line), line.getQuantity());
         }
         Order order = builder.build();
         order.recalculateTotals();
@@ -185,7 +192,7 @@ public class PosCheckoutFacade {
     private boolean reserveStock(Map<Integer, Integer> demand) {
         List<Integer> reserved = new ArrayList<>();
         for (Map.Entry<Integer, Integer> entry : demand.entrySet()) {
-            if (!menuDao.updateStock(entry.getKey(), -entry.getValue())) {
+            if (!menuDao.deductStockIfAvailable(entry.getKey(), entry.getValue())) {
                 for (Integer id : reserved) {
                     menuDao.updateStock(id, demand.get(id));
                 }
