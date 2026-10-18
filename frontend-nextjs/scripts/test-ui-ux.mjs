@@ -344,11 +344,9 @@ async function runAdminUITests() {
     { id: 'TC-ADM-02', path: '/admin/pos', title: 'Point of Sale (POS) Terminal', keywords: ['Point of sale', 'Kitchen display', 'Open tab', 'Cash', 'Card'] },
     { id: 'TC-ADM-03', path: '/admin/pos?tab=kitchen', title: 'Kitchen Display System (KDS)', keywords: ['Kitchen display', 'Pending', 'Brewing', 'Ready'] },
     { id: 'TC-ADM-04', path: '/admin/tables', title: 'Floor Plan Table Management', keywords: ['Floor plan', 'Main Floor', 'Patio', 'Coffee Bar', 'Table 1'] },
-    { id: 'TC-ADM-05', path: '/admin/inventory', title: 'Inventory & Menu Items Catalog', keywords: ['Track stock', 'items need restocking', 'Cost', 'On sale'] },
     { id: 'TC-ADM-06', path: '/admin/customers', title: 'Customer CRM & Loyalty Spend', keywords: ['Customers', 'Orders', 'Total spent', 'Last visit'] },
     { id: 'TC-ADM-07', path: '/admin/analytics', title: 'Operations Analytics & Mix Charts', keywords: ['Analytics', 'Revenue', 'Drinks', 'Payment'] },
     { id: 'TC-ADM-08', path: '/admin/settings', title: 'Branch Operations Settings', keywords: ['Branch configuration', 'Sales tax', 'Accepted payments'] },
-    { id: 'TC-ADM-09', path: '/admin/staff', title: 'Staff Roles & Schedule', keywords: ['Staff accounts arrive with sign-in'] },
   ]
 
   const adminCookie = await sessionCookie('ADMIN')

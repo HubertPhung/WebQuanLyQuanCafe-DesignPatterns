@@ -266,11 +266,11 @@ export function DashboardOperationalView({
           </Link>
 
           <Link
-            href="/admin/inventory"
+            href="/admin/menu"
             className="h-10 rounded-lg bg-white text-stone-800 shadow-2xs hover:bg-stone-50 border border-stone-200/80 font-semibold text-xs gap-1.5 px-3.5 flex items-center justify-center transition-colors"
           >
             <Package className="size-3.5 text-[#5A3E2B]" />
-            <span>Xuất kho định lượng</span>
+            <span>Tồn kho món</span>
           </Link>
 
           <Button
@@ -588,7 +588,7 @@ export function DashboardOperationalView({
           <section className="rounded-xl border border-stone-200 bg-white p-5 space-y-3">
             <h4 className="font-bold text-stone-700">Cảnh báo tồn kho · {lowStock.length} mục</h4>
             {lowStock.length === 0 ? <p className="text-sm text-stone-500">Không có món hoặc nguyên liệu dưới định mức.</p> : lowStock.slice(0, 4).map(item => <div key={item.id} className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm"><strong>{item.name}</strong><p>Còn {item.stockQty} {item.unit} · Ngưỡng {item.lowStockThreshold}</p></div>)}
-            <Link href="/admin/inventory" className="text-sm font-semibold text-[#5A3E2B] underline">Kiểm tra và điều chỉnh kho</Link>
+            <Link href="/admin/menu" className="text-sm font-semibold text-[#5A3E2B] underline">Kiểm tra và điều chỉnh kho</Link>
           </section>
           <section className="rounded-xl border border-stone-200 bg-white p-5 space-y-3">
             <h4 className="font-bold text-stone-700">Món bán chạy · 7 ngày</h4>

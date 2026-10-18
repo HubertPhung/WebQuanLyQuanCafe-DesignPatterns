@@ -5,14 +5,11 @@ import { usePathname } from 'next/navigation'
 import {
   Armchair,
   CalendarCheck,
-  CalendarDays,
   Coffee,
   Globe,
   LayoutDashboard,
   MonitorCheck,
-  Package,
   Store,
-  Users,
   UtensilsCrossed,
   ChevronsUpDown,
   ShieldCheck,
@@ -43,7 +40,6 @@ export const storeNav = [
   { href: '/admin/menu', labelVi: 'Menu', subVi: 'Món & danh mục', icon: UtensilsCrossed },
   { href: '/admin/tables', labelVi: 'Bàn ăn', subVi: 'Quản lý bàn & khu vực', icon: Armchair },
   { href: '/admin/reservations', labelVi: 'Đặt bàn', subVi: 'Quản lý đặt chỗ', icon: CalendarCheck },
-  { href: '/admin/inventory', labelVi: 'Kho', subVi: 'Nguyên liệu & tồn kho', icon: Package, badgeKey: 'stock' as const },
 ]
 
 export const businessNav = [
@@ -52,12 +48,10 @@ export const businessNav = [
 ]
 
 export const staffNav = [
-  { href: '/admin/staff', labelVi: 'Nhân viên', subVi: 'Tài khoản & người dùng', icon: Users },
-  { href: '/admin/schedule', labelVi: 'Lịch làm việc', subVi: 'Xếp ca & chấm công', icon: CalendarDays },
   { href: '/admin/users', labelVi: 'Tài khoản & phân quyền', subVi: 'Đăng nhập, vai trò', icon: ShieldCheck },
 ]
 
-type Badges = { orders?: number; stock?: number }
+type Badges = { orders?: number }
 
 function NavGroup({
   label,
@@ -65,7 +59,7 @@ function NavGroup({
   badges = {},
 }: {
   label: string
-  items: Array<{ href: string; labelVi: string; subVi: string; icon: any; badgeKey?: 'orders' | 'stock' }>
+  items: Array<{ href: string; labelVi: string; subVi: string; icon: any; badgeKey?: 'orders' }>
   badges?: Badges
 }) {
   const pathname = usePathname()
@@ -117,7 +111,7 @@ function NavGroup({
   )
 }
 
-export function AdminSidebar({ badges = { orders: 0, stock: 0 }, role = 'STAFF' }: { badges?: Badges; role?: Role }) {
+export function AdminSidebar({ badges = { orders: 0 }, role = 'STAFF' }: { badges?: Badges; role?: Role }) {
   // Only the pages this role may open (same rules as proxy.ts).
   const allowed = <T extends { href: string }>(items: T[]) =>
     items.filter((item) => atLeast(role, requiredRoleForPath(item.href) ?? 'STAFF'))

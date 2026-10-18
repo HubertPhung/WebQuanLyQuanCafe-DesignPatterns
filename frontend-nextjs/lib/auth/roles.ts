@@ -24,8 +24,6 @@ const adminRules: { prefix: string; minimum: Role }[] = [
   { prefix: '/admin/users', minimum: 'ADMIN' },
   { prefix: '/admin/settings', minimum: 'ADMIN' },
   { prefix: '/admin/analytics', minimum: 'MANAGER' },
-  { prefix: '/admin/staff', minimum: 'MANAGER' },
-  { prefix: '/admin/schedule', minimum: 'MANAGER' },
 ]
 
 /** The role a path needs, or null when it is open to everyone. */
