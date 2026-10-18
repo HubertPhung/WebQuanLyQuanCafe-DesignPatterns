@@ -59,6 +59,8 @@ import { saveOrderContact, type Fulfilment } from '@/lib/orders/online-contacts'
 import { dequeueSync, enqueueSync, listSyncQueue } from '@/lib/admin/local-links'
 import { linkMenuItem, normalizeMenuName, resolveJavaMenuIds } from '@/lib/admin/menu-link'
 import { hasReservationTimePassed } from '@/lib/reservation-rules'
+import { getAdminBranch, ADMIN_BRANCH_COOKIE } from '@/lib/admin/branch'
+import { DEFAULT_BRANCH_ID, branchById, isBranchId, type BranchId } from '@/lib/branches'
 import {
   updateMockOrderStatus,
   markMockOrderPaid,
@@ -299,6 +301,7 @@ async function forwardCheckout(
     orderType: order.orderType,
     paymentMethod: order.paymentMethod,
     tenderedAmount: order.tenderedAmount,
+    branch: order.branch,
     ...member,
     ...extra,
   }, { asService })
@@ -354,6 +357,7 @@ async function recordOrderLocally(input: LocalOrderInput, quantities: Map<number
         orderCode: input.orderCode ?? `AC-${String(next).padStart(4, '0')}-${Date.now().toString(36).slice(-3).toUpperCase()}`,
         customer,
         tableId: input.tableId,
+        branch: input.branch ?? DEFAULT_BRANCH_ID,
         orderType: input.orderType,
         items,
         subtotal,
@@ -419,6 +423,8 @@ export async function createOrder(input: NewOrderInput): Promise<ActionResult> {
       paid: input.paid,
       // Only a cash payment taken now has cash to count.
       tenderedAmount: input.paid && paymentMethod === 'cash' ? tendered : undefined,
+      // The POS sells for the branch chosen in the header; its tables are the only ones it shows.
+      branch: await getAdminBranch(),
     }
 
     // Check availability locally first so the backend never charges for an order we cannot record.
@@ -481,6 +487,8 @@ export type OnlineOrderInput = {
   address?: string
   payment: keyof typeof onlinePayments
   note?: string
+  // The branch that prepares the order: pickup happens there, delivery leaves from there.
+  branch?: BranchId
 }
 
 export type OnlineOrderResult = { ok: true; orderCode: string; total: number; paid: boolean } | { ok: false; error: string }
@@ -535,6 +543,8 @@ export async function placeOnlineOrder(input: OnlineOrderInput): Promise<OnlineO
     if (!Object.hasOwn(onlinePayments, input.payment)) throw new Error('Chọn phương thức thanh toán.')
     const paymentMethod = onlinePayments[input.payment]
     const note = String(input.note ?? '').trim().slice(0, 300)
+    if (input.branch !== undefined && !isBranchId(input.branch)) throw new Error('Chọn chi nhánh nhận đơn.')
+    const branch = input.branch ?? DEFAULT_BRANCH_ID
 
     const jar = await cookies()
     const cart = readCart(jar.get(CART_COOKIE)?.value)
@@ -566,12 +576,12 @@ export async function placeOnlineOrder(input: OnlineOrderInput): Promise<OnlineO
 
     return await withFirstOnlineOrder<OnlineOrderResult>(session.userId, async ({ isFirstOrder, markPlaced }) => {
       const paid = input.payment !== 'cod'
-      const order: LocalOrderInput = { lines, customer: name, tableId: null, orderType: fulfilment, paymentMethod, paid }
+      const order: LocalOrderInput = { lines, customer: name, tableId: null, orderType: fulfilment, paymentMethod, paid, branch }
       const voucherCode = cart?.discountCodes?.find((code) => code.applicable)?.code?.trim().toUpperCase()
       if (voucherCode === 'WELCOME10' && !isFirstOrder) {
         throw new Error('WELCOME10 chỉ áp dụng cho đơn online đầu tiên của tài khoản mới.')
       }
-      const javaNote = ['Đơn online', fulfilment === 'delivery' ? `Giao tới: ${address}` : 'Khách tự đến lấy', `SĐT ${phone}`, note, ...lineNotes]
+      const javaNote = ['Đơn online', `Chi nhánh ${branchById(branch).street}`, fulfilment === 'delivery' ? `Giao tới: ${address}` : 'Khách tự đến lấy', `SĐT ${phone}`, note, ...lineNotes]
         .filter(Boolean)
         .join(' · ')
         .slice(0, 1000)
@@ -691,6 +701,7 @@ export async function createReservation(input: NewReservationInput): Promise<Act
       dateTime: dateTime.toISOString(),
       guests: input.guests,
       tableId: input.tableId,
+      branch: await getAdminBranch(),
     }
 
     // Java runs the full validation chain (hours, capacity, availability); its verdict is final.
@@ -730,6 +741,7 @@ async function recordExternalOrder(input: ExternalOrderInput): Promise<ActionRes
         customer: input.customer.trim().slice(0, 60) || 'Walk-in',
         tableId: input.tableId,
         tableIds: input.tableIds ?? (input.tableId ? [input.tableId] : []),
+        branch: input.branch ?? DEFAULT_BRANCH_ID,
         orderType: 'dine-in',
         items: input.items,
         subtotal,
@@ -783,6 +795,7 @@ export async function transferReservationToPos(code: string, source: 'java' | 'l
       tableIds: order.tableIds,
       items: order.items.map((item) => ({ name: item.name, qty: item.qty, price: item.price })),
       guests: Math.min(Math.max(Math.trunc(guests), 1), 20),
+      branch: order.branch,
     })
     refresh()
     return res.ok ? { ok: true, message: `Order ${order.orderCode} opened by the Java backend.` } : res
@@ -995,6 +1008,7 @@ async function pushQueuedOrders(codes: string[], asService = false): Promise<Pus
     tableId: order.tableId,
     tableIds: order.tableIds,
     orderType: order.orderType,
+    branch: order.branch,
     paymentMethod: order.paymentMethod,
     paid: order.paymentStatus === 'paid',
     status: order.status,
@@ -1096,6 +1110,25 @@ export async function updateAccount(id: number, change: { role?: string; active?
     if (!result.ok) return { ok: false, error: accountError(result) }
     refresh()
     return { ok: true, message: `Account ${result.data.email} updated.` }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+// Header branch switch: every admin page, the POS and the reports follow the chosen branch.
+export async function selectAdminBranch(branch: string): Promise<ActionResult> {
+  try {
+    await assertAdminAccess()
+    if (!isBranchId(branch)) throw new Error('Chi nhánh không hợp lệ.')
+    ;(await cookies()).set(ADMIN_BRANCH_COOKIE, branch, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 365,
+    })
+    refresh()
+    return { ok: true, message: `Đang xem chi nhánh ${branchById(branch).street}.` }
   } catch (error) {
     return fail(error)
   }

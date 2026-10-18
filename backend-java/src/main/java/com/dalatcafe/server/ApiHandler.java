@@ -126,6 +126,24 @@ public abstract class ApiHandler implements HttpHandler {
         return null;
     }
 
+    /** The ?branch= filter of a list request: null for every branch, else a known branch id. */
+    protected static String branchFilter(HttpExchange exchange) {
+        String branch = queryParam(exchange, "branch");
+        if (branch != null && !com.dalatcafe.model.Branches.isKnown(branch)) {
+            throw ApiException.badRequest("Unknown branch: " + branch);
+        }
+        return branch;
+    }
+
+    /** An optional "branch" body field, checked against the known branches. */
+    protected static String branchField(Map<String, Object> body) {
+        String branch = str(body, "branch");
+        if (branch != null && !com.dalatcafe.model.Branches.isKnown(branch)) {
+            throw ApiException.badRequest("Unknown branch: " + branch);
+        }
+        return branch;
+    }
+
     protected static ApiException methodNotAllowed(HttpExchange exchange) {
         return new ApiException(405, "INVALID_INPUT", "Method not allowed: " + exchange.getRequestMethod());
     }

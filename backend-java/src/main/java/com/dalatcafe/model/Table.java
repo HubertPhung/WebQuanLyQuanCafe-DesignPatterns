@@ -16,6 +16,15 @@ public class Table implements Serializable {
     private String zone;
     private String imageUrl;
     private boolean archived;
+    private String branch = Branches.DEFAULT;
+
+    public String getBranch() {
+        return branch;
+    }
+
+    public void setBranch(String branch) {
+        this.branch = Branches.orDefault(branch);
+    }
 
     public boolean isArchived() { return archived; }
     public void setArchived(boolean archived) { this.archived = archived; }
@@ -142,6 +151,7 @@ public class Table implements Serializable {
                 ", name='" + name + '\'' +
                 ", seats=" + seats +
                 ", zone='" + zone + '\'' +
+                ", branch='" + branch + '\'' +
                 ", status=" + status +
                 ", guestCount=" + guestCount +
                 '}';

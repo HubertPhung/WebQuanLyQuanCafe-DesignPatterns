@@ -85,6 +85,26 @@ public class InMemoryDatabase {
         addTable(new Table(13, "Bàn 13", 1, "Coffee Bar", TableStatus.OCCUPIED, 1));
         addTable(new Table(14, "Bàn 14", 1, "Coffee Bar", TableStatus.AVAILABLE, 0));
         addTable(new Table(15, "Bàn 15", 1, "Coffee Bar", TableStatus.AVAILABLE, 0));
+        branchTwoTables(16).forEach(this::addTable);
+    }
+
+    /**
+     * The floor of 456 Bùi Thị Xuân, numbered from {@code firstId}. Also used to seed an existing
+     * PostgreSQL floor that predates branches, where ids 16+ may already be taken.
+     */
+    public static java.util.List<Table> branchTwoTables(int firstId) {
+        Object[][] rows = {
+                {"Bàn 01", 2, "Sân vườn"}, {"Bàn 02", 4, "Sân vườn"}, {"Bàn 03", 4, "Sân vườn"},
+                {"Bàn 04", 6, "Sân vườn"}, {"Bàn 05", 2, "Góc làm việc"}, {"Bàn 06", 2, "Góc làm việc"},
+                {"Bàn 07", 4, "Tầng 2"}, {"Bàn 08", 4, "Tầng 2"},
+        };
+        java.util.List<Table> tables = new java.util.ArrayList<>();
+        for (int i = 0; i < rows.length; i++) {
+            Table table = new Table(firstId + i, (String) rows[i][0], (Integer) rows[i][1], (String) rows[i][2]);
+            table.setBranch(Branches.BUI_THI_XUAN);
+            tables.add(table);
+        }
+        return tables;
     }
 
     private void addTable(Table table) {

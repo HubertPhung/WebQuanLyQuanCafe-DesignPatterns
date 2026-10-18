@@ -1,6 +1,6 @@
 // Shop branches shown on the storefront footer and the sign-in panel. One place to edit.
 export type Branch = {
-  id: string
+  id: 'phan-dinh-phung' | 'bui-thi-xuan'
   name: string
   street: string
   ward: string
@@ -32,6 +32,19 @@ export const branches: Branch[] = [
     note: 'Sân vườn rộng, góc làm việc yên tĩnh',
   },
 ]
+
+// Tables, orders and bookings belong to one branch; the menu, customers and accounts are shared.
+// The ids are the ones the Java backend stores (com.dalatcafe.model.Branches).
+export type BranchId = 'phan-dinh-phung' | 'bui-thi-xuan'
+export const DEFAULT_BRANCH_ID: BranchId = 'phan-dinh-phung'
+
+export function isBranchId(value: unknown): value is BranchId {
+  return branches.some((branch) => branch.id === value)
+}
+
+export function branchById(id: string | null | undefined): Branch {
+  return branches.find((branch) => branch.id === id) ?? branches[0]
+}
 
 export function branchAddress(branch: Branch) {
   return `${branch.street}, ${branch.ward}, ${branch.city}`

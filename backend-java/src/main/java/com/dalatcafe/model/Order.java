@@ -21,6 +21,15 @@ public class Order implements Serializable {
     private String customer;
     private Integer tableId;
     private List<Integer> tableIds = List.of();
+    private String branch = Branches.DEFAULT;
+
+    public String getBranch() {
+        return branch;
+    }
+
+    public void setBranch(String branch) {
+        this.branch = Branches.orDefault(branch);
+    }
 
     public List<Integer> getTableIds() {
         return tableIds.isEmpty() ? (tableId == null ? List.of() : List.of(tableId)) : List.copyOf(tableIds);

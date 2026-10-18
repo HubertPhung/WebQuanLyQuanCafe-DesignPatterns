@@ -238,12 +238,19 @@ public class CheckoutHandler extends ApiHandler {
             throw ApiException.badRequest("tableId must be greater than zero");
         }
         // Checked before the facade charges: an unknown table would only fail after payment.
-        if (tableId != null && tableDao.findById(tableId).isEmpty()) {
-            throw ApiException.notFound("Table not found: " + tableId);
+        com.dalatcafe.model.Table table = tableId == null ? null
+                : tableDao.findById(tableId).orElseThrow(() -> ApiException.notFound("Table not found: " + tableId));
+        // A dine-in order belongs to its table's branch; a pickup or delivery order names its own.
+        String branch = branchField(body);
+        if (table != null) {
+            if (branch != null && !branch.equals(table.getBranch())) {
+                throw ApiException.badRequest("Bàn " + table.getName() + " không thuộc chi nhánh này.");
+            }
+            branch = table.getBranch();
         }
         return new CheckoutRequest(lines, tableId, orderType(str(body, "orderType")),
                 paymentMethod(requireStr(body, "paymentMethod")), customer,
-                redemption != null ? redemption : discount(str(body, "voucherCode"), known), str(body, "note"), tendered);
+                redemption != null ? redemption : discount(str(body, "voucherCode"), known), str(body, "note"), tendered, branch);
     }
 
     private static Set<Customization> customizations(Map<String, Object> line) {

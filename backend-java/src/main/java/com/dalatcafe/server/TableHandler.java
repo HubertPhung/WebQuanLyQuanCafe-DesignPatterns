@@ -39,10 +39,11 @@ public class TableHandler extends ApiHandler {
         List<String> parts = segments(exchange);
         if (parts.size() == 3 && parts.get(2).equals("catalog") && method.equals("GET")) {
             List<Object> data = new ArrayList<>();
-            for (Table table : tableDao.findAll()) {
+            for (Table table : tablesOf(branchFilter(exchange))) {
                 Map<String, Object> item = new LinkedHashMap<>();
                 item.put("id", table.getId()); item.put("name", table.getName());
                 item.put("seats", table.getSeats()); item.put("zone", table.getZone());
+                item.put("branch", table.getBranch());
                 data.add(item);
             }
             sendOk(exchange, 200, data, null);
@@ -79,7 +80,7 @@ public class TableHandler extends ApiHandler {
 
         if (parts.size() == 2 && method.equals("GET")) {
             List<Object> data = new ArrayList<>();
-            for (Table table : tableDao.findAll()) {
+            for (Table table : tablesOf(branchFilter(exchange))) {
                 data.add(toJson(table));
             }
             sendOk(exchange, 200, data, null);
@@ -96,8 +97,13 @@ public class TableHandler extends ApiHandler {
         throw methodNotAllowed(exchange);
     }
 
+    private List<Table> tablesOf(String branch) {
+        return tableDao.findAll().stream().filter(t -> branch == null || branch.equals(t.getBranch())).toList();
+    }
+
     private void saveDetails(HttpExchange exchange, Integer id) throws IOException {
         Map<String, Object> body = readJsonBody(exchange);
+        String requestedBranch = branchField(body);
         String name = requireStr(body, "name");
         String zone = requireStr(body, "zone");
         int seats = requireInt(body, "seats");
@@ -110,14 +116,20 @@ public class TableHandler extends ApiHandler {
         }
         Table table;
         synchronized (tableDao) {
-            if (tableDao.findAll().stream().anyMatch(t -> !Objects.equals(t.getId(), id) && name.equalsIgnoreCase(t.getName()))) {
+            // A new table joins the requested branch; an edited one stays where it is.
+            Table existing = id == null ? null : tableDao.findById(id).orElseThrow(() -> ApiException.notFound("Table not found"));
+            String branch = existing != null ? existing.getBranch() : com.dalatcafe.model.Branches.orDefault(requestedBranch);
+            // Names are unique within a branch: both branches can have a "Bàn 01".
+            if (tableDao.findAll().stream().anyMatch(t -> !Objects.equals(t.getId(), id) && branch.equals(t.getBranch())
+                    && name.equalsIgnoreCase(t.getName()))) {
                 throw new ApiException(409, "RESOURCE_CONFLICT", "Tên bàn đã tồn tại.");
             }
             if (id == null) {
                 int nextId = tableDao.nextId();
                 table = new Table(nextId, name, seats, zone);
+                table.setBranch(branch);
             } else {
-                table = tableDao.findById(id).orElseThrow(() -> ApiException.notFound("Table not found"));
+                table = existing;
                 if (seats < table.getGuestCount()) throw ApiException.badRequest("Số chỗ nhỏ hơn số khách đang ngồi.");
                 if (reservationDao != null && reservationDao.findAll().stream().anyMatch(r -> r.getTableIds().contains(id)
                         && (r.getStatus() == com.dalatcafe.model.ReservationStatus.PENDING
@@ -169,6 +181,7 @@ public class TableHandler extends ApiHandler {
         json.put("name", table.getName());
         json.put("seats", table.getSeats());
         json.put("zone", table.getZone());
+        json.put("branch", table.getBranch());
         json.put("imageUrl", table.getImageUrl());
         json.put("status", table.getStatus() == null ? null : table.getStatus().name().toLowerCase(Locale.ROOT));
         json.put("guestCount", table.getGuestCount());

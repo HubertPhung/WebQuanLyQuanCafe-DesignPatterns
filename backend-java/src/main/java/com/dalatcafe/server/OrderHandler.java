@@ -103,9 +103,11 @@ public class OrderHandler extends ApiHandler {
 
     private void list(HttpExchange exchange) throws IOException {
         String status = queryParam(exchange, "status");
+        String branch = branchFilter(exchange);
         List<Order> orders = status == null ? orderDao.findAll() : orderDao.findByStatus(parseStatus(status));
         List<Object> data = new ArrayList<>();
         orders.stream()
+                .filter(order -> branch == null || branch.equals(order.getBranch()))
                 .sorted(Comparator.comparing(Order::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
                 .forEach(order -> data.add(toJson(order)));
         sendOk(exchange, 200, data, null);
@@ -347,6 +349,10 @@ public class OrderHandler extends ApiHandler {
         }
         order.setPaymentMethod(paymentMethod(Objects.requireNonNullElse(str(input, "paymentMethod"), "cash")));
         order.setNote(str(input, "note"));
+        // A table decides the branch; a pickup or delivery order brings its own.
+        order.setBranch(order.getTableId() != null
+                ? tableDao.findById(order.getTableId()).map(com.dalatcafe.model.Table::getBranch).orElse(null)
+                : branchField(input));
         Instant createdAt = instant(input, "createdAt");
         if (createdAt != null) {
             order.setCreatedAt(createdAt);
@@ -486,6 +492,7 @@ public class OrderHandler extends ApiHandler {
         json.put("customer", order.getCustomer());
         json.put("tableId", order.getTableId());
         json.put("tableIds", order.getTableIds());
+        json.put("branch", order.getBranch());
         json.put("orderType", order.getOrderType() == null ? null
                 : order.getOrderType().name().toLowerCase(Locale.ROOT).replace('_', '-'));
         json.put("status", order.getStatus() == null ? null : label(order.getStatus()));

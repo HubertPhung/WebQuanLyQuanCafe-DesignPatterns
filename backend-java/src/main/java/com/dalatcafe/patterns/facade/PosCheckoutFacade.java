@@ -155,6 +155,7 @@ public class PosCheckoutFacade {
             builder.addItem(line.getMenuItemId(), decorate(menu.get(line.getMenuItemId()), line), line.getQuantity());
         }
         Order order = builder.build();
+        order.setBranch(request.getBranch());
         order.recalculateTotals();
 
         DiscountContext discount = request.getDiscountStrategy() == null

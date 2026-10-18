@@ -4,12 +4,13 @@ import { createReservation as createJavaReservation, fetchReservationTables } fr
 import { isWithinDefaultOperatingHours, hasReservationTimePassed, DEFAULT_OPENING_TIME, DEFAULT_CLOSING_TIME } from '@/lib/reservation-rules'
 import { createMockReservation, getMockTables, getMockMenuItems } from '@/lib/db/mock-store'
 import { isDbConfigured } from '@/lib/db'
+import { DEFAULT_BRANCH_ID, isBranchId, type BranchId } from '@/lib/branches'
 
 export async function getCustomerReservationTables() {
   const remote = await fetchReservationTables()
   if (remote.ok) return { ok: true, tables: remote.data }
   if (isDbConfigured || !remote.unreachable) return { ok: false, tables: [], error: 'Chưa tải được danh sách bàn. Vui lòng thử lại.' }
-  return { ok: true, tables: getMockTables().map(({ id, name, seats, zone }) => ({ id, name, seats, zone })) }
+  return { ok: true, tables: getMockTables().map(({ id, name, seats, zone, branch }) => ({ id, name, seats, zone, branch })) }
 }
 
 export interface CustomerReservationInput {
@@ -21,6 +22,8 @@ export interface CustomerReservationInput {
   guests: number
   tableId: number
   tableIds?: number[]
+  // The tables must all belong to this branch.
+  branch?: BranchId
   preOrders?: { menuItemId: number; qty: number }[]
 }
 
@@ -49,6 +52,11 @@ export async function bookCustomerTable(input: CustomerReservationInput): Promis
       return { ok: false, error: 'Vui lòng chọn vị trí bàn mong muốn.' }
     }
 
+    if (input.branch !== undefined && !isBranchId(input.branch)) {
+      return { ok: false, error: 'Vui lòng chọn chi nhánh.' }
+    }
+    const branch = input.branch ?? DEFAULT_BRANCH_ID
+
     const dateTime = new Date(input.dateTime)
     if (Number.isNaN(dateTime.getTime())) {
       return { ok: false, error: 'Thời gian đặt bàn không hợp lệ.' }
@@ -69,6 +77,7 @@ export async function bookCustomerTable(input: CustomerReservationInput): Promis
       guests: input.guests,
       tableId: tableIds[0],
       tableIds,
+      branch,
       preOrders: input.preOrders && input.preOrders.length > 0 ? input.preOrders : undefined,
     }
 
@@ -103,6 +112,7 @@ export async function bookCustomerTable(input: CustomerReservationInput): Promis
       guests: booking.guests,
       tableId: booking.tableId,
       tableIds,
+      branch,
       preOrders,
     })
 

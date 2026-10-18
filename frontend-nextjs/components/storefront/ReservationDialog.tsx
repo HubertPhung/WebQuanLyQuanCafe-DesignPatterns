@@ -30,12 +30,14 @@ import { useReservationStore } from '@/lib/store/reservation-store'
 import { bookCustomerTable, getCustomerReservationTables } from '@/app/actions/reservation-actions'
 import { RESERVATION_TIME_SLOTS } from '@/lib/reservation-rules'
 import { formatMoneyVND } from '@/lib/store/cart-store'
+import { DEFAULT_BRANCH_ID, branchById, branches, type BranchId } from '@/lib/branches'
 
 interface TableOption {
   id: number
   name: string
   seats: number
   zone: string
+  branch?: BranchId
 }
 
 export function ReservationDialog() {
@@ -47,6 +49,7 @@ export function ReservationDialog() {
   const [contact, setContact] = useState('')
   const [email, setEmail] = useState('')
   const [guests, setGuests] = useState(2)
+  const [branchId, setBranchId] = useState<BranchId>(DEFAULT_BRANCH_ID)
   const [selectedZone, setSelectedZone] = useState<string>('all')
   const [tables, setTables] = useState<TableOption[]>([])
   const [tablesLoading, setTablesLoading] = useState(false)
@@ -78,9 +81,16 @@ export function ReservationDialog() {
     }).catch(() => { if (active) toast.error('Không tải được danh sách bàn.') }).finally(() => { if (active) setTablesLoading(false) })
     return () => { active = false }
   }, [isOpen])
-  const zones = ['all', ...new Set(tables.map(table => table.zone))]
+  // Each branch has its own floor; a booking uses the tables of one branch.
+  const branchTables = tables.filter(table => (table.branch ?? DEFAULT_BRANCH_ID) === branchId)
+  const zones = ['all', ...new Set(branchTables.map(table => table.zone))]
+  const chooseBranch = (next: BranchId) => {
+    setBranchId(next)
+    setSelectedZone('all')
+    setSelectedTableIds([])
+  }
 
-  const filteredTables = tables.filter((t) => {
+  const filteredTables = branchTables.filter((t) => {
     if (selectedZone !== 'all' && t.zone !== selectedZone) return false
     return true
   })
@@ -126,6 +136,7 @@ export function ReservationDialog() {
         guests,
         tableId: selectedTableIds[0],
         tableIds: selectedTableIds,
+        branch: branchId,
         preOrders: preOrders.length > 0
           ? preOrders.map((p) => ({ menuItemId: p.id, qty: p.quantity }))
           : undefined,
@@ -138,7 +149,7 @@ export function ReservationDialog() {
           customer,
           contact,
           time: `${selectedTimeSlot} ngày ${dateStr}`,
-          tableName: selectedTables.map(table => `${table.name} (${table.zone})`).join(', '),
+          tableName: `${selectedTables.map(table => `${table.name} (${table.zone})`).join(', ')} · ${branchById(branchId).street}`,
           guests,
         })
         toast.success('Đặt bàn thành công! Quán đã ghi nhận lịch hẹn.')
@@ -360,6 +371,30 @@ export function ReservationDialog() {
                       }`}
                     >
                       {num}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Branch pills: the floor below belongs to the chosen branch */}
+              <div className="space-y-1.5">
+                <span className="text-[11px] font-medium text-stone-500 block">Chi nhánh:</span>
+                <div className="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Chi nhánh đặt bàn">
+                  {branches.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={branchId === option.id}
+                      onClick={() => chooseBranch(option.id)}
+                      className={`rounded-lg px-2.5 py-2 text-left text-xs cursor-pointer transition-all ${
+                        branchId === option.id
+                          ? 'bg-amber-100 text-[#3E2723] font-bold border border-amber-300'
+                          : 'bg-stone-50 text-stone-600 border border-stone-200 hover:bg-stone-100'
+                      }`}
+                    >
+                      {option.street}
+                      <span className="block text-[10px] font-normal text-stone-500">{option.note}</span>
                     </button>
                   ))}
                 </div>

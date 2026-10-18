@@ -81,6 +81,7 @@ Cột *Frontend* là `frontend-nextjs/`, cột *Java* là `backend-java/`. Cột
 
 | Mã | Tính năng | Pattern | Frontend | Java | Tích hợp |
 | :--- | :--- | :---: | :---: | :---: | :---: |
+| `FEAT-BR-01` | Hai chi nhánh (123 Phan Đình Phùng, 456 Bùi Thị Xuân): bàn, đơn, đặt bàn, doanh thu tách theo chi nhánh; thực đơn, khách hàng, tài khoản dùng chung | — | 🟢 ô chi nhánh trên header (cookie `admin_branch`), chọn chi nhánh khi đặt bàn và khi đặt món online | 🟢 cột `branch`, `?branch=` trên các API danh sách | 🟢 |
 | `FEAT-INV-01` | Danh sách thực đơn | — | 🟢 `menu-management.tsx` (trang Kho riêng đã gỡ) | 🟢 `IMenuDao` | ⚪ |
 | `FEAT-INV-02` | Theo dõi số lượng tồn kho, cảnh báo sắp hết hàng | — | ⛔ Đã gỡ (món chỉ bật / tắt bán; cột `stock_qty`, `low_stock_threshold` đã xoá) | ⛔ Đã gỡ | — |
 | `FEAT-INV-03` | Bật/tắt bán món | — | 🟢 `setItemInStock` | 🟢 `PATCH /api/menu/{id}/stock` | 🟢 ghép theo tên món |

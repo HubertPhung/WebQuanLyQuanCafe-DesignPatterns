@@ -9,8 +9,8 @@ Tài liệu gom toàn bộ thông tin kiểm thử: cách chạy, danh mục tes
 
 | Bộ kiểm thử | Lệnh | Số ca | Chạy trên CI |
 | :--- | :--- | :---: | :---: |
-| JUnit 5 Backend | `cd backend-java && mvn clean test` | 312 | ✅ Job *Backend CI* |
-| UI/UX & Admin Actions | `cd frontend-nextjs && npm test` | 39 | ✅ Job *Frontend CI* |
+| JUnit 5 Backend | `cd backend-java && mvn clean test` | 320 | ✅ Job *Backend CI* |
+| UI/UX & Admin Actions | `cd frontend-nextjs && npm test` | 41 | ✅ Job *Frontend CI* |
 | Kiểu TypeScript | `cd frontend-nextjs && npx tsc --noEmit` | — | ✅ |
 | Build production | `cd frontend-nextjs && npm run build` | — | ✅ |
 | Đầu-cuối trên PostgreSQL thật | `cd frontend-nextjs && npm run test:e2e` | 59 | ❌ Chạy tay |
@@ -36,16 +36,17 @@ Tài liệu gom toàn bộ thông tin kiểm thử: cách chạy, danh mục tes
 | `patterns/ChainTest` | Giờ đến đã qua (đồng hồ cố định, chừa 15 phút), giờ mở cửa, sức chứa, trùng lịch bàn, thứ tự mắt xích; khi admin đang đổi giờ mở cửa, lời từ chối luôn trích một cặp giờ thật, không ghép giờ mở mới với giờ đóng cũ |
 | `patterns/ObserverTest` | Sự kiện *paid* (cộng điểm, bàn → `OCCUPIED`, phiếu KDS) và *completed* (bàn → `CLEANING`, không cộng điểm lần hai; bàn còn đơn khác đang mở thì giữ `OCCUPIED`), đăng ký trùng, đơn chưa trả tiền, đơn mang đi, khách/bàn không tồn tại, một observer lỗi không chặn các observer sau (lỗi đầu tiên vẫn được ném ra, các lỗi sau gắn vào `getSuppressed`) |
 | `dao/DaoLayerTest`, `model/ModelEntitiesTest` | Tầng DAO In-Memory và các thực thể; `Order`, `Reservation`, `Customer` bằng nhau theo mã duy nhất (`orderCode`, `reservationCode`, `phone`) và `hashCode` khớp với `equals`; nhiều luồng cùng cộng và đổi điểm của một khách không làm mất thay đổi nào; hoàn điểm (`restorePoints`) không tính thêm lượt ghé; món mới mặc định đang bán và bật / tắt được |
-| `dao/JdbcIntegrationTest` | DAO JDBC trên PostgreSQL thật: nâng cấp schema chạy lại được, khoá ngoại chặn bàn không tồn tại, cột JSONB (`items`, `variations`, `pre_orders`), seed và sequence, mã `AC-0001` / `RES-0001`, pool kết nối, checkout qua Facade, bảng `users` (email và Google id duy nhất), cộng và đổi điểm đồng thời trên cùng một dòng `customers` (khoá dòng `SELECT ... FOR UPDATE`), đổi quá số dư không đổi gì, hoàn điểm không tính thêm lượt ghé |
+| `dao/JdbcIntegrationTest` | DAO JDBC trên PostgreSQL thật: nâng cấp schema chạy lại được, cột `branch` của bàn, đơn và phiếu đặt, thêm bàn cho chi nhánh thứ hai khi nâng cấp floor cũ, khoá ngoại chặn bàn không tồn tại, cột JSONB (`items`, `variations`, `pre_orders`), seed và sequence, mã `AC-0001` / `RES-0001`, pool kết nối, checkout qua Facade, bảng `users` (email và Google id duy nhất), cộng và đổi điểm đồng thời trên cùng một dòng `customers` (khoá dòng `SELECT ... FOR UPDATE`), đổi quá số dư không đổi gì, hoàn điểm không tính thêm lượt ghé |
 | `security/SecurityTest` | Băm PBKDF2 có salt và xác minh, token HS256 hết hạn và sai khoá, khoá sau nhiều lần sai, tạo admin đầu tiên, cấu hình từ biến môi trường (từ chối khoá dev khi `APP_ENV=production`), DAO tài khoản giữ email và Google id duy nhất |
 | `server/AuthTest` | Server chạy như production (không nhận `X-User-Role`): đăng ký thành `CUSTOMER`, token giả / `alg: none` / khoá khác bị từ chối, sai mật khẩu và email lạ trả cùng một lỗi, khoá sau 5 lần sai, ADMIN cấp tài khoản STAFF, đổi vai trò và khoá có hiệu lực với token cũ, quản trị viên cuối cùng được bảo vệ, Google cần service key, liên kết khách hàng theo email đã xác minh và từ chối tài khoản nhân viên, đổi mật khẩu, khoá dịch vụ của cửa hàng (`X-Service-Key`) chỉ đặt và đồng bộ được đơn, mật khẩu có khoảng trắng đầu/cuối được so khớp đúng như đã gõ, đường dẫn giống tên (`/api/usersX`, `/api/configX`) trả 404 thay vì lọt qua kiểm tra vai trò |
 | `server/ServerTest` | Định tuyến REST, mã lỗi, RBAC (chạy với `X-User-Role` cho gọn; mặc định từ chối, MANAGER cho tạo món và thống kê), 503 khi mất CSDL, `transfer-pos` qua Adapter, vòng đời đơn trên KDS và đồng bộ bàn, thanh toán đơn chuyển từ đặt bàn, đổi trạng thái phiếu, tạo món và bật / tắt bán (endpoint `/stock` chỉ nhận `inStock`), đổi điểm thành viên (kể cả không giảm quá hoá đơn), thống kê (chuỗi theo ngày, cơ cấu thanh toán, `days` sai), xem trước voucher, nhập đơn offline (idempotent, dòng sai chỉ làm hỏng đơn đó), cài đặt `/api/config` (chỉ ADMIN, chuỗi đặt bàn đọc giá trị mới, cập nhật sai không đổi gì), từ chối đặt bàn cho thời điểm đã qua, giá món đặt trước lấy từ menu theo `menuItemId` (bỏ qua giá client gửi), món đặt trước không tồn tại bị từ chối, checkout tại bàn không tồn tại trả 404 trước khi thu tiền, tiền mặt khách đưa thiếu trả 400 trước khi thu tiền, hoàn tất một đơn khi bàn còn đơn khác đang mở giữ bàn `OCCUPIED`, kể cả hoá đơn mở chưa thanh toán (seed `AC-0052-C3D` ở bàn 7) |
+| `server/BranchTest` | Bàn, đơn, đặt bàn và thống kê tách theo chi nhánh: `?branch=` trên `/api/tables`, `/catalog`, `/orders`, `/reservations`, `/analytics/overview` (id lạ trả 400); bàn mới vào chi nhánh được gửi, sửa bàn không đổi chi nhánh, tên bàn trùng được ở hai chi nhánh; đơn tại bàn lấy chi nhánh của bàn, đơn mang đi lấy chi nhánh được gửi, gửi lệch chi nhánh của bàn trả 400 và không thu tiền; phiếu đặt lấy chi nhánh của bàn và chuyển sang POS thành đơn cùng chi nhánh, không ghép bàn hai chi nhánh; đơn offline nhập đúng chi nhánh |
 | `server/ConfigHandlerTest` | `GET /api/config` không trả cấu hình đang ghi dở (giờ mở sau giờ đóng) khi admin lưu cài đặt cùng lúc |
 | `server/OrderHandlerTest`, `server/ReservationHandlerTest`, `server/CheckoutHandlerTest`, `server/MenuHandlerTest` | Yêu cầu đồng thời trên DAO trả bản sao (như JDBC): huỷ đơn đúng lúc thanh toán không để đơn đã thu tiền ở trạng thái chưa trả; hoàn tất đơn trong lúc sự kiện *paid* đang chạy vẫn để bàn ở `CLEANING`; hai lần checkout không cùng tiêu một số dư điểm; không trừ được điểm thì trả 503, không thu tiền, không ghi đơn; checkout thất bại sau khi đã giữ điểm thì hoàn đủ điểm; một đơn khác được thanh toán trong lúc checkout của hội viên đang chạy không cộng điểm nhầm cho hội viên đó; hai phiếu cùng bàn cùng giờ chỉ một phiếu qua chuỗi; một phiếu chỉ chuyển sang POS một lần; endpoint `/stock` chỉ bật / tắt bán, từ chối `change`, `stockQty` và giá trị không phải boolean |
 
 ---
 
-## 3. Bộ test UI/UX & Admin Actions (39 ca)
+## 3. Bộ test UI/UX & Admin Actions (41 ca)
 
 Các mã dưới đây khớp chính xác với `frontend-nextjs/scripts/test-ui-ux.mjs`.
 
@@ -70,6 +71,7 @@ Các mã dưới đây khớp chính xác với `frontend-nextjs/scripts/test-ui
 | | `TC-ADM-06` | `/admin/customers` – CRM khách hàng |
 | | `TC-ADM-07` | `/admin/analytics` – Biểu đồ phân tích |
 | | `TC-ADM-08` | `/admin/settings` – Cấu hình chi nhánh |
+| | `TC-ADM-11` | Cookie `admin_branch=bui-thi-xuan` (ô chi nhánh trên header) chỉ hiện sơ đồ bàn của 456 Bùi Thị Xuân; mặc định chỉ hiện 123 Phan Đình Phùng |
 | | `TC-ADM-10` | Header admin không còn ô tìm kiếm; có chuông thông báo và nút "Đơn đang phục vụ" dẫn thẳng tới tab Bếp |
 | Admin Actions (mock store) | `TC-ACT-01` | Tạo đơn POS (bàn 5 có khách), món không có trong thực đơn bị từ chối |
 | | `TC-ACT-02` | Đơn đi qua KDS: Brewing → Ready → Completed |
@@ -82,6 +84,7 @@ Các mã dưới đây khớp chính xác với `frontend-nextjs/scripts/test-ui
 | | `TC-ACT-09` | Món mới trả về id để liên kết với món Java |
 | | `TC-ACT-10` | Khi Java tắt, fallback đặt bàn cục bộ từ chối phiếu trùng khung 2 giờ, phiếu 23:30 và phiếu đã qua; phiếu đã huỷ không giữ chỗ |
 | | `TC-ACT-11` | Khi Java tắt, đơn tiền mặt có nhập tiền khách đưa mà thiếu so với tổng bị từ chối và không ghi đơn; đưa đủ thì nhận; thanh toán thẻ bỏ qua số tiền đưa |
+| | `TC-ACT-12` | Đơn tại bàn lấy chi nhánh của bàn, đơn mang đi lấy chi nhánh được chọn; phiếu đặt không ghép được bàn của hai chi nhánh và mang chi nhánh của bàn |
 | Đăng nhập & phân quyền | `TC-AUTH-01` | Khách chưa đăng nhập bị chuyển tới `/login?next=…` |
 | | `TC-AUTH-02` | Phiên `CUSTOMER` không vào được `/admin` |
 | | `TC-AUTH-03` | `STAFF` mở được POS nhưng bị chặn ở cài đặt (chỉ ADMIN) |
@@ -111,8 +114,8 @@ Các mã dưới đây khớp chính xác với `frontend-nextjs/scripts/test-ui
 
 | Hạng mục | Kết quả |
 | :--- | :--- |
-| JUnit 5 (`mvn clean test`) | **168 / 168 PASS** (bộ test lúc chạy E2E; hiện là 312, xem mục 1) |
-| UI/UX (`npm test`, Java đang chạy) | **25 / 25 PASS** (hiện là 39, xem mục 3) |
+| JUnit 5 (`mvn clean test`) | **168 / 168 PASS** (bộ test lúc chạy E2E; hiện là 320, xem mục 1) |
+| UI/UX (`npm test`, Java đang chạy) | **25 / 25 PASS** (hiện là 41, xem mục 3) |
 | TypeScript, build production | Không lỗi |
 | Cú pháp sơ đồ Mermaid (`mermaid.parse`, Mermaid 11) | Tất cả sơ đồ trong `docs/` hợp lệ |
 | API proxy `lib/api-client.ts` với Java thật (menu, checkout, bàn, đặt bàn, backend tắt, `JAVA_BACKEND_URL=off`) | **9 / 9 PASS** |

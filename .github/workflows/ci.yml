@@ -48,7 +48,7 @@ jobs:
       - name: Build Next.js Application
         run: npm run build
 
-      - name: Run Automated UI/UX & Admin Action Test Suite (39 Tests)
+      - name: Run Automated UI/UX & Admin Action Test Suite (41 Tests)
         run: |
           # Khởi động production server Next.js ở chế độ background
           npx next start -p 3000 &

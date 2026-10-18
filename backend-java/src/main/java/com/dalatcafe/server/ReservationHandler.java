@@ -77,9 +77,12 @@ public class ReservationHandler extends ApiHandler {
         }
         switch (exchange.getRequestMethod().toUpperCase(Locale.ROOT)) {
             case "GET":
+                String branch = branchFilter(exchange);
                 List<Object> data = new ArrayList<>();
                 for (Reservation reservation : reservationDao.findAll()) {
-                    data.add(toJson(reservation));
+                    if (branch == null || branch.equals(reservation.getBranch())) {
+                        data.add(toJson(reservation));
+                    }
                 }
                 sendOk(exchange, 200, data, null);
                 break;
@@ -252,16 +255,23 @@ public class ReservationHandler extends ApiHandler {
             if (requested.isEmpty() || requested.size() > 10) throw ApiException.badRequest("Chọn từ 1 đến 10 bàn.");
             List<Integer> ids = new ArrayList<>();
             List<String> names = new ArrayList<>();
+            String branch = null;
             for (Object raw : requested) {
                 if (raw == null) throw ApiException.badRequest("Mã bàn không hợp lệ.");
                 int id = requireInt(Map.of("id", raw), "id");
                 if (id < 1 || ids.contains(id)) throw ApiException.badRequest("Mã bàn không hợp lệ hoặc bị trùng.");
                 Table table = tableDao.findById(id).orElseThrow(() -> ApiException.notFound("Table not found: " + id));
+                if (branch != null && !branch.equals(table.getBranch())) {
+                    throw ApiException.badRequest("Các bàn ghép phải cùng một chi nhánh.");
+                }
+                branch = table.getBranch();
                 ids.add(id);
                 names.add(table.getName());
             }
             reservation.setTableIds(ids);
             reservation.setTableName(String.join(", ", names));
+            reservation.setBranch(branch);
+            requireBranch(body, reservation);
             return;
         }
         if (body.get("tableId") != null) {
@@ -270,15 +280,28 @@ public class ReservationHandler extends ApiHandler {
                     .orElseThrow(() -> ApiException.notFound("Table not found: " + tableId));
             reservation.setTableId(table.getId());
             reservation.setTableName(table.getName());
+            reservation.setBranch(table.getBranch());
+            requireBranch(body, reservation);
             return;
         }
         String name = requireStr(body, "table");
+        // Both branches number their tables alike, so a name is looked up within the requested branch.
+        String branch = com.dalatcafe.model.Branches.orDefault(branchField(body));
         Table table = tableDao.findAll().stream()
-                .filter(t -> name.equalsIgnoreCase(t.getName()))
+                .filter(t -> branch.equals(t.getBranch()) && name.equalsIgnoreCase(t.getName()))
                 .findFirst()
                 .orElseThrow(() -> ApiException.notFound("Table not found: " + name));
         reservation.setTableId(table.getId());
         reservation.setTableName(table.getName());
+        reservation.setBranch(table.getBranch());
+    }
+
+    /** A booking that names a branch must use that branch's tables. */
+    private static void requireBranch(Map<String, Object> body, Reservation reservation) {
+        String requested = branchField(body);
+        if (requested != null && !requested.equals(reservation.getBranch())) {
+            throw ApiException.badRequest("Bàn đã chọn không thuộc chi nhánh này.");
+        }
     }
 
     private static Instant parseDateTime(String raw) {
@@ -299,6 +322,7 @@ public class ReservationHandler extends ApiHandler {
         json.put("table", r.getTableName());
         json.put("tableId", r.getTableId());
         json.put("tableIds", r.getTableIds());
+        json.put("branch", r.getBranch());
         json.put("guests", r.getGuests());
         json.put("status", r.getStatus() == null ? null : r.getStatus().getDescription());
         json.put("note", r.getNote());

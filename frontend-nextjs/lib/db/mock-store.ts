@@ -1,5 +1,6 @@
 import type { FloorTable, MenuItem, Order, OrderStatus, TableStatus, Variation, OrderItem, PaymentMethod, OrderType } from './schema'
 import { shippingFee } from '../storefront/delivery'
+import { DEFAULT_BRANCH_ID, type BranchId } from '../branches'
 import { customizationSurcharge, describeCustomizations, type PosCustomization } from '../admin/customizations'
 import {
   DEFAULT_CLOSING_TIME,
@@ -22,7 +23,7 @@ function startOfDay(offsetDays = 0) {
 
 function createInitialTables(): FloorTable[] {
   const now = new Date()
-  return [
+  const firstBranch: Omit<FloorTable, 'branch'>[] = [
     { id: 1, name: 'Table 1', seats: 2, zone: 'Main Floor', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: now },
     { id: 2, name: 'Table 2', seats: 4, zone: 'Main Floor', status: 'occupied', guestCount: 3, occupiedSince: new Date(Date.now() - 25 * 60000), updatedAt: now },
     { id: 3, name: 'Table 3', seats: 4, zone: 'Main Floor', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: now },
@@ -39,6 +40,23 @@ function createInitialTables(): FloorTable[] {
     { id: 14, name: 'Table 14', seats: 1, zone: 'Coffee Bar', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: now },
     { id: 15, name: 'Table 15', seats: 1, zone: 'Coffee Bar', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: now },
   ]
+  // 456 Bùi Thị Xuân: the same floor the Java seed gives that branch (InMemoryDatabase.branchTwoTables).
+  const secondBranch: Omit<FloorTable, 'branch'>[] = [
+    ['Bàn 01', 2, 'Sân vườn'], ['Bàn 02', 4, 'Sân vườn'], ['Bàn 03', 4, 'Sân vườn'], ['Bàn 04', 6, 'Sân vườn'],
+    ['Bàn 05', 2, 'Góc làm việc'], ['Bàn 06', 2, 'Góc làm việc'], ['Bàn 07', 4, 'Tầng 2'], ['Bàn 08', 4, 'Tầng 2'],
+  ].map(([name, seats, zone], index) => ({
+    id: 16 + index, name: name as string, seats: seats as number, zone: zone as string,
+    status: 'available', guestCount: 0, occupiedSince: null, updatedAt: now,
+  }))
+  return [
+    ...firstBranch.map((table) => ({ ...table, branch: DEFAULT_BRANCH_ID })),
+    ...secondBranch.map((table) => ({ ...table, branch: 'bui-thi-xuan' as const })),
+  ]
+}
+
+// A table decides the branch of its orders and bookings.
+function branchOfTable(tables: FloorTable[], tableId: number | null | undefined): BranchId | undefined {
+  return tableId == null ? undefined : tables.find((table) => table.id === tableId)?.branch
 }
 
 function createInitialMenuItems(): MenuItem[] {
@@ -322,6 +340,7 @@ function createInitialOrders(): Order[] {
       orderCode: `AC-${String(codeNum).padStart(4, '0')}`,
       customer,
       tableId,
+      branch: DEFAULT_BRANCH_ID,
       orderType,
       items,
       subtotal,
@@ -552,6 +571,7 @@ export type MockReservation = {
   guests: number
   tableId: number | null
   tableName: string
+  branch: BranchId
   status: ReservationStatusLabel
   preOrders: { name: string; qty: number; price: number }[]
 }
@@ -564,7 +584,7 @@ function at(daysFromToday: number, hour: number, minute = 0) {
 }
 
 function createInitialReservations(): MockReservation[] {
-  return [
+  const seeded: Omit<MockReservation, 'branch'>[] = [
     {
       code: 'RES-001', customer: 'Nguyễn Hoàng Nam', contact: '0912 345 678', email: 'nam.nguyen@gmail.com',
       note: 'Yêu cầu bàn gần cửa sổ, chuẩn bị trước cà phê.', dateTime: at(0, 15), guests: 2, tableId: 4, tableName: 'Table 4',
@@ -609,6 +629,7 @@ function createInitialReservations(): MockReservation[] {
       status: 'Đã hủy', preOrders: [],
     },
   ]
+  return seeded.map((reservation) => ({ ...reservation, branch: DEFAULT_BRANCH_ID }))
 }
 
 type StoreState = {
@@ -648,11 +669,16 @@ export function getMockTables(): FloorTable[] {
   return store.tables.filter(table => !table.deletedAt).sort((a, b) => a.id - b.id)
 }
 
-export function saveMockTable(input: { name: string; seats: number; zone: string; imageUrl: string | null }, id?: number): FloorTable {
+export function saveMockTable(
+  { branch: requested, ...input }: { name: string; seats: number; zone: string; imageUrl: string | null; branch?: BranchId },
+  id?: number,
+): FloorTable {
   const store = getStore()
-  if (store.tables.some(t => !t.deletedAt && t.id !== id && t.name.toLowerCase() === input.name.toLowerCase())) throw new Error('Tên bàn đã tồn tại.')
   let table = id === undefined ? undefined : store.tables.find(t => t.id === id && !t.deletedAt)
   if (id !== undefined && !table) throw new Error('Không tìm thấy bàn.')
+  // An edited table stays at its branch; names only have to be unique within one branch.
+  const branch = table?.branch ?? requested ?? DEFAULT_BRANCH_ID
+  if (store.tables.some(t => !t.deletedAt && t.id !== id && t.branch === branch && t.name.toLowerCase() === input.name.toLowerCase())) throw new Error('Tên bàn đã tồn tại.')
   if (table && input.seats < table.guestCount) throw new Error('Số chỗ nhỏ hơn số khách đang ngồi.')
   if (id !== undefined && store.reservations.some(r => {
     const ids = r.tableIds ?? [r.tableId]
@@ -660,7 +686,7 @@ export function saveMockTable(input: { name: string; seats: number; zone: string
       && r.guests > ids.reduce<number>((sum, selected) => sum + (selected === id ? input.seats : store.tables.find(table => table.id === selected)?.seats ?? 0), 0)
   })) throw new Error('Số chỗ nhỏ hơn số khách đã đặt bàn.')
   if (!table) {
-    table = { id: Math.max(0, ...store.tables.map(t => t.id)) + 1, ...input, status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date() }
+    table = { id: Math.max(0, ...store.tables.map(t => t.id)) + 1, ...input, branch, status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date() }
     store.tables.push(table)
   } else Object.assign(table, input, { updatedAt: new Date() })
   return { ...table }
@@ -775,6 +801,8 @@ export type NewMockOrderInput = {
   totals?: { subtotal: number; total: number }
   // Cash the customer handed over; optional, but when given a paid cash order must be covered.
   tenderedAmount?: number
+  // Branch of a pickup or delivery order; a table decides it otherwise.
+  branch?: BranchId
 }
 
 // The local stand-in for the Java Facade rule: cash tendered below the total is refused.
@@ -816,6 +844,7 @@ export function createMockOrder(input: NewMockOrderInput): { ok: boolean; messag
     orderCode: input.orderCode ?? `AC-${String(nextId).padStart(4, '0')}-${Date.now().toString(36).slice(-3).toUpperCase()}`,
     customer: input.customer.trim().slice(0, 60) || 'Walk-in',
     tableId: input.tableId,
+    branch: branchOfTable(store.tables, input.tableId) ?? input.branch ?? DEFAULT_BRANCH_ID,
     orderType: input.orderType,
     items,
     subtotal,
@@ -841,9 +870,11 @@ export function createMockOrder(input: NewMockOrderInput): { ok: boolean; messag
   return { ok: true, message: `Order sent to the bar for ${newOrder.customer}.` }
 }
 
-export type NewMockReservationInput = Omit<MockReservation, 'code' | 'status' | 'tableName' | 'preOrders' | 'tableId'> & {
+export type NewMockReservationInput = Omit<MockReservation, 'code' | 'status' | 'tableName' | 'preOrders' | 'tableId' | 'branch'> & {
   tableId: number
   preOrders?: MockReservation['preOrders']
+  // When given, every chosen table must belong to this branch.
+  branch?: BranchId
 }
 
 export function expireMockNoShows(now = Date.now()): number {
@@ -880,6 +911,9 @@ export function createMockReservation(input: NewMockReservationInput): { ok: boo
   if (!ids.length || ids.length > 10 || new Set(ids).size !== ids.length || ids.some(id => !Number.isInteger(id) || id < 1)) return { ok: false, error: 'Chọn từ 1 đến 10 bàn khác nhau.' }
   const tables = ids.map(id => store.tables.find(table => table.id === id && !table.deletedAt))
   if (tables.some(table => !table)) return { ok: false, error: 'Table not found.' }
+  const branch = tables[0]!.branch
+  if (tables.some(table => table!.branch !== branch)) return { ok: false, error: 'Các bàn ghép phải cùng một chi nhánh.' }
+  if (input.branch && input.branch !== branch) return { ok: false, error: 'Bàn đã chọn không thuộc chi nhánh này.' }
   const capacity = tables.reduce((sum, table) => sum + table!.seats, 0)
   if (input.guests < 1 || input.guests > capacity) return { ok: false, error: 'Số khách vượt tổng số chỗ các bàn đã chọn.' }
   const taken = store.reservations.some(
@@ -890,7 +924,7 @@ export function createMockReservation(input: NewMockReservationInput): { ok: boo
   const localCount = store.reservations.filter((r) => r.code.startsWith('RES-L')).length
   // The L marks a local booking so it is never mistaken for a backend-issued RES-0001.
   const code = `RES-L${String(localCount + 1).padStart(4, '0')}`
-  store.reservations.push({ ...input, tableId: ids[0], tableIds: ids, code, tableName: tables.map(table => table!.name).join(', '), status: 'Chờ xác nhận', preOrders: input.preOrders ?? [] })
+  store.reservations.push({ ...input, branch, tableId: ids[0], tableIds: ids, code, tableName: tables.map(table => table!.name).join(', '), status: 'Chờ xác nhận', preOrders: input.preOrders ?? [] })
   return { ok: true, code }
 }
 
@@ -913,6 +947,7 @@ export type ExternalOrderInput = {
   tableId: number | null
   items: OrderItem[]
   guests?: number
+  branch?: BranchId
 }
 
 // Records an order whose lines were priced elsewhere (Java Adapter, or the local Adapter below),
@@ -927,6 +962,7 @@ export function createMockOrderFromItems(input: ExternalOrderInput): { ok: boole
     customer: input.customer.trim().slice(0, 60) || 'Walk-in',
     tableId: input.tableId,
     tableIds: input.tableIds,
+    branch: branchOfTable(store.tables, input.tableIds?.[0] ?? input.tableId) ?? input.branch ?? DEFAULT_BRANCH_ID,
     orderType: 'dine-in',
     items: input.items,
     subtotal,
@@ -963,6 +999,7 @@ export function transferMockReservation(code: string): { ok: boolean; orderCode?
     tableIds: reservation.tableIds,
     items: reservation.preOrders.map((item) => ({ name: item.name, qty: item.qty, price: item.price })),
     guests: reservation.guests,
+    branch: reservation.branch,
   })
   if (!res.ok) return { ok: false, error: res.error }
   reservation.status = 'Hoàn thành'

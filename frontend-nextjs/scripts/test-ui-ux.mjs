@@ -365,6 +365,21 @@ async function runAdminUITests() {
     }
   }
 
+  // TC-ADM-11: the header's branch switch (admin_branch cookie) shows that branch's floor only
+  try {
+    const first = await fetchPage(`${BASE_URL}/admin/tables`, { headers: { Cookie: adminCookie } })
+    const second = await fetchPage(`${BASE_URL}/admin/tables`, { headers: { Cookie: `${adminCookie}; admin_branch=bui-thi-xuan` } })
+    const firstOk = first.status === 200 && first.body.includes('Coffee Bar') && !first.body.includes('Góc làm việc')
+    const secondOk = second.status === 200 && second.body.includes('Góc làm việc') && !second.body.includes('Coffee Bar') && second.body.includes('456 Bùi Thị Xuân')
+    if (firstOk && secondOk) {
+      recordTest('TC-ADM-11', 'Branch Switch Shows Only That Branch', 'Admin UI', 'PASS', '123 Phan Đình Phùng and 456 Bùi Thị Xuân floors kept apart')
+    } else {
+      recordTest('TC-ADM-11', 'Branch Switch Shows Only That Branch', 'Admin UI', 'FAIL', JSON.stringify({ first: first.status, firstOk, second: second.status, secondOk }))
+    }
+  } catch (err) {
+    recordTest('TC-ADM-11', 'Branch Switch Shows Only That Branch', 'Admin UI', 'FAIL', err.message)
+  }
+
   // TC-ADM-10: the header has no search box; its bell links each alert to the page that resolves it
   try {
     const res = await fetchPage(`${BASE_URL}/admin`, { headers: { Cookie: adminCookie } })
@@ -564,6 +579,25 @@ async function runAdminMutationTests() {
       recordTest('TC-ACT-11', 'Offline Cash Sale Must Be Covered by the Cash Tendered', 'Admin Actions', 'PASS', short.error)
     } else {
       recordTest('TC-ACT-11', 'Offline Cash Sale Must Be Covered by the Cash Tendered', 'Admin Actions', 'FAIL', JSON.stringify({ short, shortRecorded, covered, card }))
+    }
+
+    // TC-ACT-12: Orders and bookings belong to a branch: a table decides it, pickup names it,
+    // and one booking cannot join tables of both branches
+    const secondTable = getMockTables().find(t => t.branch === 'bui-thi-xuan')
+    const secondTables = getMockTables().filter(t => t.branch === 'bui-thi-xuan')
+    createMockOrder({ lines: [{ menuItemId: 1, qty: 1 }], customer: 'Branch Dine-in', tableId: secondTable.id, orderType: 'dine-in', paymentMethod: 'card', paid: true })
+    createMockOrder({ lines: [{ menuItemId: 1, qty: 1 }], customer: 'Branch Pickup', tableId: null, orderType: 'pickup', paymentMethod: 'card', paid: true, branch: 'bui-thi-xuan' })
+    const branchOf = (customer) => getMockActiveOrders().find(o => o.customer === customer)?.branch
+    const mixed = createMockReservation({ customer: 'Mixed Branch', contact: '0900000020', email: null, note: null, dateTime: at(5), guests: 2, tableId: 1, tableIds: [1, secondTable.id] })
+    const wrongBranch = createMockReservation({ customer: 'Wrong Branch', contact: '0900000021', email: null, note: null, dateTime: at(5), guests: 2, tableId: 1, branch: 'bui-thi-xuan' })
+    const joined = createMockReservation({ customer: 'Second Branch', contact: '0900000022', email: null, note: null, dateTime: at(5), guests: 4, tableId: secondTables[1].id, tableIds: [secondTables[1].id, secondTables[2].id], branch: 'bui-thi-xuan' })
+    const { getMockReservations } = await import('../lib/db/mock-store.ts')
+    const joinedBranch = getMockReservations().find(r => r.code === joined.code)?.branch
+    if (secondTables.length === 8 && branchOf('Branch Dine-in') === 'bui-thi-xuan' && branchOf('Branch Pickup') === 'bui-thi-xuan'
+      && !mixed.ok && !wrongBranch.ok && joined.ok && joinedBranch === 'bui-thi-xuan') {
+      recordTest('TC-ACT-12', 'Orders and Bookings Belong to One Branch', 'Admin Actions', 'PASS', `${mixed.error} / ${wrongBranch.error}`)
+    } else {
+      recordTest('TC-ACT-12', 'Orders and Bookings Belong to One Branch', 'Admin Actions', 'FAIL', JSON.stringify({ tables: secondTables.length, dineIn: branchOf('Branch Dine-in'), pickup: branchOf('Branch Pickup'), mixed, wrongBranch, joined, joinedBranch }))
     }
 
   } catch (err) {

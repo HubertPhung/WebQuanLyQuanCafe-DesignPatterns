@@ -1,8 +1,9 @@
 import 'server-only'
-import { asc, desc, gte, inArray, ne, isNull } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, inArray, ne, isNull } from 'drizzle-orm'
 import { db, isDbConfigured, ensureOrderTableGroups, ensureTableImages } from '@/lib/db'
 import { adminMenuItems, adminOrders, adminTables, type Order, type MenuItem, type FloorTable } from '@/lib/db/schema'
 import { assertAdminAccess } from './access'
+import { getAdminBranch } from './branch'
 import {
   getMockMenuItems,
   getMockTables,
@@ -37,51 +38,64 @@ export async function getMenuItems(): Promise<MenuItem[]> {
   }
 }
 
+// The floor of the branch chosen in the admin header.
 export async function getTables(): Promise<FloorTable[]> {
   await assertAdminAccess()
-  const remote = await fetchTables()
+  const branch = await getAdminBranch()
+  const remote = await fetchTables(branch)
   if (remote.ok) return remote.data.map(t => ({ ...t, occupiedSince: t.occupiedSince ? new Date(t.occupiedSince) : null, updatedAt: new Date() }))
+  const mock = () => getMockTables().filter((table) => table.branch === branch)
   if (!isDbConfigured || !db) {
-    return getMockTables()
+    return mock()
   }
   try {
     await ensureTableImages()
-    return await db.select().from(adminTables).where(isNull(adminTables.deletedAt)).orderBy(asc(adminTables.id))
+    return await db.select().from(adminTables)
+      .where(and(isNull(adminTables.deletedAt), eq(adminTables.branch, branch)))
+      .orderBy(asc(adminTables.id))
   } catch (error) {
     console.warn('Database query failed, using fallback mock store:', error)
-    return getMockTables()
+    return mock()
   }
 }
 
+// Open orders of the chosen branch: the KDS, the POS tabs and the header counts.
 export async function getActiveOrders(): Promise<Order[]> {
   await assertAdminAccess()
   await ensureOrderTableGroups()
+  const branch = await getAdminBranch()
+  const mock = () => getMockActiveOrders().filter((order) => order.branch === branch)
   if (!isDbConfigured || !db) {
-    return getMockActiveOrders()
+    return mock()
   }
   try {
-    return await db.select().from(adminOrders).where(ne(adminOrders.status, 'completed')).orderBy(asc(adminOrders.createdAt))
+    return await db.select().from(adminOrders)
+      .where(and(ne(adminOrders.status, 'completed'), eq(adminOrders.branch, branch)))
+      .orderBy(asc(adminOrders.createdAt))
   } catch (error) {
     console.warn('Database query failed, using fallback mock store:', error)
-    return getMockActiveOrders()
+    return mock()
   }
 }
 
-export async function getOrdersSince(days: number): Promise<Order[]> {
+// Orders of the chosen branch, or of the whole shop for figures that are shared (customers).
+export async function getOrdersSince(days: number, scope: 'branch' | 'all' = 'branch'): Promise<Order[]> {
   await assertAdminAccess()
   await ensureOrderTableGroups()
+  const branch = scope === 'branch' ? await getAdminBranch() : null
+  const mock = () => getMockOrdersSince(days).filter((order) => !branch || order.branch === branch)
   if (!isDbConfigured || !db) {
-    return getMockOrdersSince(days)
+    return mock()
   }
   try {
     return await db
       .select()
       .from(adminOrders)
-      .where(gte(adminOrders.createdAt, startOfDay(days)))
+      .where(and(gte(adminOrders.createdAt, startOfDay(days)), branch ? eq(adminOrders.branch, branch) : undefined))
       .orderBy(desc(adminOrders.createdAt))
   } catch (error) {
     console.warn('Database query failed, using fallback mock store:', error)
-    return getMockOrdersSince(days)
+    return mock()
   }
 }
 
@@ -100,7 +114,7 @@ export type DataSource = 'java' | 'local'
 
 // Chart data computed by GET /api/analytics/overview, in the shape the dashboard widgets use.
 async function getJavaOverview(days: number) {
-  const remote = await fetchAnalytics(days)
+  const remote = await fetchAnalytics(days, await getAdminBranch())
   if (!remote.ok) return null
   const analytics = remote.data
   return {
@@ -229,7 +243,8 @@ export async function getCustomers(): Promise<{ customers: CustomerView[]; sourc
       })),
     }
   }
-  const orders = await getOrdersSince(90)
+  // Members are shared by both branches, so the summary counts every order.
+  const orders = await getOrdersSince(90, 'all')
   const customers = new Map<string, CustomerView>()
   for (const order of orders) {
     if (order.customer === 'Walk-in') continue
@@ -284,9 +299,11 @@ function formatSlot(date: Date) {
   }).format(date)
 }
 
+// Bookings of the chosen branch.
 export async function getReservations(): Promise<{ reservations: ReservationView[]; javaOnline: boolean }> {
   await assertAdminAccess()
-  const local: ReservationView[] = getMockReservations().map((r) => ({
+  const branch = await getAdminBranch()
+  const local: ReservationView[] = getMockReservations().filter((r) => r.branch === branch).map((r) => ({
     id: r.code,
     source: 'local',
     customer: r.customer,
@@ -302,7 +319,7 @@ export async function getReservations(): Promise<{ reservations: ReservationView
     preOrders: r.preOrders,
   }))
 
-  const remote = await fetchReservations()
+  const remote = await fetchReservations(branch)
   if (!remote.ok) return { reservations: local, javaOnline: false }
   const fromJava: ReservationView[] = remote.data.map((r) => ({
     id: r.id,
@@ -326,9 +343,11 @@ export type OnlineOrderView = Order & { contact: OrderContact }
 
 // Storefront orders, newest first: the order rows the POS and kitchen share, joined with the
 // contact and delivery details placeOnlineOrder stored for them.
+// Storefront orders picked up at or delivered from the chosen branch.
 export async function getOnlineOrders(): Promise<OnlineOrderView[]> {
   await assertAdminAccess()
-  return joinContactOrders(await listOrderContacts())
+  const branch = await getAdminBranch()
+  return (await joinContactOrders(await listOrderContacts())).filter((order) => order.branch === branch)
 }
 
 // The order rows behind the given contacts, in the contacts' order. The caller has already

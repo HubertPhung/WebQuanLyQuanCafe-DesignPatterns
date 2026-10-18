@@ -42,9 +42,10 @@ import { updateOrderStatus, updateTableStatus } from '@/app/admin/actions'
 import { formatCurrency, formatElapsed, tableStatusLabels } from '@/lib/admin/format'
 import type { FloorTable, MenuItem, Order, OrderStatus, TableStatus } from '@/lib/db/schema'
 import { cn } from '@/lib/utils'
+import { DEFAULT_BRANCH_ID } from '@/lib/branches'
 
 // Default fallback data if server props are undefined
-const defaultTables: FloorTable[] = [
+const defaultTables: FloorTable[] = ([
   { id: 12, name: 'Bar 01', seats: 1, zone: 'Quầy Bar', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date() },
   { id: 13, name: 'Bar 02', seats: 1, zone: 'Quầy Bar', status: 'occupied', guestCount: 1, occupiedSince: new Date(Date.now() - 15 * 60000), updatedAt: new Date() },
   { id: 14, name: 'Bar 03', seats: 1, zone: 'Quầy Bar', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date() },
@@ -60,9 +61,9 @@ const defaultTables: FloorTable[] = [
   { id: 9, name: 'Vườn 03', seats: 4, zone: 'Sân vườn', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date() },
   { id: 10, name: 'Vườn 04', seats: 2, zone: 'Sân vườn', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date() },
   { id: 11, name: 'Vườn 05', seats: 2, zone: 'Sân vườn', status: 'reserved', guestCount: 2, occupiedSince: null, updatedAt: new Date() },
-]
+] as Omit<FloorTable, 'branch'>[]).map((table) => ({ ...table, branch: DEFAULT_BRANCH_ID }))
 
-const defaultOrders: Order[] = [
+const defaultOrders: Order[] = ([
   {
     id: 101,
     orderCode: 'AC-0101',
@@ -117,7 +118,7 @@ const defaultOrders: Order[] = [
     createdAt: new Date(Date.now() - 12 * 60000),
     completedAt: null,
   },
-]
+] as Omit<Order, 'branch'>[]).map((order) => ({ ...order, branch: DEFAULT_BRANCH_ID }))
 
 export interface DashboardOperationalViewProps {
   initialTables?: FloorTable[]

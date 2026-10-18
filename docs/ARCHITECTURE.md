@@ -104,6 +104,11 @@ Lưu ý: kho của frontend và kho của Java là hai bộ dữ liệu riêng, 
 
 ---
 
+### 2.4. Chi nhánh
+- **Admin:** ô chi nhánh trên header gọi Server Action `selectAdminBranch`, lưu id vào cookie `admin_branch` (httpOnly, 1 năm) rồi làm mới mọi trang admin. `getAdminBranch()` (`lib/admin/branch.ts`) đọc cookie này; các query trong `lib/admin/queries.ts` lọc bàn, đơn đang mở, đơn theo ngày, đặt bàn, đơn online và thống kê theo chi nhánh đó, và gửi `?branch=` khi gọi Java. Khách hàng thành viên dùng chung nên trang khách hàng không lọc.
+- **Ghi:** đơn POS mang chi nhánh đang chọn (`branch` trong `POST /api/checkout`); bàn mới vào chi nhánh đang chọn; đơn chuyển từ đặt bàn và đơn offline giữ chi nhánh của bàn / của đơn khi đồng bộ.
+- **Storefront:** form đặt bàn cho chọn chi nhánh trước rồi mới hiện bàn của chi nhánh đó; trang thanh toán cho chọn chi nhánh pha chế (giao hàng) hoặc nơi đến lấy.
+
 ## 3. Các tầng xử lý
 
 | Tầng | Công nghệ | Trách nhiệm |

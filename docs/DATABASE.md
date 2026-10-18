@@ -28,6 +28,7 @@ erDiagram
         text name
         int seats
         text zone
+        text branch
         text status
         int guest_count
         timestamptz occupied_since
@@ -52,6 +53,7 @@ erDiagram
         text order_code UK
         text customer
         int table_id
+        text branch
         text order_type
         jsonb items
         numeric subtotal
@@ -67,6 +69,7 @@ erDiagram
         varchar name
         int seats
         varchar zone
+        varchar branch
         varchar status
         int guest_count
         timestamptz occupied_since
@@ -91,6 +94,7 @@ erDiagram
         varchar order_code UK
         varchar customer
         int table_id
+        varchar branch
         varchar order_type
         numeric subtotal
         numeric vat_amount
@@ -113,6 +117,7 @@ erDiagram
         timestamptz date_time
         varchar table_name
         int table_id
+        varchar branch
         int guests
         varchar status
         text note
@@ -149,9 +154,9 @@ erDiagram
 
 | Bảng | Cột đáng chú ý | Giá trị hợp lệ |
 | :--- | :--- | :--- |
-| `admin_tables` | `zone` mặc định `'Main'`, `guest_count`, `occupied_since` | `status`: `available`, `occupied`, `reserved`, `cleaning` |
+| `admin_tables` | `zone` mặc định `'Main'`, `branch` (mặc định `phan-dinh-phung`), `guest_count`, `occupied_since` | `status`: `available`, `occupied`, `reserved`, `cleaning` |
 | `admin_menu_items` | `kind` (`menu` / `ingredient`), `unit` mặc định `'pcs'`, `variations` JSONB `[{ name, price }]` | — |
-| `admin_orders` | `order_code` duy nhất, `items` JSONB `[{ name, qty, price, variation? }]`, **không có cột VAT, giảm giá hay ghi chú** (`total` = `subtotal × 1,08`) | `order_type`: `dine-in`, `pickup`, `delivery`; `payment_method`: `cash`, `qr`, `card`; `payment_status`: `paid`, `unpaid`, `refunded`; `status`: `pending`, `brewing`, `ready`, `completed` |
+| `admin_orders` | `order_code` duy nhất, `branch` (mặc định `phan-dinh-phung`), `items` JSONB `[{ name, qty, price, variation? }]`, **không có cột VAT, giảm giá hay ghi chú** (`total` = `subtotal × 1,08`) | `order_type`: `dine-in`, `pickup`, `delivery`; `payment_method`: `cash`, `qr`, `card`; `payment_status`: `paid`, `unpaid`, `refunded`; `status`: `pending`, `brewing`, `ready`, `completed` |
 
 Hai bảng phụ do `lib/admin/local-links.ts` tự tạo (`CREATE TABLE IF NOT EXISTS`) ở lần dùng đầu, **không sửa** các bảng `admin_*`:
 
@@ -162,7 +167,7 @@ Hai bảng phụ do `lib/admin/local-links.ts` tự tạo (`CREATE TABLE IF NOT 
 
 Không có `DATABASE_URL`, hoặc không tạo được bảng, thì hai danh sách này nằm trong bộ nhớ cùng mock store.
 
-Dữ liệu mẫu của mock store gồm 15 bàn, 13 món bán, 5 nguyên liệu và lịch sử đơn hàng.
+Dữ liệu mẫu của mock store gồm 15 bàn ở 123 Phan Đình Phùng, 8 bàn ở 456 Bùi Thị Xuân, 13 món bán, 5 nguyên liệu và lịch sử đơn hàng.
 
 ---
 
@@ -170,7 +175,7 @@ Dữ liệu mẫu của mock store gồm 15 bàn, 13 món bán, 5 nguyên liệu
 
 | Bảng | Cột đáng chú ý | Giá trị lưu trong cột trạng thái |
 | :--- | :--- | :--- |
-| `tables` | `zone` mặc định `'Main Floor'` | `AVAILABLE`, `OCCUPIED`, `RESERVED`, `CLEANING` |
+| `tables` | `zone` mặc định `'Main Floor'`, `branch` | `AVAILABLE`, `OCCUPIED`, `RESERVED`, `CLEANING` |
 | `menu_items` | `unit` mặc định `'ly'`, `variations` JSONB `[{ name, price }]` | — |
 | `orders` | `vat_amount`, `discount_amount`, `note`, `items` JSONB `[{ menuItemId, name, qty, price, variation, notes }]`, `table_id` → `tables(id)` | `order_type`: `DINE_IN`, `PICKUP`, `DELIVERY`; `payment_method`: `CASH`, `QR`, `CARD`; `payment_status`: `PAID`, `UNPAID`, …; `status`: `PENDING`, `BREWING`, `READY`, `COMPLETED`, `CANCELLED` |
 | `reservations` | `id` SERIAL + `reservation_code` duy nhất (`RES-0001` theo id), `table_id` → `tables(id)`, `table_name`, `pre_orders` JSONB `[{ name, qty, price }]` | `PENDING` (Chờ xác nhận), `CONFIRMED` (Đã xác nhận đặt bàn), `SEATED` (Khách đã nhận bàn), `CANCELLED` (Đã hủy) |
@@ -184,7 +189,8 @@ DAO ghi trạng thái bằng **tên enum in hoa** (giá trị mặc định tron
 - Khoá ngoại `fk_orders_table` và `fk_reservations_table` được thêm trong khối `DO` có kiểm tra tồn tại, với `NOT VALID`: dòng cũ được giữ nguyên, dòng mới phải trỏ tới bàn có thật. Kèm chỉ mục cho `table_id`, `orders.status`, `reservations.date_time`.
 - Nếu `tables` hoặc `menu_items` còn trống, 15 bàn và thực đơn mẫu của `InMemoryDatabase` được ghi vào (đơn tại bàn cần bàn tồn tại vì có khoá ngoại). Sau đó `syncSequences` đưa các sequence SERIAL vượt id lớn nhất.
 - Nếu không chuẩn bị được schema (ví dụ thiếu quyền), server ở lại chế độ In-Memory và ghi log lỗi.
-- **Không theo dõi tồn kho.** `menu_items` và `admin_menu_items` không còn cột `stock_qty`, `low_stock_threshold`; món bán hay không chỉ do cột `in_stock`. Trên Supabase hai cột này đã được xoá bằng migration `drop_menu_stock_columns`. Database cũ còn giữ hai cột vẫn chạy được, vì code không đọc hay ghi chúng và chúng có giá trị mặc định.
+- **Chi nhánh.** `tables`, `orders`, `reservations` có cột `branch VARCHAR(40) NOT NULL DEFAULT 'phan-dinh-phung'` (kèm chỉ mục), thêm bằng `ADD COLUMN IF NOT EXISTS`: dòng cũ thuộc chi nhánh đầu. Nếu chưa có bàn nào ở `bui-thi-xuan`, `DaoFactory` thêm 8 bàn mẫu cho chi nhánh này với id nối sau id lớn nhất, không đụng bàn cũ. Phía frontend, `ensureTableImages` / `ensureOrderTableGroups` thêm cột `branch` tương tự cho `admin_tables`, `admin_orders`.
+- **Không theo dõi tồn kho.** `menu_items` và `admin_menu_items` không còn cột `stock_qty`, `low_stock_threshold`; món bán hay không chỉ do cột `in_stock`. Database cũ còn giữ hai cột vẫn chạy được, vì code không đọc hay ghi chúng và chúng có giá trị mặc định.
 
 **Kết nối.** `JdbcDatabase` giữ một pool nhỏ (tối đa 8 kết nối rảnh): `close()` trả kết nối về pool sau khi rollback giao dịch dở và bật lại auto-commit. `isAvailable()` lưu kết quả kiểm tra 5 giây, nên kiểm tra sức khoẻ trên đường xử lý request không mở kết nối mới mỗi lần.
 

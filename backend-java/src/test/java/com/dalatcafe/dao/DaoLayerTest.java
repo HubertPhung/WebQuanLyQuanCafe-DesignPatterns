@@ -39,12 +39,14 @@ class DaoLayerTest {
     class TableDaoTests {
 
         @Test
-        @DisplayName("findAll should return 15 pre-seeded physical tables")
+        @DisplayName("findAll should return 15 tables at Phan Đình Phùng and 8 at Bùi Thị Xuân")
         void testFindAllTables() {
             List<Table> tables = tableDao.findAll();
-            assertEquals(15, tables.size(), "Should have exactly 15 tables");
+            assertEquals(23, tables.size(), "15 + 8 seeded tables");
             assertEquals("Bàn 01", tables.get(0).getName());
             assertEquals("Bàn 15", tables.get(14).getName());
+            assertEquals(15, tables.stream().filter(t -> com.dalatcafe.model.Branches.PHAN_DINH_PHUNG.equals(t.getBranch())).count());
+            assertEquals(8, tables.stream().filter(t -> com.dalatcafe.model.Branches.BUI_THI_XUAN.equals(t.getBranch())).count());
         }
 
         @Test

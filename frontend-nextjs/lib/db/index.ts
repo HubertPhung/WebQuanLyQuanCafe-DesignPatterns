@@ -20,18 +20,19 @@ if (db && process.env.NODE_ENV !== 'production') {
   globalForDb.drizzleDb = db
 }
 
+// Columns added after the first release; rows from before branches belong to the first branch.
 let groupColumnsReady: Promise<void> | undefined
 let tableImagesReady: Promise<void> | undefined
 export async function ensureTableImages(): Promise<void> {
   if (!pool) return
-  tableImagesReady ??= pool.query('ALTER TABLE admin_tables ADD COLUMN IF NOT EXISTS image_url text, ADD COLUMN IF NOT EXISTS deleted_at timestamptz')
+  tableImagesReady ??= pool.query("ALTER TABLE admin_tables ADD COLUMN IF NOT EXISTS image_url text, ADD COLUMN IF NOT EXISTS deleted_at timestamptz, ADD COLUMN IF NOT EXISTS branch text NOT NULL DEFAULT 'phan-dinh-phung'")
     .then(() => {}).catch(error => { tableImagesReady = undefined; throw error })
   await tableImagesReady
 }
 
 export async function ensureOrderTableGroups(): Promise<void> {
   if (!pool) return
-  groupColumnsReady ??= pool.query("ALTER TABLE admin_orders ADD COLUMN IF NOT EXISTS table_ids jsonb NOT NULL DEFAULT '[]'::jsonb")
+  groupColumnsReady ??= pool.query("ALTER TABLE admin_orders ADD COLUMN IF NOT EXISTS table_ids jsonb NOT NULL DEFAULT '[]'::jsonb, ADD COLUMN IF NOT EXISTS branch text NOT NULL DEFAULT 'phan-dinh-phung'")
     .then(() => {}).catch(error => { groupColumnsReady = undefined; throw error })
   await groupColumnsReady
 }

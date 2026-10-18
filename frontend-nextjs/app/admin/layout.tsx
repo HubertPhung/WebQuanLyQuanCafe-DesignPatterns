@@ -6,6 +6,7 @@ import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { requirePageRole } from '@/lib/auth/session'
 import { getHeaderData } from '@/lib/admin/queries'
+import { getAdminBranch } from '@/lib/admin/branch'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,7 +24,7 @@ export const viewport: Viewport = {
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   // proxy.ts already redirected visitors; this is the authoritative check for every admin page.
   const session = await requirePageRole('STAFF', '/admin')
-  const header = await getHeaderData()
+  const [header, branch] = await Promise.all([getHeaderData(), getAdminBranch()])
 
   return (
       <TooltipProvider>
@@ -39,7 +40,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               className="pointer-events-none absolute top-1/3 -left-20 -z-10 size-80 rounded-full bg-amber-600/5 blur-3xl"
               aria-hidden="true"
             />
-            <AdminHeader {...header} user={{ name: session.name, email: session.email, role: session.role }} />
+            <AdminHeader {...header} branch={branch} user={{ name: session.name, email: session.email, role: session.role }} />
             <main className="flex flex-1 flex-col gap-6 md:gap-8 p-4 md:p-6 lg:p-8 w-full max-w-[1560px] mx-auto">{children}</main>
           </SidebarInset>
         </SidebarProvider>

@@ -53,6 +53,13 @@ Ngoại lệ: một đường dẫn nằm ngoài các nhóm đã đăng ký (`/a
 - Thiếu token hoặc token sai trả 401 `UNAUTHORIZED`; vai trò không đủ trả 403 `FORBIDDEN`. Header `X-User-Role` tự khai **chỉ** được chấp nhận khi server chạy với `AUTH_ALLOW_ROLE_HEADER=true` (dành cho phát triển và bộ test REST cũ); khi có Bearer token thì token luôn thắng.
 - **CORS:** `Access-Control-Allow-Origin: *`. Cho phép các phương thức GET, POST, PUT, PATCH, DELETE và OPTIONS. Preflight `OPTIONS` trả 204, không cần token.
 
+### 1.4. Chi nhánh
+Quán có hai chi nhánh, id cố định ở `com.dalatcafe.model.Branches` và `frontend-nextjs/lib/branches.ts`: `phan-dinh-phung` (123 Phan Đình Phùng, chi nhánh mặc định) và `bui-thi-xuan` (456 Bùi Thị Xuân).
+- **Thuộc về một chi nhánh:** bàn, đơn hàng, phiếu đặt bàn (trường `branch` trong JSON). **Dùng chung:** thực đơn, khách hàng thành viên, tài khoản, cài đặt quán.
+- **Lọc danh sách:** `GET /api/tables`, `/api/tables/catalog`, `/api/orders`, `/api/reservations`, `/api/analytics/overview` nhận `?branch=<id>`. Không gửi thì trả cả quán; id lạ trả 400.
+- **Chi nhánh của bản ghi mới:** bàn mới vào chi nhánh trong `branch` của body (mặc định chi nhánh đầu), sửa bàn không đổi chi nhánh. Đơn tại bàn và phiếu đặt lấy chi nhánh của bàn; đơn mang đi / giao hàng lấy `branch` trong body. Gửi `branch` khác chi nhánh của bàn, hoặc ghép bàn của hai chi nhánh vào một phiếu, đều trả 400 trước khi thu tiền hay lưu.
+- Tên bàn chỉ cần không trùng **trong cùng chi nhánh** (cả hai chi nhánh đều có `Bàn 01`).
+
 ---
 
 ## 2. Danh mục endpoint
@@ -109,7 +116,7 @@ Trả về toàn bộ món bán và nguyên liệu.
 ```
 
 ### 3.2. `GET /api/tables`
-Trả về 15 bàn: `id`, `name` (`"Bàn 01"`…), `seats`, `zone` (`Main Floor`, `Patio`, `Coffee Bar`), `status` (chữ thường), `guestCount`, `occupiedSince`.
+Trả về bàn của cả quán, hoặc một chi nhánh với `?branch=` (dữ liệu mẫu: 15 bàn ở `phan-dinh-phung` với khu `Main Floor`, `Patio`, `Coffee Bar`; 8 bàn ở `bui-thi-xuan` với khu `Sân vườn`, `Góc làm việc`, `Tầng 2`). Mỗi bàn: `id`, `name` (`"Bàn 01"`…), `seats`, `zone`, `branch`, `status` (chữ thường), `guestCount`, `occupiedSince`.
 
 ### 3.3. `PUT|PATCH /api/tables/{id}` (hoặc `/api/tables/{id}/status`)
 ```json
@@ -120,7 +127,7 @@ Trả về 15 bàn: `id`, `name` (`"Bàn 01"`…), `seats`, `zone` (`Main Floor`
 - Phản hồi 200: `{ "ok": true, "message": "Table #3 status changed to 'occupied'" }`. Sai đầu vào trả 400, không có bàn trả 404.
 
 ### 3.4. `GET /api/reservations`
-Danh sách phiếu: `id` (mã `RES-xxxx`), `customer`, `contact`, `email`, `dateTime`, `table`, `tableId`, `guests`, `status` (nhãn tiếng Việt), `note`, `preOrders[]`.
+Danh sách phiếu (lọc bằng `?branch=`): `id` (mã `RES-xxxx`), `customer`, `contact`, `email`, `dateTime`, `table`, `tableId`, `tableIds`, `branch`, `guests`, `status` (nhãn tiếng Việt), `note`, `preOrders[]`.
 
 ### 3.5. `POST /api/reservations`
 ```json
@@ -201,7 +208,7 @@ Khách đặt trước đến quán: `ReservationToOrderAdapter` chuyển phiế
   - 401 / 403: thiếu quyền.
 
 ### 3.8. `GET /api/orders`
-Danh sách đơn, mới nhất trước. Lọc bằng `?status=pending|brewing|ready|completed|cancelled` (sai giá trị: 400). Mỗi đơn gồm `orderCode`, `customer`, `tableId`, `orderType`, `status`, `paymentStatus`, `paymentMethod`, `items[]` (`menuItemId`, `name`, `qty`, `price`, `variation`), `subtotal`, `discountAmount`, `vatAmount`, `total`, `note`, `createdAt`, `completedAt`.
+Danh sách đơn, mới nhất trước. Lọc bằng `?status=pending|brewing|ready|completed|cancelled` (sai giá trị: 400) và `?branch=`. Mỗi đơn gồm `orderCode`, `customer`, `tableId`, `branch`, `orderType`, `status`, `paymentStatus`, `paymentMethod`, `items[]` (`menuItemId`, `name`, `qty`, `price`, `variation`), `subtotal`, `discountAmount`, `vatAmount`, `total`, `note`, `createdAt`, `completedAt`.
 
 ### 3.9. `PATCH /api/orders/{code}/status`
 ```json
@@ -245,6 +252,7 @@ Bật / tắt bán một món. Hệ thống không theo dõi số lượng tồn
 Danh sách thành viên, chi tiêu nhiều nhất trước: `id`, `name`, `phone`, `email`, `totalOrders`, `totalSpent`, `loyaltyPoints`, `rank` (`bronze`, `silver`, `gold`, `vip`), `lastVisit`. `?phone=0901234567` trả mảng 0 hoặc 1 phần tử (POS dùng để tra cứu thành viên).
 
 ### 3.15. `GET /api/analytics/overview?days=7` (MANAGER+)
+Thêm `&branch=<id>` để chỉ tính đơn và bàn của một chi nhánh (dashboard admin luôn gửi chi nhánh đang chọn).
 Tính trực tiếp từ DAO mỗi lần gọi. Doanh thu chỉ tính đơn đã thanh toán và chưa huỷ; "hôm nay" theo giờ `Asia/Ho_Chi_Minh`. `days` (1–90, mặc định 7) là độ dài chuỗi `revenueByDay`; `paymentMix` và `topItems` tính trong cùng khoảng đó. Sai `days` trả 400. Dashboard và trang phân tích của frontend dùng endpoint này khi Java phản hồi.
 ```json
 {
