@@ -1,0 +1,277 @@
+{
+  "assets": [
+    {
+      "file": "frontend-nextjs/public/fonts/be-vietnam-pro/BeVietnamPro-Bold.ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/bevietnampro/BeVietnamPro-Bold.ttf",
+      "bytes": 140300,
+      "sha256": "7f738fe5c43c8872807b20e2d30d42163618de8a4daf7f48a939adac32c16847",
+      "kind": "font"
+    },
+    {
+      "file": "frontend-nextjs/public/fonts/be-vietnam-pro/BeVietnamPro-Light.ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/bevietnampro/BeVietnamPro-Light.ttf",
+      "bytes": 136772,
+      "sha256": "f0b7143edac3fd99960312706cfa51cbafec28e7afa6d4afbd08a73bb246af13",
+      "kind": "font"
+    },
+    {
+      "file": "frontend-nextjs/public/fonts/be-vietnam-pro/BeVietnamPro-Medium.ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/bevietnampro/BeVietnamPro-Medium.ttf",
+      "bytes": 135980,
+      "sha256": "b60832bfa0fcd015158112c64d7e3fdad3b0c6287d1823f85a3103636e845268",
+      "kind": "font"
+    },
+    {
+      "file": "frontend-nextjs/public/fonts/be-vietnam-pro/BeVietnamPro-Regular.ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/bevietnampro/BeVietnamPro-Regular.ttf",
+      "bytes": 132948,
+      "sha256": "cd1ef6e9d7db28ad5cdb88a65ccbe693870e60d340b791f349d248342b4fe4c3",
+      "kind": "font"
+    },
+    {
+      "file": "frontend-nextjs/public/fonts/be-vietnam-pro/BeVietnamPro-SemiBold.ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/bevietnampro/BeVietnamPro-SemiBold.ttf",
+      "bytes": 136736,
+      "sha256": "bd8e27eb02720b9d91e59e4f10a90878643219f25ce6a8d9a4f06a8a88d3bb71",
+      "kind": "font"
+    },
+    {
+      "file": "frontend-nextjs/public/fonts/be-vietnam-pro/OFL.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/bevietnampro/OFL.txt",
+      "bytes": 4397,
+      "sha256": "6b7f8f73609a25ea78c891e34cf37b06f8a676b7ea986e941e43b009110f2a85",
+      "kind": "license"
+    },
+    {
+      "file": "frontend-nextjs/public/fonts/playfair-display/OFL.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/playfairdisplay/OFL.txt",
+      "bytes": 4449,
+      "sha256": "566be814f8e96e93dfa16101331557eb6b5467e9e03f627c0910fe93ca12300e",
+      "kind": "license"
+    },
+    {
+      "file": "frontend-nextjs/public/fonts/playfair-display/PlayfairDisplay-Italic[wght].ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/playfairdisplay/PlayfairDisplay-Italic%5Bwght%5D.ttf",
+      "bytes": 278688,
+      "sha256": "a5e26dc5e2e77fb2803a0bf02fd4f81ee136ec8dea863ccdb0c59a263b21378b",
+      "kind": "font"
+    },
+    {
+      "file": "frontend-nextjs/public/fonts/playfair-display/PlayfairDisplay[wght].ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/playfairdisplay/PlayfairDisplay%5Bwght%5D.ttf",
+      "bytes": 300724,
+      "sha256": "c40f2293766a503bc70cce9e512ef844a4ccb7cbcde792fe2ea31d191917d8d6",
+      "kind": "font"
+    },
+    {
+      "file": "frontend-nextjs/public/images/catalog/photo-1442512595331-e89e73853f31.jpg",
+      "source": "https://images.unsplash.com/photo-1442512595331-e89e73853f31?auto=format&fit=crop&w=800&q=80",
+      "bytes": 57967,
+      "sha256": "74ce66b4980f024d907b97d6d61f3b8576b202ab0b1c399bd164bdc5c983116b",
+      "kind": "image"
+    },
+    {
+      "file": "frontend-nextjs/public/images/catalog/photo-1447933601403-0c6688de566e.jpg",
+      "source": "https://images.unsplash.com/photo-1447933601403-0c6688de566e?auto=format&fit=crop&w=800&q=80",
+      "bytes": 145338,
+      "sha256": "482f5fa1a97c459edfbbdcfe18eb3ae0a163d308b1398ba3c8b59d9150488b9e",
+      "kind": "image"
+    },
+    {
+      "file": "frontend-nextjs/public/images/catalog/photo-1495474472287-4d71bcdd2085.jpg",
+      "source": "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=800&q=80",
+      "bytes": 63909,
+      "sha256": "b471780ea2d97ffbd87e050d841afd44896f683faf2e394f30f45d41589a3c39",
+      "kind": "image"
+    },
+    {
+      "file": "frontend-nextjs/public/images/catalog/photo-1497636577773-f1231844b336.jpg",
+      "source": "https://images.unsplash.com/photo-1497636577773-f1231844b336?auto=format&fit=crop&w=800&q=80",
+      "bytes": 109990,
+      "sha256": "96205b3c56f2428c3325913dbe161169bdf4e4174692050631551508e671e653",
+      "kind": "image"
+    },
+    {
+      "file": "frontend-nextjs/public/images/catalog/photo-1498804103079-a6351b050096.jpg",
+      "source": "https://images.unsplash.com/photo-1498804103079-a6351b050096?auto=format&fit=crop&w=800&q=80",
+      "bytes": 119862,
+      "sha256": "b1ff48e55654ee049c6fee29a4ceef1070db691a04a1741ae7b66ecdf2bc668f",
+      "kind": "image"
+    },
+    {
+      "file": "frontend-nextjs/public/images/catalog/photo-1501339847302-ac426a4a7cbb.jpg",
+      "source": "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=800&q=80",
+      "bytes": 69398,
+      "sha256": "c115e95bf748327bdc7a2e12417f5ec95d4572669bc2ffc5ffb4680770b6c486",
+      "kind": "image"
+    },
+    {
+      "file": "frontend-nextjs/public/images/catalog/photo-1501386761578-eac5c94b800a.jpg",
+      "source": "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=800&q=80",
+      "bytes": 86149,
+      "sha256": "859f64b45104a15e896326b74bb1192b53dbfff90807ab93d3eae1b606f8be8d",
+      "kind": "image"
+    },
+    {
+      "file": "frontend-nextjs/public/images/catalog/photo-1508766917616-d22f3f1eea14.jpg",
+      "source": "https://images.unsplash.com/photo-1508766917616-d22f3f1eea14?auto=format&fit=crop&w=800&q=80",
+      "bytes": 147212,
+      "sha256": "cac9948c78fe6ba99d4e3ce9a6676110c945197352266dc18078fe2bc9a517ce",
+      "kind": "image"
+    },
+    {
+      "file": "frontend-nextjs/public/images/catalog/photo-1509440159596-0249088772ff.jpg",
+      "source": "https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=800&q=80",
+      "bytes": 154277,
+      "sha256": "06933e1e77c2a29c89c4876359b2f8d0e0f0c2e7910c7313aacf6c9fed7a0033",
+      "kind": "image"
+    },
+    {
+      "file": "frontend-nextjs/public/images/catalog/photo-1511920170033-f8396924c348.jpg",
+      "source": "https://images.unsplash.com/photo-1511920170033-f8396924c348?auto=format&fit=crop&w=800&q=80",
+      "bytes": 152145,
+      "sha256": "f0f0019f4cf4503566ca0f6b75d2e04fcf8841eab53cf257286ab477e01173a2",
+      "kind": "image"
+    },
+    {
+      "file": "frontend-nextjs/public/images/catalog/photo-1514432324607-a09d9b4aefdd.jpg",
+      "source": "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=800&q=80",
+      "bytes": 153238,
+      "sha256": "1ddae143ab2ab1ed5b9eece978f8342814242165f703854bf7713cee89dce105",
+      "kind": "image"
+    },
+    {
+      "file": "frontend-nextjs/public/images/catalog/photo-1517248135467-4c7edcad34c4.jpg",
+      "source": "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=800&q=80",
+      "bytes": 121904,
+      "sha256": "9ec287ef0f804ccbbf0246f7e6e1773888fc0676024f9c85aa771b1f4f2f6afd",
+      "kind": "image"
+    },
+    {
+      "file": "frontend-nextjs/public/images/catalog/photo-1517256064527-09c73fc73e38.jpg",
+      "source": "https://images.unsplash.com/photo-1517256064527-09c73fc73e38?auto=format&fit=crop&w=800&q=80",
+      "bytes": 101243,
+      "sha256": "a484ce05ee0706607ec408a4aa9f8186c8778cea1354298db577ed1fc65b89f5",
+      "kind": "image"
+    },
+    {
+      "file": "frontend-nextjs/public/images/catalog/photo-1517701550927-30cf4ba1dba5.jpg",
+      "source": "https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?auto=format&fit=crop&w=800&q=80",
+      "bytes": 104770,
+      "sha256": "d47a96c4ef60058235894480e6f3fd7ca45ca22df122122ca3b5f93073a39d6f",
+      "kind": "image"
+    },
+    {
+      "file": "frontend-nextjs/public/images/catalog/photo-1521017432531-fbd92d768814.jpg",
+      "source": "https://images.unsplash.com/photo-1521017432531-fbd92d768814?auto=format&fit=crop&w=800&q=80",
+      "bytes": 127812,
+      "sha256": "acd66e662ac11675cf96db272a14e57990aea9b88d0920af17181ea9f73cd137",
+      "kind": "image"
+    },
+    {
+      "file": "frontend-nextjs/public/images/catalog/photo-1525610553991-2bede1a236e2.jpg",
+      "source": "https://images.unsplash.com/photo-1525610553991-2bede1a236e2?auto=format&fit=crop&w=800&q=80",
+      "bytes": 110251,
+      "sha256": "5aacd62f15c20cd52283c56e504459241d6af8d71b6b3704bee872a32739e3c0",
+      "kind": "image"
+    },
+    {
+      "file": "frontend-nextjs/public/images/catalog/photo-1534778101976-62847782c213.jpg",
+      "source": "https://images.unsplash.com/photo-1534778101976-62847782c213?auto=format&fit=crop&w=800&q=80",
+      "bytes": 81943,
+      "sha256": "626da516b0bccd0dfd735e90d929dbc16ff19d3d8cf78e322ceba542a691e400",
+      "kind": "image"
+    },
+    {
+      "file": "frontend-nextjs/public/images/catalog/photo-1554118811-1e0d58224f24.jpg",
+      "source": "https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=800&q=80",
+      "bytes": 121335,
+      "sha256": "a146aab112361634bfdfa8e20c90e66a517f14e5f25266031dc2bc737af4d39c",
+      "kind": "image"
+    },
+    {
+      "file": "frontend-nextjs/public/images/catalog/photo-1555507036-ab1f4038808a.jpg",
+      "source": "https://images.unsplash.com/photo-1555507036-ab1f4038808a?auto=format&fit=crop&w=800&q=80",
+      "bytes": 104853,
+      "sha256": "acd807ab701113fed1ad91cdc6268105d0c542c2d42c07d9e2ecc6b2cbdf836e",
+      "kind": "image"
+    },
+    {
+      "file": "frontend-nextjs/public/images/catalog/photo-1556679343-c7306c1976bc.jpg",
+      "source": "https://images.unsplash.com/photo-1556679343-c7306c1976bc?auto=format&fit=crop&w=800&q=80",
+      "bytes": 82438,
+      "sha256": "87eeb9a3b3e6b92038d10b6015861152e415f7b9ca1b2dd2d044df791ef4e5c9",
+      "kind": "image"
+    },
+    {
+      "file": "frontend-nextjs/public/images/catalog/photo-1559925393-8be0ec4767c8.jpg",
+      "source": "https://images.unsplash.com/photo-1559925393-8be0ec4767c8?auto=format&fit=crop&w=800&q=80",
+      "bytes": 153696,
+      "sha256": "0bcb2588a4ec2c72bef8cd6a8b60d2c9cf7c51db630797c6918f81f57e51cb86",
+      "kind": "image"
+    },
+    {
+      "file": "frontend-nextjs/public/images/catalog/photo-1580933073521-dc49ac0d4e6a.jpg",
+      "source": "https://images.unsplash.com/photo-1580933073521-dc49ac0d4e6a?auto=format&fit=crop&w=800&q=80",
+      "bytes": 144231,
+      "sha256": "41e343b97857a4af80ea56e9ce6b32addb8dd61544225cb722915008ada8e17a",
+      "kind": "image"
+    },
+    {
+      "file": "frontend-nextjs/public/images/catalog/photo-1600093463592-8e36ae95ef56.jpg",
+      "source": "https://images.unsplash.com/photo-1600093463592-8e36ae95ef56?auto=format&fit=crop&w=800&q=80",
+      "bytes": 129698,
+      "sha256": "2d84b5dfecf3e1f6b7cffb3fcb421d3f7a45dc4ceddb1435be3d7abebd0fe541",
+      "kind": "image"
+    },
+    {
+      "file": "frontend-nextjs/public/images/catalog/photo-1607958996333-41aef7caefaa.jpg",
+      "source": "https://images.unsplash.com/photo-1607958996333-41aef7caefaa?auto=format&fit=crop&w=800&q=80",
+      "bytes": 57681,
+      "sha256": "c3821894f6ea7e11609c3b7c7c2a5d10c6a83fad95cb5c6babee122ec1117178",
+      "kind": "image"
+    },
+    {
+      "file": "frontend-nextjs/public/images/catalog/photo-1610882648335-ced8fc8fa6b6.jpg",
+      "source": "https://images.unsplash.com/photo-1610882648335-ced8fc8fa6b6?auto=format&fit=crop&w=800&q=80",
+      "bytes": 79189,
+      "sha256": "f9677dfc08dd7bd5d020e11e9d2b90f146d84e5c5b3a85c235c04bab6738b42c",
+      "kind": "image"
+    },
+    {
+      "file": "frontend-nextjs/public/images/catalog/photo-1751569543716-70c5fb9a8298.jpg",
+      "source": "https://images.unsplash.com/photo-1751569543716-70c5fb9a8298?auto=format&fit=crop&w=800&q=80",
+      "bytes": 136891,
+      "sha256": "845b156a95c90afc1754547cf7e391825e84c4fe01a53350a922f396c14fdfb1",
+      "kind": "image"
+    },
+    {
+      "file": "frontend-nextjs/public/vendor/vis-network/vis-network.min.js",
+      "source": "https://unpkg.com/vis-network@9.1.6/standalone/umd/vis-network.min.js",
+      "bytes": 702611,
+      "sha256": "576bb887733eb01bb52ee75b90ef46d818454de5fddb5b616fb8a298d307ca12",
+      "kind": "script"
+    },
+    {
+      "file": "frontend-nextjs/public/vendor/vis-network/LICENSE-MIT",
+      "source": "https://unpkg.com/vis-network@9.1.6/LICENSE-MIT",
+      "bytes": 1084,
+      "sha256": "1f65085e54c036645082257618db2c7b787e68c3b02485e214ecd09e0834ee8f",
+      "kind": "license"
+    },
+    {
+      "file": "frontend-nextjs/public/vendor/vis-network/LICENSE-APACHE-2.0",
+      "source": "https://unpkg.com/vis-network@9.1.6/LICENSE-APACHE-2.0",
+      "bytes": 10171,
+      "sha256": "1509904280a272780fd69c04b858f512cf216f8e3464a0dd98d8f34416feced9",
+      "kind": "license"
+    }
+  ],
+  "replacements": [
+    {
+      "source": "https://images.unsplash.com/photo-1445116572660-238429888876?auto=format&fit=crop&w=800&q=80",
+      "reason": "HTTP Error 404: Not Found",
+      "local": "/images/space/counter.jpg"
+    }
+  ]
+}

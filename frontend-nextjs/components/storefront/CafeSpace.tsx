@@ -1,5 +1,6 @@
 'use client'
 
+import { localImageSrc } from '@/lib/assets'
 import Image from 'next/image'
 import { motion } from 'framer-motion'
 import { Armchair, Leaf, Sun } from 'lucide-react'
@@ -52,7 +53,7 @@ export function CafeSpace() {
             className={`group relative overflow-hidden rounded-2xl bg-stone-200 ${photo.className}`}
           >
             <Image
-              src={photo.src}
+              src={localImageSrc(photo.src)}
               alt={photo.alt}
               fill
               sizes={index === 0 ? '(min-width: 768px) 66vw, 100vw' : '(min-width: 768px) 33vw, 100vw'}

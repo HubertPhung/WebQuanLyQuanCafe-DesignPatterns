@@ -1,5 +1,6 @@
 'use client'
 
+import { localImageSrc } from '@/lib/assets'
 import { useMemo, useState, useTransition } from 'react'
 import { Coffee, Search, Tag, Trash2, UtensilsCrossed } from 'lucide-react'
 import { toast } from 'sonner'
@@ -161,7 +162,7 @@ export function MenuManagement({ items, canManage = false }: { items: MenuItem[]
                         <td className="py-3 px-3">
                           <div className="size-11 overflow-hidden rounded-md bg-[#F7F5F0] border border-stone-200/80 flex items-center justify-center text-[#5A3E2B]">
                             {item.imageUrl ? (
-                              <img src={item.imageUrl} alt="" className="size-full object-cover" />
+                              <img src={localImageSrc(item.imageUrl)} alt="" className="size-full object-cover" />
                             ) : (
                               <Coffee className="size-4.5" aria-hidden="true" />
                             )}

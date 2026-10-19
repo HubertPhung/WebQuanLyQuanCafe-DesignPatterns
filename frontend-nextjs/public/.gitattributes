@@ -1,0 +1,4 @@
+# Preserve downloaded asset bytes and their recorded SHA-256 across platforms.
+fonts/** -text -whitespace
+images/catalog/** -text
+vendor/** -text -whitespace

@@ -23,6 +23,7 @@ import { assertAdminAccess } from '@/lib/admin/access'
 import { getSession } from '@/lib/auth/session'
 import { TAX_RATE } from '@/lib/admin/format'
 import { orderTransitionError } from '@/lib/orders/lifecycle'
+import { localImageSrc } from '@/lib/assets'
 import { assertPosTableAvailable, withPosTableLock } from '@/lib/admin/pos-table-guard'
 import { isDaLatAddress, shippingFee } from '@/lib/storefront/delivery'
 import { withFirstOnlineOrder } from '@/lib/orders/first-online-order'
@@ -992,8 +993,8 @@ function catalogFields(input: NewItemInput): MenuCatalogInput {
   const name = input.name.trim().slice(0, 80)
   const category = input.category.trim().slice(0, 40)
   if (!name || !category) throw new Error('Vui lòng nhập tên món và danh mục.')
-  const imageUrl = input.imageUrl.trim()
-  if (imageUrl && !/^(https:\/\/|\/|data:image\/)/.test(imageUrl)) throw new Error('Ảnh phải là đường dẫn HTTPS, ảnh trong trang hoặc ảnh tải lên.')
+  const imageUrl = localImageSrc(input.imageUrl, '')
+  if (input.imageUrl.trim() && !imageUrl) throw new Error('Vui lòng tải ảnh lên hoặc chọn ảnh có sẵn trong trang.')
   return {
     name,
     category,

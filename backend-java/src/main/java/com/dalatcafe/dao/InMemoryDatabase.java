@@ -71,63 +71,63 @@ public class InMemoryDatabase {
     private void seedTables() {
         // 15 Physical Tables matching docs/DATABASE.md and mock-store.ts
         Table t1 = new Table(1, "Bàn 01", 2, "Main Floor", TableStatus.AVAILABLE, 0);
-        t1.setImageUrl("https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=800&q=80");
+        t1.setImageUrl("/images/catalog/photo-1554118811-1e0d58224f24.jpg");
         addTable(t1);
 
         Table t2 = new Table(2, "Bàn 02", 4, "Main Floor", TableStatus.OCCUPIED, 3);
-        t2.setImageUrl("https://images.unsplash.com/photo-1521017432531-fbd92d768814?auto=format&fit=crop&w=800&q=80");
+        t2.setImageUrl("/images/catalog/photo-1521017432531-fbd92d768814.jpg");
         addTable(t2);
 
         Table t3 = new Table(3, "Bàn 03", 4, "Main Floor", TableStatus.AVAILABLE, 0);
-        t3.setImageUrl("https://images.unsplash.com/photo-1442512595331-e89e73853f31?auto=format&fit=crop&w=800&q=80");
+        t3.setImageUrl("/images/catalog/photo-1442512595331-e89e73853f31.jpg");
         addTable(t3);
 
         Table t4 = new Table(4, "Bàn 04", 2, "Main Floor", TableStatus.RESERVED, 2);
-        t4.setImageUrl("https://images.unsplash.com/photo-1559925393-8be0ec4767c8?auto=format&fit=crop&w=800&q=80");
+        t4.setImageUrl("/images/catalog/photo-1559925393-8be0ec4767c8.jpg");
         addTable(t4);
 
         Table t5 = new Table(5, "Bàn 05", 6, "Main Floor", TableStatus.AVAILABLE, 0);
-        t5.setImageUrl("https://images.unsplash.com/photo-1600093463592-8e36ae95ef56?auto=format&fit=crop&w=800&q=80");
+        t5.setImageUrl("/images/catalog/photo-1600093463592-8e36ae95ef56.jpg");
         addTable(t5);
 
         Table t6 = new Table(6, "Bàn 06", 4, "Main Floor", TableStatus.AVAILABLE, 0);
-        t6.setImageUrl("https://images.unsplash.com/photo-1511920170033-f8396924c348?auto=format&fit=crop&w=800&q=80");
+        t6.setImageUrl("/images/catalog/photo-1511920170033-f8396924c348.jpg");
         addTable(t6);
 
         Table t7 = new Table(7, "Bàn 07", 4, "Patio", TableStatus.OCCUPIED, 4);
-        t7.setImageUrl("https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=800&q=80");
+        t7.setImageUrl("/images/catalog/photo-1517248135467-4c7edcad34c4.jpg");
         addTable(t7);
 
         Table t8 = new Table(8, "Bàn 08", 2, "Patio", TableStatus.CLEANING, 0);
-        t8.setImageUrl("https://images.unsplash.com/photo-1525610553991-2bede1a236e2?auto=format&fit=crop&w=800&q=80");
+        t8.setImageUrl("/images/catalog/photo-1525610553991-2bede1a236e2.jpg");
         addTable(t8);
 
         Table t9 = new Table(9, "Bàn 09", 4, "Patio", TableStatus.AVAILABLE, 0);
-        t9.setImageUrl("https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=800&q=80");
+        t9.setImageUrl("/images/catalog/photo-1501339847302-ac426a4a7cbb.jpg");
         addTable(t9);
 
         Table t10 = new Table(10, "Bàn 10", 2, "Patio", TableStatus.AVAILABLE, 0);
-        t10.setImageUrl("https://images.unsplash.com/photo-1508766917616-d22f3f1eea14?auto=format&fit=crop&w=800&q=80");
+        t10.setImageUrl("/images/catalog/photo-1508766917616-d22f3f1eea14.jpg");
         addTable(t10);
 
         Table t11 = new Table(11, "Bàn 11", 2, "Patio", TableStatus.RESERVED, 2);
-        t11.setImageUrl("https://images.unsplash.com/photo-1447933601403-0c6688de566e?auto=format&fit=crop&w=800&q=80");
+        t11.setImageUrl("/images/catalog/photo-1447933601403-0c6688de566e.jpg");
         addTable(t11);
 
         Table t12 = new Table(12, "Bàn 12", 1, "Coffee Bar", TableStatus.AVAILABLE, 0);
-        t12.setImageUrl("https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=800&q=80");
+        t12.setImageUrl("/images/catalog/photo-1501386761578-eac5c94b800a.jpg");
         addTable(t12);
 
         Table t13 = new Table(13, "Bàn 13", 1, "Coffee Bar", TableStatus.OCCUPIED, 1);
-        t13.setImageUrl("https://images.unsplash.com/photo-1445116572660-238429888876?auto=format&fit=crop&w=800&q=80");
+        t13.setImageUrl("/images/space/counter.jpg");
         addTable(t13);
 
         Table t14 = new Table(14, "Bàn 14", 1, "Coffee Bar", TableStatus.AVAILABLE, 0);
-        t14.setImageUrl("https://images.unsplash.com/photo-1498804103079-a6351b050096?auto=format&fit=crop&w=800&q=80");
+        t14.setImageUrl("/images/catalog/photo-1498804103079-a6351b050096.jpg");
         addTable(t14);
 
         Table t15 = new Table(15, "Bàn 15", 1, "Coffee Bar", TableStatus.AVAILABLE, 0);
-        t15.setImageUrl("https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=800&q=80");
+        t15.setImageUrl("/images/catalog/photo-1495474472287-4d71bcdd2085.jpg");
         addTable(t15);
 
         branchTwoTables(16).forEach(this::addTable);
@@ -139,14 +139,14 @@ public class InMemoryDatabase {
      */
     public static java.util.List<Table> branchTwoTables(int firstId) {
         Object[][] rows = {
-                {"Bàn 01", 2, "Sân vườn", "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=800&q=80"},
-                {"Bàn 02", 4, "Sân vườn", "https://images.unsplash.com/photo-1525610553991-2bede1a236e2?auto=format&fit=crop&w=800&q=80"},
-                {"Bàn 03", 4, "Sân vườn", "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=800&q=80"},
-                {"Bàn 04", 6, "Sân vườn", "https://images.unsplash.com/photo-1508766917616-d22f3f1eea14?auto=format&fit=crop&w=800&q=80"},
-                {"Bàn 05", 2, "Góc làm việc", "https://images.unsplash.com/photo-1497636577773-f1231844b336?auto=format&fit=crop&w=800&q=80"},
-                {"Bàn 06", 2, "Góc làm việc", "https://images.unsplash.com/photo-1521017432531-fbd92d768814?auto=format&fit=crop&w=800&q=80"},
-                {"Bàn 07", 4, "Tầng 2", "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=800&q=80"},
-                {"Bàn 08", 4, "Tầng 2", "https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=800&q=80"},
+                {"Bàn 01", 2, "Sân vườn", "/images/catalog/photo-1517248135467-4c7edcad34c4.jpg"},
+                {"Bàn 02", 4, "Sân vườn", "/images/catalog/photo-1525610553991-2bede1a236e2.jpg"},
+                {"Bàn 03", 4, "Sân vườn", "/images/catalog/photo-1501339847302-ac426a4a7cbb.jpg"},
+                {"Bàn 04", 6, "Sân vườn", "/images/catalog/photo-1508766917616-d22f3f1eea14.jpg"},
+                {"Bàn 05", 2, "Góc làm việc", "/images/catalog/photo-1497636577773-f1231844b336.jpg"},
+                {"Bàn 06", 2, "Góc làm việc", "/images/catalog/photo-1521017432531-fbd92d768814.jpg"},
+                {"Bàn 07", 4, "Tầng 2", "/images/catalog/photo-1495474472287-4d71bcdd2085.jpg"},
+                {"Bàn 08", 4, "Tầng 2", "/images/catalog/photo-1554118811-1e0d58224f24.jpg"},
         };
         java.util.List<Table> tables = new java.util.ArrayList<>();
         for (int i = 0; i < rows.length; i++) {
@@ -166,7 +166,7 @@ public class InMemoryDatabase {
         // Menu item 1: Ca phe Muoi
         MenuItem item1 = new MenuItem(1, "Cà phê Muối Đặc Biệt", "Cà phê", 45000.0, 15000.0);
         item1.setRecipe("Cà phê pha phin truyền thống kết hợp lớp kem mặn béo ngậy.");
-        item1.setImageUrl("https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=800&q=80");
+        item1.setImageUrl("/images/catalog/photo-1514432324607-a09d9b4aefdd.jpg");
         item1.addVariation(new Variation("Nóng", 0.0));
         item1.addVariation(new Variation("Đá", 0.0));
         menuItems.put(1, item1);
@@ -174,7 +174,7 @@ public class InMemoryDatabase {
         // Menu item 2: Latte Vani
         MenuItem item2 = new MenuItem(2, "Cà phê Latte Vani Mịn", "Cà phê", 55000.0, 18000.0);
         item2.setRecipe("Double shot espresso, siro vani và sữa tươi thanh trùng.");
-        item2.setImageUrl("https://images.unsplash.com/photo-1534778101976-62847782c213?auto=format&fit=crop&w=800&q=80");
+        item2.setImageUrl("/images/catalog/photo-1534778101976-62847782c213.jpg");
         item2.addVariation(new Variation("Sữa tươi", 0.0));
         item2.addVariation(new Variation("Sữa yến mạch", 10000.0));
         menuItems.put(2, item2);
@@ -182,7 +182,7 @@ public class InMemoryDatabase {
         // Menu item 3: Bac Xiu
         MenuItem item3 = new MenuItem(3, "Bạc Xỉu Sữa Tươi", "Cà phê", 45000.0, 16000.0);
         item3.setRecipe("Nhiều sữa ít cà phê, béo ngậy chuẩn vị Sài Gòn.");
-        item3.setImageUrl("https://images.unsplash.com/photo-1517256064527-09c73fc73e38?auto=format&fit=crop&w=800&q=80");
+        item3.setImageUrl("/images/catalog/photo-1517256064527-09c73fc73e38.jpg");
         item3.addVariation(new Variation("Nóng", 0.0));
         item3.addVariation(new Variation("Đá", 0.0));
         menuItems.put(3, item3);
@@ -190,18 +190,18 @@ public class InMemoryDatabase {
         // Menu item 4: Cold Brew Cam Vang
         MenuItem item4 = new MenuItem(4, "Cold Brew Cam Vàng", "Cà phê ủ lạnh", 55000.0, 20000.0);
         item4.setRecipe("Cà phê ủ lạnh 16h kết hợp lát cam vàng mọng nước.");
-        item4.setImageUrl("https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?auto=format&fit=crop&w=800&q=80");
+        item4.setImageUrl("/images/catalog/photo-1517701550927-30cf4ba1dba5.jpg");
         menuItems.put(4, item4);
 
         // Menu item 5: Tra Dao Cam Sa
         MenuItem item5 = new MenuItem(5, "Trà Đào Cam Sả", "Trà & Bánh", 50000.0, 18000.0);
         item5.setRecipe("Trà đen thơm mát kết hợp miếng đào tươi giòn và sả đập dập.");
-        item5.setImageUrl("https://images.unsplash.com/photo-1556679343-c7306c1976bc?auto=format&fit=crop&w=800&q=80");
+        item5.setImageUrl("/images/catalog/photo-1556679343-c7306c1976bc.jpg");
         menuItems.put(5, item5);
 
         // Menu item 6: Banh Croissant
         MenuItem item6 = new MenuItem(6, "Bánh Croissant Bơ Tỏi", "Trà & Bánh", 35000.0, 12000.0);
-        item6.setImageUrl("https://images.unsplash.com/photo-1555507036-ab1f4038808a?auto=format&fit=crop&w=800&q=80");
+        item6.setImageUrl("/images/catalog/photo-1555507036-ab1f4038808a.jpg");
         item6.setUnit("cái");
         menuItems.put(6, item6);
     }

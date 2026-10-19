@@ -1,5 +1,6 @@
 'use client'
 
+import { localImageSrc } from '@/lib/assets'
 import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -47,21 +48,21 @@ import { DEFAULT_BRANCH_ID } from '@/lib/branches'
 
 // Default fallback data if server props are undefined
 const defaultTables: FloorTable[] = ([
-  { id: 12, name: 'Bar 01', seats: 1, zone: 'Quầy Bar', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date(), imageUrl: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=800&q=80' },
-  { id: 13, name: 'Bar 02', seats: 1, zone: 'Quầy Bar', status: 'occupied', guestCount: 1, occupiedSince: new Date(Date.now() - 15 * 60000), updatedAt: new Date(), imageUrl: 'https://images.unsplash.com/photo-1445116572660-238429888876?auto=format&fit=crop&w=800&q=80' },
-  { id: 14, name: 'Bar 03', seats: 1, zone: 'Quầy Bar', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date(), imageUrl: 'https://images.unsplash.com/photo-1498804103079-a6351b050096?auto=format&fit=crop&w=800&q=80' },
-  { id: 15, name: 'Bar 04', seats: 1, zone: 'Quầy Bar', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date(), imageUrl: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=800&q=80' },
-  { id: 1, name: 'Bàn 01', seats: 2, zone: 'Phòng lạnh', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date(), imageUrl: 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=800&q=80' },
-  { id: 2, name: 'Bàn 02', seats: 4, zone: 'Phòng lạnh', status: 'occupied', guestCount: 3, occupiedSince: new Date(Date.now() - 35 * 60000), updatedAt: new Date(), imageUrl: 'https://images.unsplash.com/photo-1521017432531-fbd92d768814?auto=format&fit=crop&w=800&q=80' },
-  { id: 3, name: 'Bàn 03', seats: 4, zone: 'Phòng lạnh', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date(), imageUrl: 'https://images.unsplash.com/photo-1442512595331-e89e73853f31?auto=format&fit=crop&w=800&q=80' },
-  { id: 4, name: 'Bàn 04', seats: 2, zone: 'Phòng lạnh', status: 'reserved', guestCount: 2, occupiedSince: null, updatedAt: new Date(), imageUrl: 'https://images.unsplash.com/photo-1559925393-8be0ec4767c8?auto=format&fit=crop&w=800&q=80' },
-  { id: 5, name: 'Bàn 05', seats: 6, zone: 'Phòng lạnh', status: 'occupied', guestCount: 5, occupiedSince: new Date(Date.now() - 75 * 60000), updatedAt: new Date(), imageUrl: 'https://images.unsplash.com/photo-1600093463592-8e36ae95ef56?auto=format&fit=crop&w=800&q=80' },
-  { id: 6, name: 'Bàn 06', seats: 4, zone: 'Phòng lạnh', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date(), imageUrl: 'https://images.unsplash.com/photo-1511920170033-f8396924c348?auto=format&fit=crop&w=800&q=80' },
-  { id: 7, name: 'Vườn 01', seats: 4, zone: 'Sân vườn', status: 'occupied', guestCount: 4, occupiedSince: new Date(Date.now() - 50 * 60000), updatedAt: new Date(), imageUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=800&q=80' },
-  { id: 8, name: 'Vườn 02', seats: 2, zone: 'Sân vườn', status: 'cleaning', guestCount: 0, occupiedSince: null, updatedAt: new Date(), imageUrl: 'https://images.unsplash.com/photo-1525610553991-2bede1a236e2?auto=format&fit=crop&w=800&q=80' },
-  { id: 9, name: 'Vườn 03', seats: 4, zone: 'Sân vườn', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date(), imageUrl: 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=800&q=80' },
-  { id: 10, name: 'Vườn 04', seats: 2, zone: 'Sân vườn', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date(), imageUrl: 'https://images.unsplash.com/photo-1508766917616-d22f3f1eea14?auto=format&fit=crop&w=800&q=80' },
-  { id: 11, name: 'Vườn 05', seats: 2, zone: 'Sân vườn', status: 'reserved', guestCount: 2, occupiedSince: null, updatedAt: new Date(), imageUrl: 'https://images.unsplash.com/photo-1447933601403-0c6688de566e?auto=format&fit=crop&w=800&q=80' },
+  { id: 12, name: 'Bar 01', seats: 1, zone: 'Quầy Bar', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date(), imageUrl: '/images/catalog/photo-1501386761578-eac5c94b800a.jpg' },
+  { id: 13, name: 'Bar 02', seats: 1, zone: 'Quầy Bar', status: 'occupied', guestCount: 1, occupiedSince: new Date(Date.now() - 15 * 60000), updatedAt: new Date(), imageUrl: '/images/space/counter.jpg' },
+  { id: 14, name: 'Bar 03', seats: 1, zone: 'Quầy Bar', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date(), imageUrl: '/images/catalog/photo-1498804103079-a6351b050096.jpg' },
+  { id: 15, name: 'Bar 04', seats: 1, zone: 'Quầy Bar', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date(), imageUrl: '/images/catalog/photo-1495474472287-4d71bcdd2085.jpg' },
+  { id: 1, name: 'Bàn 01', seats: 2, zone: 'Phòng lạnh', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date(), imageUrl: '/images/catalog/photo-1554118811-1e0d58224f24.jpg' },
+  { id: 2, name: 'Bàn 02', seats: 4, zone: 'Phòng lạnh', status: 'occupied', guestCount: 3, occupiedSince: new Date(Date.now() - 35 * 60000), updatedAt: new Date(), imageUrl: '/images/catalog/photo-1521017432531-fbd92d768814.jpg' },
+  { id: 3, name: 'Bàn 03', seats: 4, zone: 'Phòng lạnh', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date(), imageUrl: '/images/catalog/photo-1442512595331-e89e73853f31.jpg' },
+  { id: 4, name: 'Bàn 04', seats: 2, zone: 'Phòng lạnh', status: 'reserved', guestCount: 2, occupiedSince: null, updatedAt: new Date(), imageUrl: '/images/catalog/photo-1559925393-8be0ec4767c8.jpg' },
+  { id: 5, name: 'Bàn 05', seats: 6, zone: 'Phòng lạnh', status: 'occupied', guestCount: 5, occupiedSince: new Date(Date.now() - 75 * 60000), updatedAt: new Date(), imageUrl: '/images/catalog/photo-1600093463592-8e36ae95ef56.jpg' },
+  { id: 6, name: 'Bàn 06', seats: 4, zone: 'Phòng lạnh', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date(), imageUrl: '/images/catalog/photo-1511920170033-f8396924c348.jpg' },
+  { id: 7, name: 'Vườn 01', seats: 4, zone: 'Sân vườn', status: 'occupied', guestCount: 4, occupiedSince: new Date(Date.now() - 50 * 60000), updatedAt: new Date(), imageUrl: '/images/catalog/photo-1517248135467-4c7edcad34c4.jpg' },
+  { id: 8, name: 'Vườn 02', seats: 2, zone: 'Sân vườn', status: 'cleaning', guestCount: 0, occupiedSince: null, updatedAt: new Date(), imageUrl: '/images/catalog/photo-1525610553991-2bede1a236e2.jpg' },
+  { id: 9, name: 'Vườn 03', seats: 4, zone: 'Sân vườn', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date(), imageUrl: '/images/catalog/photo-1501339847302-ac426a4a7cbb.jpg' },
+  { id: 10, name: 'Vườn 04', seats: 2, zone: 'Sân vườn', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date(), imageUrl: '/images/catalog/photo-1508766917616-d22f3f1eea14.jpg' },
+  { id: 11, name: 'Vườn 05', seats: 2, zone: 'Sân vườn', status: 'reserved', guestCount: 2, occupiedSince: null, updatedAt: new Date(), imageUrl: '/images/catalog/photo-1447933601403-0c6688de566e.jpg' },
 ] as Omit<FloorTable, 'branch'>[]).map((table) => ({ ...table, branch: DEFAULT_BRANCH_ID }))
 
 const defaultOrders: Order[] = ([
@@ -391,7 +392,7 @@ export function DashboardOperationalView({
                     {table.imageUrl && (
                       <>
                         <img
-                          src={table.imageUrl}
+                          src={localImageSrc(table.imageUrl)}
                           alt=""
                           className="absolute inset-0 -z-20 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                           loading="lazy"
@@ -631,7 +632,7 @@ export function DashboardOperationalView({
             {activeTableDetail.imageUrl && (
               <div className="relative h-44 w-full overflow-hidden rounded-xl border border-stone-200 mt-2 shadow-2xs">
                 <img
-                  src={activeTableDetail.imageUrl}
+                  src={localImageSrc(activeTableDetail.imageUrl)}
                   alt={activeTableDetail.name}
                   className="h-full w-full object-cover"
                 />

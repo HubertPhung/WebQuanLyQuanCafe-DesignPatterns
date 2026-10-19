@@ -152,8 +152,9 @@ public class TableHandler extends ApiHandler {
         if (name.length() > 100 || zone.length() > 50 || seats < 1 || seats > 100) {
             throw ApiException.badRequest("Tên tối đa 100 ký tự, khu vực tối đa 50 ký tự, số chỗ từ 1 đến 100.");
         }
-        if (image != null && (image.length() > 2048 || !image.matches("https?://[^\\s]+"))) {
-            throw ApiException.badRequest("Ảnh phải là đường dẫn http hoặc https hợp lệ.");
+        if (image != null && (image.length() > 2048 || !image.startsWith("/") || image.startsWith("//")
+                || image.contains("\\") || image.chars().anyMatch(Character::isWhitespace))) {
+            throw ApiException.badRequest("Ảnh phải là đường dẫn trong trang, bắt đầu bằng /.");
         }
         Table table;
         synchronized (tableDao) {

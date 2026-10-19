@@ -8,6 +8,7 @@ import { isDbConfigured } from '@/lib/db'
 import { saveDatabaseTable, deleteDatabaseTable, mirrorDatabaseTable, mirrorDeletedTable } from '@/lib/admin/table-repository'
 import { getAdminBranch } from '@/lib/admin/branch'
 import type { FloorTable } from '@/lib/db/schema'
+import { localImageSrc } from '@/lib/assets'
 
 export type TableDetails = { name: string; seats: number; zone: string; imageUrl: string | null }
 type Result<T> = { ok: true; data: T } | { ok: false; error: string }
@@ -19,8 +20,9 @@ export async function saveTableDetails(input: TableDetails, id?: number): Promis
     if (!details.name || details.name.length > 100 || !details.zone || details.zone.length > 50 || !Number.isInteger(details.seats) || details.seats < 1 || details.seats > 100) throw new Error('Nhập tên bàn, khu vực và số chỗ từ 1 đến 100.')
     if (id !== undefined && (!Number.isInteger(id) || id <= 0)) throw new Error('Mã bàn không hợp lệ.')
     if (details.imageUrl) {
-      const url = new URL(details.imageUrl)
-      if (!['http:', 'https:'].includes(url.protocol) || details.imageUrl.length > 2048) throw new Error('Ảnh phải là URL http hoặc https hợp lệ.')
+      const localImage = localImageSrc(details.imageUrl, '')
+      if (!localImage.startsWith('/') || localImage.length > 2048) throw new Error('Vui lòng tải ảnh lên hoặc dùng đường dẫn ảnh trong trang.')
+      details.imageUrl = localImage
     }
     // A new table joins the branch chosen in the header; an edited one keeps its branch.
     const located = { ...details, branch: await getAdminBranch() }

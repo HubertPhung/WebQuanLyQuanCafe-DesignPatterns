@@ -1,5 +1,6 @@
 'use client'
 
+import { localImageSrc } from '@/lib/assets'
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import {
@@ -375,7 +376,7 @@ export function CheckoutForm({ account }: { account: { name: string; email: stri
                   lineItems.map((line) => (
                     <div key={line.id} className="flex items-center gap-3 py-3">
                       {line.merchandise.product.featuredImage?.url ? (
-                        <img src={line.merchandise.product.featuredImage.url} alt="" className="size-12 rounded-lg border border-stone-100 object-cover" />
+                        <img src={localImageSrc(line.merchandise.product.featuredImage.url)} alt="" className="size-12 rounded-lg border border-stone-100 object-cover" />
                       ) : (
                         <div className="flex size-12 items-center justify-center rounded-lg bg-stone-100 text-stone-400">
                           <ShoppingBag className="size-5" aria-hidden="true" />

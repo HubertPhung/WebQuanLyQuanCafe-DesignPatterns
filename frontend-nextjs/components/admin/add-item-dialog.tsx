@@ -1,5 +1,6 @@
 'use client'
 
+import { localImageSrc } from '@/lib/assets'
 import { useState, useTransition, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
@@ -58,7 +59,7 @@ export function AddItemDialog({ categories, onCreated, item }: { categories: str
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   function reset() {
-    setImageUrl(item?.imageUrl ?? '')
+    setImageUrl(localImageSrc(item?.imageUrl, ''))
     setImageName(item?.imageUrl ? 'Ảnh hiện tại của món' : '')
     setOptions((item?.variations ?? []).map((option, index) => ({ id: index + 1, name: option.name, price: String(option.price) })))
     setIsDragging(false)
@@ -245,7 +246,7 @@ export function AddItemDialog({ categories, onCreated, item }: { categories: str
               ) : (
                 <div className="flex items-center gap-4 rounded-xl border border-stone-200 bg-stone-50/80 p-3">
                   <div className="relative size-20 shrink-0 overflow-hidden rounded-lg border border-stone-200 bg-white shadow-2xs">
-                    <img src={imageUrl} alt="Xem trước món" className="size-full object-cover" />
+                    <img src={localImageSrc(imageUrl)} alt="Xem trước món" className="size-full object-cover" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-800">

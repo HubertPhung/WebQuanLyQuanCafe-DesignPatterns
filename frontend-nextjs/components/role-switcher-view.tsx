@@ -1,5 +1,6 @@
 'use client'
 
+import { localImageSrc } from '@/lib/assets'
 import { useState, useEffect } from 'react'
 import useSWR from 'swr'
 import {
@@ -157,7 +158,7 @@ export function RoleSwitcherView({
                   Khám phá {p.title} <ArrowRight size={16} />
                 </a>
               </div>
-              {p.featuredImage && <img src={p.featuredImage.url} alt={p.title} loading="lazy" />}
+              {p.featuredImage && <img src={localImageSrc(p.featuredImage.url)} alt={p.title} loading="lazy" />}
             </section>
           ))}
 

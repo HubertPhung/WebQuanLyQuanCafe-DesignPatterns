@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process'
 import { readFile, unlink } from 'node:fs/promises'
 import path from 'node:path'
 import { SignJWT } from 'jose'
+import { createHash } from 'node:crypto'
 
 const port = 3117
 const base = `http://localhost:${port}`
@@ -64,6 +65,20 @@ try {
     return JSON.parse(resultLine.substring(resultLine.indexOf(':') + 1))
   }
 
+  // Every downloaded asset must be served by this production server with its original bytes.
+  const assets = JSON.parse(await readFile('../docs/assets/sources.json', 'utf8')).assets
+  await Promise.all(assets.filter(asset => asset.kind !== 'license').map(async asset => {
+    const response = await fetch(base + '/' + asset.file.split('/public/')[1])
+    assert.equal(response.status, 200, asset.file)
+    const bytes = Buffer.from(await response.arrayBuffer())
+    assert.equal(createHash('sha256').update(bytes).digest('hex'), asset.sha256, asset.file)
+  }))
+  const home = await (await fetch(base)).text()
+  for (const [, tag, src] of home.matchAll(/<(img|script|link)\b[^>]*?\b(?:src|href)="([^"]+)"/g)) {
+    assert.equal(new URL(src, base).origin, base, `${tag}: ${src}`)
+  }
+  console.log('PASS: production images, fonts and scripts are served locally')
+
   const image = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a4WQAAAAASUVORK5CYII=', 'base64')
   function imageForm(bytes, name = 'table.png') {
     const form = new FormData(); form.set('image', new Blob([bytes]), name); return form
@@ -80,12 +95,16 @@ try {
   assert.equal((await fetch(base + url, { headers: { Cookie: customer } })).status, 403)
   assert.equal((await fetch(`${base}/api/table-images?name=../secret`, { headers: { Cookie: staff } })).status, 404)
 
-  const details = { name: 'HTTP CRUD test table', seats: 4, zone: 'HTTP test area', imageUrl: base + url }
+  const details = { name: 'HTTP CRUD test table', seats: 4, zone: 'HTTP test area', imageUrl: url }
+  const externalImage = await action('saveTableDetails', [{ ...details, imageUrl: 'https://example.com/table.jpg' }])
+  assert.equal(externalImage.ok, false)
+  const protocolRelativeImage = await action('saveTableDetails', [{ ...details, imageUrl: '//example.com/table.jpg' }])
+  assert.equal(protocolRelativeImage.ok, false)
   const denied = await action('saveTableDetails', [details], '/admin/tables', staff)
   assert.equal(denied.ok, false)
   const created = await action('saveTableDetails', [details])
   assert.equal(created.ok, true, JSON.stringify(created))
-  assert.equal(created.data.imageUrl, base + url)
+  assert.equal(created.data.imageUrl, url)
   const id = created.data.id
   assert.ok((await (await fetch(`${base}/admin/tables`, { headers: { Cookie: manager } })).text()).includes(details.name))
   const edited = await action('saveTableDetails', [{ ...details, name: 'HTTP edited table', seats: 6, imageUrl: null }, id])

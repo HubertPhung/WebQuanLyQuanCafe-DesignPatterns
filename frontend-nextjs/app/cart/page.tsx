@@ -1,5 +1,6 @@
 'use client'
 
+import { localImageSrc } from '@/lib/assets'
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -98,7 +99,7 @@ export default function CartPage() {
                     <div key={line.id} className="py-4 first:pt-0 last:pb-0 flex flex-col sm:flex-row items-start sm:items-center gap-4">
                       {line.merchandise.product.featuredImage?.url ? (
                         <img
-                          src={line.merchandise.product.featuredImage.url}
+                          src={localImageSrc(line.merchandise.product.featuredImage.url)}
                           alt={line.merchandise.product.title}
                           className="size-20 rounded-xl object-cover border border-stone-100 shrink-0"
                         />

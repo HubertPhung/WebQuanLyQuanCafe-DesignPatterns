@@ -1,0 +1,3 @@
+# Bundled upstream libraries and fonts are assets, not application source.
+frontend-nextjs/public/vendor/
+frontend-nextjs/public/fonts/
