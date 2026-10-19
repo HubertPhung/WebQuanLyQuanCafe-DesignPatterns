@@ -81,19 +81,27 @@ class ServerTest {
 
     @Test
     void managerCanCreateEditAndDeleteTableWithImage() throws Exception {
-        String details = "{\"name\":\"Ban test CRUD\",\"seats\":4,\"zone\":\"San vuon\",\"imageUrl\":\"https://example.com/table.jpg\"}";
+        String details = "{\"name\":\"Ban test CRUD\",\"seats\":4,\"zone\":\"San vuon\",\"imageUrl\":\"/images/space/counter.jpg\"}";
         assertEquals(403, call("POST", "/api/tables", "STAFF", details).statusCode());
         HttpResponse<String> created = call("POST", "/api/tables", "MANAGER", details);
         assertEquals(201, created.statusCode(), created.body());
         int id = ((Number) data(created).get("id")).intValue();
-        assertEquals("https://example.com/table.jpg", data(created).get("imageUrl"));
+        assertEquals("/images/space/counter.jpg", data(created).get("imageUrl"));
         assertEquals(409, call("POST", "/api/tables", "MANAGER", details).statusCode());
         HttpResponse<String> updated = call("PUT", "/api/tables/" + id + "/details", "MANAGER", details.replace("San vuon", "Tang 2"));
         assertEquals(200, updated.statusCode(), updated.body());
         assertEquals("Tang 2", data(updated).get("zone"));
-        assertEquals("https://example.com/table.jpg", DaoFactory.getInstance().getTableDao().findById(id).orElseThrow().getImageUrl());
+        assertEquals("/images/space/counter.jpg", DaoFactory.getInstance().getTableDao().findById(id).orElseThrow().getImageUrl());
         assertEquals(200, call("DELETE", "/api/tables/" + id, "MANAGER", null).statusCode());
         assertTrue(DaoFactory.getInstance().getTableDao().findById(id).isEmpty());
+    }
+
+    @Test
+    void tableDetailsRejectRemoteImages() throws Exception {
+        for (String image : java.util.List.of("https://example.com/table.jpg", "//example.com/table.jpg")) {
+            String details = "{\"name\":\"Ban local image\",\"seats\":4,\"zone\":\"Main\",\"imageUrl\":\"" + image + "\"}";
+            assertEquals(400, call("POST", "/api/tables", "MANAGER", details).statusCode(), image);
+        }
     }
 
     @Test

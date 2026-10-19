@@ -146,6 +146,7 @@ Danh mục test, báo cáo E2E và các giới hạn đã biết: [docs/TESTING.
 | [docs/DESIGN_PATTERNS_SPEC.md](docs/DESIGN_PATTERNS_SPEC.md) | Báo cáo 9 mẫu GoF: sơ đồ lớp Mermaid, mã nguồn thật, đề xuất mở rộng |
 | [docs/PROJECT_MANAGEMENT.md](docs/PROJECT_MANAGEMENT.md) | Danh mục tính năng và trạng thái, lịch sử 15 issue, quy ước issue, quy trình Git |
 | [docs/TESTING.md](docs/TESTING.md) | Bộ test JUnit và UI, báo cáo E2E, giới hạn đã biết |
+| [docs/assets/](docs/assets/README.md) | Ảnh, font và thư viện Graphify lưu nội bộ; nguồn tải và kiểm tra tính toàn vẹn |
 | [docs/reports/](docs/reports/README.md) | Báo cáo review, kiểm toán nghiệp vụ và design pattern, các phiên sửa lỗi; tổng hợp việc còn mở |
 
 ---

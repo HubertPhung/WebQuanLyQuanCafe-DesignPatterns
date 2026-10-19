@@ -1,22 +1,28 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
-import { Be_Vietnam_Pro, Playfair_Display } from 'next/font/google'
+import localFont from 'next/font/local'
 import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
 
-const beVietnamPro = Be_Vietnam_Pro({
-  subsets: ['vietnamese', 'latin'],
-  weight: ['300', '400', '500', '600', '700'],
+const beVietnamPro = localFont({
+  src: [
+    { path: '../public/fonts/be-vietnam-pro/BeVietnamPro-Light.ttf', weight: '300', style: 'normal' },
+    { path: '../public/fonts/be-vietnam-pro/BeVietnamPro-Regular.ttf', weight: '400', style: 'normal' },
+    { path: '../public/fonts/be-vietnam-pro/BeVietnamPro-Medium.ttf', weight: '500', style: 'normal' },
+    { path: '../public/fonts/be-vietnam-pro/BeVietnamPro-SemiBold.ttf', weight: '600', style: 'normal' },
+    { path: '../public/fonts/be-vietnam-pro/BeVietnamPro-Bold.ttf', weight: '700', style: 'normal' },
+  ],
   variable: '--font-be-vietnam-pro',
   display: 'swap',
 })
 
 // Headings: a serif with a full Vietnamese glyph set, so stacked diacritics (ữ, ặ, ồ) stay
 // balanced at display sizes where the bold sans looked heavy. Body text keeps Be Vietnam Pro.
-const playfair = Playfair_Display({
-  subsets: ['vietnamese', 'latin'],
-  weight: ['500', '600', '700'],
-  style: ['normal', 'italic'],
+const playfair = localFont({
+  src: [
+    { path: '../public/fonts/playfair-display/PlayfairDisplay[wght].ttf', weight: '400 900', style: 'normal' },
+    { path: '../public/fonts/playfair-display/PlayfairDisplay-Italic[wght].ttf', weight: '400 900', style: 'italic' },
+  ],
   variable: '--font-display',
   display: 'swap',
 })

@@ -1,5 +1,6 @@
 'use client'
 
+import { localImageSrc } from '@/lib/assets'
 import { useMemo, useState, useTransition } from 'react'
 import {
   Coffee,
@@ -83,7 +84,7 @@ export function PosTerminal({
       key: lineKey(1, []),
       menuItemId: 1,
       name: 'Cà phê Muối Đặc Biệt',
-      imageUrl: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=800&q=80',
+      imageUrl: '/images/catalog/photo-1514432324607-a09d9b4aefdd.jpg',
       basePrice: 45000,
       customizations: [],
       qty: 1,
@@ -248,7 +249,7 @@ export function PosTerminal({
               <div className="relative h-28 sm:h-32 w-full overflow-hidden bg-stone-100 shrink-0">
                 {item.imageUrl ? (
                   <img
-                    src={item.imageUrl}
+                    src={localImageSrc(item.imageUrl)}
                     alt={item.name}
                     loading="lazy"
                     className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
@@ -379,7 +380,7 @@ export function PosTerminal({
                 <div className="flex items-center justify-between text-xs gap-2">
                   <div className="flex items-center gap-2.5 flex-1 min-w-0">
                     {line.imageUrl ? (
-                      <img src={line.imageUrl} alt="" className="size-9 rounded-lg object-cover shrink-0 border border-stone-200" />
+                      <img src={localImageSrc(line.imageUrl)} alt="" className="size-9 rounded-lg object-cover shrink-0 border border-stone-200" />
                     ) : (
                       <div className="size-9 rounded-lg bg-amber-50 flex items-center justify-center shrink-0 border border-stone-200 text-[#5A3E2B]">
                         <Coffee className="size-4 opacity-50" />

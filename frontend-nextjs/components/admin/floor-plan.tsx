@@ -1,5 +1,6 @@
 'use client'
 
+import { localImageSrc } from '@/lib/assets'
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { saveTableDetails, deleteTable } from '@/app/admin/table-actions'
@@ -93,7 +94,7 @@ export function FloorPlan({ tables: initialTables, openOrders, canManage = false
     setNewTableName(table?.name ?? '')
     setNewTableSeats(String(table?.seats ?? 4))
     setNewTableZone(table?.zone ?? areas[0]?.name ?? '')
-    setImageUrl(table?.imageUrl ?? '')
+    setImageUrl(localImageSrc(table?.imageUrl, ''))
     setIsAddTableOpen(true)
   }
 
@@ -306,7 +307,7 @@ export function FloorPlan({ tables: initialTables, openOrders, canManage = false
               >
                 {t.imageUrl && (
                   <>
-                    <img src={t.imageUrl} alt="" className="absolute inset-0 -z-20 h-full w-full object-cover transition-transform duration-500 hover:scale-105" loading="lazy" />
+                    <img src={localImageSrc(t.imageUrl)} alt="" className="absolute inset-0 -z-20 h-full w-full object-cover transition-transform duration-500 hover:scale-105" loading="lazy" />
                     <div className="absolute inset-0 -z-10 bg-gradient-to-t from-white/95 via-white/85 to-white/70 backdrop-blur-[0.5px]" />
                   </>
                 )}
@@ -356,7 +357,7 @@ export function FloorPlan({ tables: initialTables, openOrders, canManage = false
               <tbody className="divide-y divide-stone-100">
                 {tables.map((t) => (
                   <tr key={t.id} className="hover:bg-stone-50/60 transition-colors">
-                    <td className="py-3 px-3 font-bold text-stone-900">{t.imageUrl && <img src={t.imageUrl} alt={t.name} className="mb-2 h-12 w-20 rounded object-cover" loading="lazy" />}{t.name.replace('Table', 'Bàn')}{canManage && <div className="mt-2 flex gap-2"><Button variant="outline" size="sm" disabled={pending} onClick={() => editTable(t)}>Sửa</Button><Button variant="outline" size="sm" disabled={pending} onClick={() => { setDeleteError(''); setDeleting(t) }}>Xóa</Button></div>}</td>
+                    <td className="py-3 px-3 font-bold text-stone-900">{t.imageUrl && <img src={localImageSrc(t.imageUrl)} alt={t.name} className="mb-2 h-12 w-20 rounded object-cover" loading="lazy" />}{t.name.replace('Table', 'Bàn')}{canManage && <div className="mt-2 flex gap-2"><Button variant="outline" size="sm" disabled={pending} onClick={() => editTable(t)}>Sửa</Button><Button variant="outline" size="sm" disabled={pending} onClick={() => { setDeleteError(''); setDeleting(t) }}>Xóa</Button></div>}</td>
                     <td className="py-3 px-3 text-stone-600">{t.zone}</td>
                     <td className="py-3 px-3 text-stone-600">{t.seats} chỗ</td>
                     <td className="py-3 px-3">
@@ -436,14 +437,14 @@ export function FloorPlan({ tables: initialTables, openOrders, canManage = false
             </div>
             <div>
               <label htmlFor="table-image" className="mb-1 block font-semibold">Hình ảnh bàn</label>
-              <input id="table-image" type="url" value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="https://... hoặc tải ảnh bên dưới" className="w-full rounded-lg border p-2" />
+              <input id="table-image" type="text" value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="/images/... hoặc tải ảnh bên dưới" className="w-full rounded-lg border p-2" />
               <div data-testid="table-image-dropzone" onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = uploading || pending ? 'none' : 'copy'; setDraggingImage(true) }} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDraggingImage(false) }} onDrop={event => { event.preventDefault(); setDraggingImage(false); void uploadImage(Array.from(event.dataTransfer.files)) }}
                 className={cn('relative mt-2 rounded-xl border-2 border-dashed p-5 text-center', draggingImage ? 'border-amber-700 bg-amber-50' : 'border-stone-300 bg-stone-50')}>
                 <label htmlFor="table-image-file" className="block cursor-pointer font-semibold">{uploading ? 'Đang tải ảnh…' : 'Kéo thả ảnh vào đây hoặc bấm để chọn ảnh'}</label>
                 <input id="table-image-file" type="file" aria-label="Tải ảnh bàn" accept="image/jpeg,image/png,image/webp" disabled={uploading || pending} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ''; if (files.length) void uploadImage(files) }} />
               </div>
               <p className="mt-1 text-stone-500">JPG, PNG hoặc WebP, tối đa 2 MB. {uploading ? 'Đang tải ảnh…' : ''}</p>
-              {imageUrl && <div className="mt-2"><img src={imageUrl} alt="Xem trước ảnh bàn" className="h-32 w-full rounded-lg object-cover" /><Button type="button" variant="ghost" onClick={() => setImageUrl('')}>Gỡ ảnh</Button></div>}
+              {imageUrl && <div className="mt-2"><img src={localImageSrc(imageUrl)} alt="Xem trước ảnh bàn" className="h-32 w-full rounded-lg object-cover" /><Button type="button" variant="ghost" onClick={() => setImageUrl('')}>Gỡ ảnh</Button></div>}
             </div>
             {formError && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{formError}</p>}
             <DialogFooter className="pt-2">

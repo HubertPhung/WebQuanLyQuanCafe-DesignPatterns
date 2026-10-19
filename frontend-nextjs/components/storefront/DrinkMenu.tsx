@@ -1,5 +1,6 @@
 'use client'
 
+import { localImageSrc } from '@/lib/assets'
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Coffee, Heart, Plus, Search, SlidersHorizontal, Sparkles, X, Check } from 'lucide-react'
@@ -309,7 +310,7 @@ export function DrinkMenu({
                 >
                   {p.featuredImage ? (
                     <img
-                      src={p.featuredImage.url}
+                      src={localImageSrc(p.featuredImage.url)}
                       alt={p.featuredImage.altText || p.title}
                       loading="lazy"
                       className="size-full object-cover transition-transform duration-500 group-hover:scale-105"
