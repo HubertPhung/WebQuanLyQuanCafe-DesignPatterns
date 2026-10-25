@@ -2,6 +2,7 @@ import { getProducts, type Product } from '@/lib/shopify'
 import { getOverview, getTables } from '@/lib/admin/queries'
 import { RoleSwitcherView } from '@/components/role-switcher-view'
 import { getSession } from '@/lib/auth/session'
+import { atLeast } from '@/lib/auth/roles'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,12 +20,16 @@ export default async function Page() {
   let initialOverview
   let initialTables
 
-  try {
-    const [overview, tables] = await Promise.all([getOverview(), getTables()])
-    initialOverview = overview
-    initialTables = tables
-  } catch (err) {
-    console.warn('Failed to load initial admin overview:', err)
+  // The staff dashboard needs floor and sales data; guests and customers never see it, so
+  // they must not trigger the admin queries (which refuse them) on every visit.
+  if (session && atLeast(session.role, 'STAFF')) {
+    try {
+      const [overview, tables] = await Promise.all([getOverview(), getTables()])
+      initialOverview = overview
+      initialTables = tables
+    } catch (err) {
+      console.warn('Failed to load initial admin overview:', err)
+    }
   }
 
   return (

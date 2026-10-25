@@ -19,6 +19,9 @@ for (const asset of manifest.assets) {
 
 assert.equal(localImageSrc('/images/latte.png'), '/images/latte.png')
 assert.equal(localImageSrc('/api/table-images?name=local.jpg'), '/api/table-images?name=local.jpg')
+assert.equal(localImageSrc('http://localhost:3000/api/table-images?name=a.jpg'), '/api/table-images?name=a.jpg')
+assert.equal(localImageSrc('http://localhost:3000/other?name=a.jpg'), '/placeholder.svg')
+assert.equal(localImageSrc('https://evil.example/api/table-images?name=a.jpg'), '/placeholder.svg')
 const uploaded = 'data:image/png;base64,aGVsbG8='
 assert.equal(localImageSrc(uploaded), uploaded)
 for (const external of ['https://example.com/image.jpg', '//example.com/image.jpg', '/\\example.com/image.jpg']) {
