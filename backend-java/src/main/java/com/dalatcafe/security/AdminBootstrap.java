@@ -10,10 +10,9 @@ import java.util.Optional;
 import java.util.logging.Logger;
 
 /**
- * Makes sure a fresh store has one administrator, so somebody can sign in and create the
- * staff accounts. Uses ADMIN_EMAIL / ADMIN_PASSWORD when set; otherwise creates
- * admin@dalatcafe.local with a random password that is printed once in the server log.
- * Does nothing while any active admin exists.
+ * Bảo đảm kho mới có một quản trị viên, để có người đăng nhập và tạo tài khoản nhân viên. Dùng
+ * ADMIN_EMAIL / ADMIN_PASSWORD nếu được đặt; nếu không thì tạo admin@dalatcafe.local với mật khẩu
+ * ngẫu nhiên in một lần trong log server. Không làm gì khi đã có quản trị viên đang hoạt động.
  */
 public final class AdminBootstrap {
     private static final Logger LOGGER = Logger.getLogger(AdminBootstrap.class.getName());
@@ -23,7 +22,7 @@ public final class AdminBootstrap {
     private AdminBootstrap() {
     }
 
-    /** Returns the generated password when one was created, for the start-up log. */
+    /** Trả về mật khẩu vừa sinh khi có tạo mới, để ghi vào log lúc khởi động. */
     public static Optional<String> ensureAdmin(IUserDao users, PasswordHasher hasher, Map<String, String> env) {
         boolean hasAdmin = users.findAll().stream().anyMatch(u -> u.isActive() && u.getRole() == UserRole.ADMIN);
         if (hasAdmin) {

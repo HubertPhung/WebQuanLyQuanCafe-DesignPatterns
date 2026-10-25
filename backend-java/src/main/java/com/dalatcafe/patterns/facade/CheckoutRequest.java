@@ -10,9 +10,9 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Immutable input of {@link PosCheckoutFacade#checkout(CheckoutRequest)}.
- * {@code customer}, {@code discountStrategy}, {@code tenderedAmount} and {@code branch} are optional;
- * without a branch the order belongs to {@link Branches#DEFAULT}.
+ * Đầu vào bất biến của {@link PosCheckoutFacade#checkout(CheckoutRequest)}. {@code customer},
+ * {@code discountStrategy}, {@code tenderedAmount} và {@code branch} là tùy chọn; không có chi
+ * nhánh thì đơn thuộc {@link Branches#DEFAULT}.
  */
 public final class CheckoutRequest {
     private final List<CheckoutLine> lines;
@@ -31,7 +31,7 @@ public final class CheckoutRequest {
         this(lines, tableId, orderType, paymentMethod, customer, discountStrategy, note, null);
     }
 
-    /** {@code tenderedAmount} is the cash the customer handed over; a cash sale must cover the total. */
+    /** {@code tenderedAmount} là tiền mặt khách đưa; đơn trả tiền mặt phải đủ tổng tiền. */
     public CheckoutRequest(List<CheckoutLine> lines, Integer tableId, OrderType orderType,
                            PaymentMethod paymentMethod, Customer customer,
                            IDiscountStrategy discountStrategy, String note, Double tenderedAmount) {

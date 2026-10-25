@@ -127,7 +127,7 @@ class ModelEntitiesTest {
                     () -> assertEquals(90000.0, item.getLineTotal())
             );
 
-            // Minimum quantity clamping
+            // Chặn số lượng tối thiểu
             item.setQty(0);
             assertEquals(1, item.getQty());
             assertEquals(45000.0, item.getLineTotal());
@@ -178,14 +178,14 @@ class ModelEntitiesTest {
             assertEquals(4, table.getSeats());
             assertEquals("Tầng 1", table.getZone());
 
-            // Transition to OCCUPIED
+            // Chuyển sang OCCUPIED
             table.setStatus(TableStatus.OCCUPIED);
             table.setGuestCount(3);
             assertEquals(TableStatus.OCCUPIED, table.getStatus());
             assertNotNull(table.getOccupiedSince());
             assertEquals(3, table.getGuestCount());
 
-            // Transition to AVAILABLE (clears occupiedSince and guestCount)
+            // Chuyển sang AVAILABLE (xóa occupiedSince và guestCount)
             table.setStatus(TableStatus.AVAILABLE);
             assertEquals(TableStatus.AVAILABLE, table.getStatus());
             assertNull(table.getOccupiedSince());
@@ -231,12 +231,12 @@ class ModelEntitiesTest {
 
             assertEquals(3, item.getVariations().size());
 
-            // Returned list should be unmodifiable
+            // Danh sách trả về phải không sửa được
             assertThrows(UnsupportedOperationException.class, () ->
                     item.getVariations().add(new Variation("Extra shot", 15000.0))
             );
 
-            // Defensive copy on setVariations
+            // setVariations tạo bản sao phòng vệ
             List<Variation> externalList = List.of(new Variation("Mặc định", 0.0));
             item.setVariations(externalList);
             assertEquals(1, item.getVariations().size());
@@ -280,18 +280,16 @@ class ModelEntitiesTest {
             order.addItem(new OrderItem(1, "Cà Phê Muối Biển", 2, 45000.0, null, null)); // 90,000
             order.addItem(new OrderItem(2, "Bánh Croissant Bơ Tỏi", 1, 35000.0, null, null)); // 35,000
 
-            // Subtotal = 125,000
+            // Tạm tính = 125.000
             assertEquals(125000.0, order.getSubtotal(), 0.01);
-            // Default VAT 8% on 125,000 = 10,000
+            // VAT mặc định 8% trên 125.000 = 10.000
             assertEquals(10000.0, order.getVatAmount(), 0.01);
-            // Total = 125,000 + 10,000 = 135,000
+            // Tổng = 125.000 + 10.000 = 135.000
             assertEquals(135000.0, order.getTotal(), 0.01);
 
-            // Apply 25,000 discount
+            // Áp giảm giá 25.000
             order.setDiscountAmount(25000.0);
-            // After discount: 100,000
-            // VAT 8% on 100,000 = 8,000
-            // Total = 100,000 + 8,000 = 108,000
+            // Sau giảm giá: 100.000; VAT 8% trên 100.000 = 8.000; Tổng = 100.000 + 8.000 = 108.000
             assertEquals(125000.0, order.getSubtotal(), 0.01);
             assertEquals(25000.0, order.getDiscountAmount(), 0.01);
             assertEquals(8000.0, order.getVatAmount(), 0.01);
@@ -361,12 +359,12 @@ class ModelEntitiesTest {
             res.addPreOrder(new OrderItem("Cà Phê Cold Brew Mận", 2, 50000.0));
             assertEquals(1, res.getPreOrders().size());
 
-            // Immutable list
+            // Danh sách bất biến
             assertThrows(UnsupportedOperationException.class, () ->
                     res.getPreOrders().add(new OrderItem("Extra", 1, 10000.0))
             );
 
-            // Guests min bound
+            // Giới hạn dưới của số khách
             res.setGuests(0);
             assertEquals(1, res.getGuests());
         }
@@ -400,25 +398,25 @@ class ModelEntitiesTest {
             assertEquals(0.0, customer.getTotalSpent());
             assertEquals(0, customer.getLoyaltyPoints());
 
-            // Spend 450,000 -> Still BRONZE (< 500,000)
+            // Chi 450.000 -> vẫn BRONZE (< 500.000)
             customer.addOrderRecord(450000.0, 45);
             assertEquals(CustomerRank.BRONZE, customer.getRank());
             assertEquals(1, customer.getTotalOrders());
             assertEquals(450000.0, customer.getTotalSpent());
             assertEquals(45, customer.getLoyaltyPoints());
 
-            // Spend +150,000 -> Total 600,000 -> Upgrade to SILVER
+            // Chi thêm 150.000 -> tổng 600.000 -> lên SILVER
             customer.addOrderRecord(150000.0, 15);
             assertEquals(CustomerRank.SILVER, customer.getRank());
             assertEquals(2, customer.getTotalOrders());
             assertEquals(600000.0, customer.getTotalSpent());
             assertEquals(60, customer.getLoyaltyPoints());
 
-            // Spend +1,500,000 -> Total 2,100,000 -> Upgrade to GOLD
+            // Chi thêm 1.500.000 -> tổng 2.100.000 -> lên GOLD
             customer.addOrderRecord(1500000.0, 150);
             assertEquals(CustomerRank.GOLD, customer.getRank());
 
-            // Spend +3,000,000 -> Total 5,100,000 -> Upgrade to VIP
+            // Chi thêm 3.000.000 -> tổng 5.100.000 -> lên VIP
             customer.addOrderRecord(3000000.0, 300);
             assertEquals(CustomerRank.VIP, customer.getRank());
         }
@@ -429,15 +427,15 @@ class ModelEntitiesTest {
             Customer customer = new Customer();
             customer.setLoyaltyPoints(100);
 
-            // Successful redemption
+            // Đổi điểm thành công
             assertTrue(customer.redeemPoints(40));
             assertEquals(60, customer.getLoyaltyPoints());
 
-            // Insufficient points
+            // Không đủ điểm
             assertFalse(customer.redeemPoints(70));
             assertEquals(60, customer.getLoyaltyPoints());
 
-            // Invalid non-positive points
+            // Số điểm không dương là không hợp lệ
             assertFalse(customer.redeemPoints(0));
             assertFalse(customer.redeemPoints(-10));
             assertEquals(60, customer.getLoyaltyPoints());

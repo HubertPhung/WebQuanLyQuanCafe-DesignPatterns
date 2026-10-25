@@ -2,7 +2,7 @@ package com.dalatcafe.patterns.strategy;
 
 import com.dalatcafe.model.Customer;
 
-/** Computes a monetary deduction, never greater than the subtotal. */
+/** Tính một khoản giảm tiền, không bao giờ lớn hơn tạm tính. */
 public interface IDiscountStrategy {
     double calculateDiscount(double subtotal, Customer customer);
     String getDiscountDescription();

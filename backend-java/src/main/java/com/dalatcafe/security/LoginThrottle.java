@@ -8,9 +8,9 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Slows down password guessing: after {@code maxFailures} wrong passwords for one email within
- * {@code window}, that email is locked until the window has passed. A successful sign-in clears
- * the count. Kept in memory, per server process.
+ * Làm chậm việc đoán mật khẩu: sau {@code maxFailures} lần sai mật khẩu của một email trong {@code
+ * window}, email đó bị khóa cho tới khi hết khoảng thời gian. Đăng nhập thành công thì xóa bộ đếm.
+ * Lưu trong bộ nhớ, theo từng tiến trình server.
  */
 public final class LoginThrottle {
     public static final int DEFAULT_MAX_FAILURES = 5;

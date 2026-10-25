@@ -20,8 +20,8 @@ export default async function Page() {
   let initialOverview
   let initialTables
 
-  // The staff dashboard needs floor and sales data; guests and customers never see it, so
-  // they must not trigger the admin queries (which refuse them) on every visit.
+  // Dashboard nhân viên cần dữ liệu bàn và doanh số; khách vãng lai và khách hàng không bao giờ
+  // thấy nó, nên họ không được kích hoạt các truy vấn admin (vốn sẽ từ chối họ) ở mỗi lần truy cập.
   if (session && atLeast(session.role, 'STAFF')) {
     try {
       const [overview, tables] = await Promise.all([getOverview(), getTables()])

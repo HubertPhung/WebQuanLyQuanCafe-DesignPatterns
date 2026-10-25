@@ -19,7 +19,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Base class of the REST handlers: JSON envelope, body reading and uniform error mapping
+ * Lớp cơ sở của các REST handler: phong bì JSON, đọc body và ánh xạ lỗi thống nhất
  * ({"ok":true,"data":...} / {"ok":false,"error":...,"code":...}).
  */
 public abstract class ApiHandler implements HttpHandler {
@@ -27,7 +27,7 @@ public abstract class ApiHandler implements HttpHandler {
     static final int MAX_BODY_BYTES = 1024 * 1024;
     private static final String JSON_UTF8 = "application/json; charset=UTF-8";
 
-    /** Routes the request; may throw {@link ApiException} for expected failures. */
+    /** Định tuyến request; có thể ném {@link ApiException} cho các lỗi lường trước. */
     protected abstract void route(HttpExchange exchange) throws IOException;
 
     @Override
@@ -46,7 +46,7 @@ public abstract class ApiHandler implements HttpHandler {
         }
     }
 
-    // ---- responses ----
+    // ---- phản hồi ----
 
     public static void sendOk(HttpExchange exchange, int status, Object data, String message) throws IOException {
         Map<String, Object> body = new LinkedHashMap<>();
@@ -77,7 +77,7 @@ public abstract class ApiHandler implements HttpHandler {
         }
     }
 
-    // ---- request helpers ----
+    // ---- hàm hỗ trợ đọc request ----
 
     protected static Map<String, Object> readJsonBody(HttpExchange exchange) throws IOException {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
@@ -103,13 +103,16 @@ public abstract class ApiHandler implements HttpHandler {
         return Json.parseObject(text);
     }
 
-    /** Path segments after the leading "/api", e.g. /api/tables/3/status -> [tables, 3, status]. */
+    /** Các đoạn đường dẫn sau "/api" ở đầu, ví dụ /api/tables/3/status -> [tables, 3, status]. */
     protected static List<String> segments(HttpExchange exchange) {
         String path = exchange.getRequestURI().getPath();
         return List.of(path.replaceAll("^/+|/+$", "").split("/"));
     }
 
-    /** First value of a query-string parameter (URL-decoded), or null when absent or blank. */
+    /**
+     * Giá trị đầu tiên của một tham số query string (đã giải mã URL), hoặc null khi không có hay để
+     * trống.
+     */
     protected static String queryParam(HttpExchange exchange, String name) {
         String query = exchange.getRequestURI().getRawQuery();
         if (query == null) {
@@ -126,7 +129,10 @@ public abstract class ApiHandler implements HttpHandler {
         return null;
     }
 
-    /** The ?branch= filter of a list request: null for every branch, else a known branch id. */
+    /**
+     * Bộ lọc ?branch= của request lấy danh sách: null là mọi chi nhánh, còn lại là một id chi nhánh
+     * hợp lệ.
+     */
     protected static String branchFilter(HttpExchange exchange) {
         String branch = queryParam(exchange, "branch");
         if (branch != null && !com.dalatcafe.model.Branches.isKnown(branch)) {
@@ -135,7 +141,7 @@ public abstract class ApiHandler implements HttpHandler {
         return branch;
     }
 
-    /** An optional "branch" body field, checked against the known branches. */
+    /** Trường "branch" tùy chọn trong body, được đối chiếu với các chi nhánh đã biết. */
     protected static String branchField(Map<String, Object> body) {
         String branch = str(body, "branch");
         if (branch != null && !com.dalatcafe.model.Branches.isKnown(branch)) {
@@ -160,7 +166,7 @@ public abstract class ApiHandler implements HttpHandler {
         }
     }
 
-    // ---- JSON field helpers ----
+    // ---- hàm hỗ trợ đọc trường JSON ----
 
     protected static String str(Map<String, Object> map, String key) {
         Object value = map.get(key);

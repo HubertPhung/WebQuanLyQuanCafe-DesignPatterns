@@ -17,9 +17,9 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Issues and verifies JWT access tokens signed with HS256 (pure Java SE). The Next.js frontend
- * verifies the same tokens with the shared secret. Verification accepts only
- * {@code alg: HS256}, so a forged {@code alg: none} token is rejected.
+ * Cấp và kiểm tra access token JWT ký bằng HS256 (Java SE thuần). Frontend Next.js kiểm tra cùng
+ * các token đó bằng khóa bí mật dùng chung. Chỉ chấp nhận {@code alg: HS256}, nên token giả mạo
+ * {@code alg: none} bị từ chối.
  */
 public final class TokenService {
     private static final String HEADER = base64Url("{\"alg\":\"HS256\",\"typ\":\"JWT\"}".getBytes(StandardCharsets.UTF_8));
@@ -28,7 +28,9 @@ public final class TokenService {
     private final Duration ttl;
     private final Clock clock;
 
-    /** Verified token contents. The role in the token is informational; callers re-read the account. */
+    /**
+     * Nội dung token đã kiểm tra. Vai trò trong token chỉ để tham khảo; nơi gọi đọc lại tài khoản.
+     */
     public record Claims(int userId, String email, String name, String role, long expiresAt) {
     }
 
@@ -85,7 +87,7 @@ public final class TokenService {
             return Optional.of(new Claims(userId, (String) payload.get("email"), (String) payload.get("name"),
                     (String) payload.get("role"), exp.longValue()));
         } catch (RuntimeException e) {
-            // Bad base64, bad JSON or a non-numeric subject: not a token we issued.
+            // Base64 hỏng, JSON hỏng hoặc subject không phải số: không phải token do chúng ta cấp.
             return Optional.empty();
         }
     }

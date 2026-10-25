@@ -1,12 +1,11 @@
-// End-to-end check of the whole stack on a real PostgreSQL database:
-//   Java backend (JAVA_BACKEND_URL, default http://localhost:8080) in JDBC mode,
-//   Next.js (TEST_BASE_URL, default http://localhost:3000), both on DATABASE_URL.
-// Unlike test-ui-ux.mjs, which drives the mock store in-process, every step here goes through
-// HTTP and is checked against the database. Rows it writes carry a run id and are deleted at the
-// end; table states, on/off switches and settings it changes are put back. Existing data is not touched.
-//
-//   npm run test:e2e   (reads DATABASE_URL and AUTH_JWT_SECRET from the environment or .env.local;
-//   Java also needs the frontend's AUTH_SERVICE_KEY for guests' online orders)
+// Kiểm tra đầu-cuối toàn bộ hệ thống trên database PostgreSQL thật: backend Java (JAVA_BACKEND_URL,
+// mặc định http://localhost:8080) ở chế độ JDBC và Next.js (TEST_BASE_URL, mặc định
+// http://localhost:3000), cả hai dùng DATABASE_URL. Khác với test-ui-ux.mjs (chạy mock store ngay
+// trong tiến trình), mọi bước ở đây đi qua HTTP và được đối chiếu với database. Các dòng nó ghi
+// mang mã lần chạy và bị xóa ở cuối; trạng thái bàn, công tắc bật/tắt bán và cài đặt nó đổi đều
+// được trả lại. Dữ liệu có sẵn không bị đụng tới. Chạy: npm run test:e2e (đọc DATABASE_URL và
+// AUTH_JWT_SECRET từ biến môi trường hoặc .env.local; Java cũng cần AUTH_SERVICE_KEY của frontend
+// cho đơn online của khách).
 import { createHmac, randomBytes } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -24,10 +23,10 @@ const db = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 2 })
 const RUN = `E2E${Date.now().toString(36).toUpperCase()}`
 const created = { orders: new Set(), reservations: new Set(), users: new Set(), menuIds: new Set(), phones: new Set() }
 
-// --- helpers ---
+// --- hàm hỗ trợ ---
 const b64 = (value) => Buffer.from(JSON.stringify(value)).toString('base64url')
-// A session for an existing account, signed like the Java TokenService (HS256). Java re-reads the
-// role from the users table, so this is exactly what a signed-in browser sends.
+// Phiên đăng nhập cho một tài khoản có sẵn, ký giống TokenService bên Java (HS256). Java đọc lại
+// vai trò từ bảng users, nên đây đúng là thứ một trình duyệt đã đăng nhập gửi lên.
 function sessionToken(userId) {
   const now = Math.floor(Date.now() / 1000)
   const body = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: String(userId), email: `${RUN}@test.local`, name: RUN, role: 'ADMIN', iat: now, exp: now + 3600 })}`
@@ -46,7 +45,7 @@ async function call(method, path, body, auth = ADMIN) {
   try {
     json = JSON.parse(text)
   } catch {
-    // not JSON
+    // không phải JSON
   }
   return { status: res.status, json, data: json?.data, text }
 }
@@ -63,7 +62,7 @@ function cafeDateTime(daysAhead, hour, minute = 0) {
   return `${day}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00+07:00`
 }
 
-// --- what the run may change, recorded before it starts ---
+// --- những gì lần chạy có thể thay đổi, ghi lại trước khi bắt đầu ---
 async function snapshot() {
   const tables = (await db.query('SELECT id, status, guest_count, occupied_since FROM tables')).rows
   const stock = (await db.query('SELECT id, in_stock FROM menu_items')).rows
@@ -75,7 +74,7 @@ async function snapshot() {
 async function restore(before) {
   const codes = [...created.orders]
   await db.query('DELETE FROM orders WHERE order_code = ANY($1::text[])', [codes])
-  // Online orders also live in the frontend store, with their contact and sync-queue rows.
+  // Đơn online cũng nằm trong kho frontend, cùng các dòng liên hệ và hàng đợi đồng bộ của chúng.
   await db.query('DELETE FROM admin_orders WHERE order_code = ANY($1::text[])', [codes])
   await db.query('DELETE FROM admin_order_contacts WHERE order_code = ANY($1::text[])', [codes])
   await db.query('DELETE FROM admin_sync_queue WHERE order_code = ANY($1::text[])', [codes])
@@ -102,7 +101,7 @@ async function restore(before) {
   }
 }
 
-// The checkout page calls the placeOnlineOrder server action; its id comes from the build.
+// Trang thanh toán gọi server action placeOnlineOrder; id của nó lấy từ bản build.
 function onlineOrderActionId() {
   try {
     const manifest = JSON.parse(fs.readFileSync(path.join(process.cwd(), '.next/server/server-reference-manifest.json'), 'utf8')).node
@@ -112,7 +111,7 @@ function onlineOrderActionId() {
   }
 }
 
-// A shopper's browser: keeps the session and cart cookies between requests.
+// Trình duyệt của một khách mua: giữ cookie phiên và giỏ hàng giữa các request.
 function shopperSession(sessionToken = null) {
   const jar = new Map(sessionToken ? [['dalatcafe_session', sessionToken]] : [])
   const header = () => [...jar].map(([k, v]) => `${k}=${v}`).join('; ')
@@ -147,7 +146,7 @@ function shopperSession(sessionToken = null) {
 }
 
 async function run() {
-  // --- Auth & RBAC with real accounts ---
+  // --- Xác thực và phân quyền với tài khoản thật ---
   let r = await call('GET', '/api/auth/me')
   check('AUTH-01', 'Bearer token resolves to the admin account in the database', r.status === 200 && r.data?.role === 'ADMIN', brief(r))
   r = await call('GET', '/api/orders', undefined, null)
@@ -163,7 +162,7 @@ async function run() {
   r = await call('PUT', '/api/config', { storeName: 'x' }, STAFF)
   check('AUTH-05', 'Staff cannot change admin-only settings', r.status === 403, brief(r))
 
-  // --- Menu & on/off switch ---
+  // --- Thực đơn và công tắc bật/tắt bán ---
   r = await call('GET', '/api/menu', undefined, null)
   const menu = r.data ?? []
   check('MENU-01', 'Public menu is served', r.status === 200 && menu.length > 0, `${menu.length} items`)
@@ -186,7 +185,7 @@ async function run() {
   check('MENU-07', 'An item can be switched off', r.status === 200 && r.data?.inStock === false, brief(r))
   await call('PATCH', `/api/menu/${item.id}/stock`, { inStock: true })
 
-  // --- Tables ---
+  // --- Bàn ---
   r = await call('GET', '/api/tables')
   const free = (r.data ?? []).filter((t) => t.status === 'available').map((t) => t.id)
   check('TABLE-01', 'Floor plan is served with at least two free tables', r.status === 200 && free.length >= 2, `${free.length} free`)
@@ -195,7 +194,7 @@ async function run() {
   check('TABLE-02', 'Staff seats guests at a table', r.status === 200, brief(r))
   await call('PATCH', `/api/tables/${posTable}/status`, { status: 'available' })
 
-  // --- Reservation (Chain of Responsibility) -> POS (Adapter) -> pay (Factory + Observer) ---
+  // --- Đặt bàn (Chain of Responsibility) -> POS (Adapter) -> thanh toán (Factory + Observer) ---
   const guest = `${RUN} Khách đặt bàn`
   r = await call('POST', '/api/reservations', { customer: guest, contact: '0900111222', dateTime: cafeDateTime(2, 9), tableId: bookedTable, guests: 2, preOrders: [{ menuItemId: menu[0].id, qty: 2 }] }, null)
   const resCode = r.data?.id
@@ -211,7 +210,7 @@ async function run() {
   check('RES-04', 'Staff confirms the booking', r.status === 200, brief(r))
   r = await call('POST', `/api/reservations/${resCode}/transfer-pos`)
   check('RES-04A', 'Future booking cannot open a kitchen order', r.status === 409 && r.json?.code === 'RESERVATION_NOT_DUE', brief(r))
-  // Advance only this run's booking to arrival; do not depend on the wall clock or opening hours.
+  // Chỉ đẩy phiếu của lần chạy này tới giờ khách đến; không phụ thuộc đồng hồ thật hay giờ mở cửa.
   await db.query('UPDATE reservations SET date_time = NOW() WHERE reservation_code = $1 AND customer = $2', [resCode, guest])
   r = await call('POST', `/api/reservations/${resCode}/transfer-pos`)
   const bookingOrder = r.data?.orderCode
@@ -243,7 +242,7 @@ async function run() {
   if (pickup?.orderCode) created.orders.add(pickup.orderCode)
   check('POS-07', 'Cash pickup checkout returns change', r.status === 200 && pickup?.changeDue > 0, brief(r))
 
-  // --- Kitchen display ---
+  // --- Màn hình pha chế ---
   for (const status of ['brewing', 'ready', 'completed']) {
     r = await call('PATCH', `/api/orders/${dineIn?.orderCode}/status`, { status })
     check(`KDS-${status}`, `Order moves to ${status}`, r.status === 200, brief(r))
@@ -255,13 +254,13 @@ async function run() {
   r = await call('PATCH', `/api/orders/${pickup?.orderCode}/status`, { status: 'cancelled' })
   check('KDS-refund', 'Cancelling a paid order refunds it', r.status === 200 && r.data?.paymentStatus === 'refunded', brief(r))
 
-  // --- Paying the booking order ---
+  // --- Thanh toán đơn của phiếu đặt bàn ---
   r = await call('POST', `/api/orders/${bookingOrder}/pay`, { paymentMethod: 'qr' })
   check('PAY-01', 'Booking order is paid at the counter', r.status === 200, brief(r))
   r = await call('POST', `/api/orders/${bookingOrder}/pay`, { paymentMethod: 'qr' })
   check('PAY-02', 'An order cannot be paid twice', r.status === 409, brief(r))
 
-  // --- Vouchers, offline sync, settings, analytics ---
+  // --- Voucher, đồng bộ offline, cài đặt, thống kê ---
   r = await call('POST', '/api/vouchers/validate', { code: 'welcome10', subtotal: 100000 }, null)
   check('VOUCHER', 'Voucher preview matches checkout', r.status === 200 && r.data?.valid && r.data?.discountAmount === 10000, brief(r))
   const offline = { orderCode: `AC-${RUN}-OFF`, customer: `${RUN} Offline`, orderType: 'pickup', paymentMethod: 'cash', paid: true, status: 'pending', createdAt: new Date().toISOString(), total: 48600, lines: [{ menuItemId: item.id, name: itemName, qty: 1, price: 39000, variation: null }] }
@@ -280,7 +279,7 @@ async function run() {
   const codes = new Set((r.data ?? []).map((o) => o.orderCode))
   check('ORDERS', 'Order list shows every order written', [dineIn?.orderCode, pickup?.orderCode, bookingOrder, offline.orderCode].every((c) => codes.has(c)))
 
-  // --- Storefront online orders (server actions, as the checkout page calls them) ---
+  // --- Đơn online trên storefront (server action, như trang thanh toán gọi) ---
   const actionId = onlineOrderActionId()
   if (!actionId) {
     check('ONLINE', 'Online checkout (needs a production build: next build, next start)', false, '.next/server/server-reference-manifest.json not found')
@@ -293,7 +292,7 @@ async function run() {
     r = await guestShopper.cart({ action: 'add', variantId: `gid://dalatcafe/ProductVariant/${productId}` })
     check('ONLINE-01b', 'A guest is asked to sign in before adding to the cart', r.status === 401 && r.json.loginRequired === true, `${r.status}`)
 
-    // A customer signs up (Java) and shops with that session.
+    // Một khách đăng ký (bên Java) và mua sắm bằng phiên đó.
     const shopperEmail = `${RUN.toLowerCase()}.shopper@test.local`
     r = await call('POST', '/api/auth/register', { email: shopperEmail, name: `${RUN} Shopper`, password: 'Shopper2026!' }, null)
     if (r.status === 201) created.users.add(shopperEmail)
@@ -321,7 +320,7 @@ async function run() {
     check('ONLINE-06', 'Cash on delivery reaches Java unpaid', cod?.ok && cod.paid === false && javaCod?.payment_status === 'UNPAID', JSON.stringify(cod))
     const codMember = (await db.query('SELECT 1 FROM customers WHERE phone = $1', [codPhone])).rows[0]
     check('ONLINE-06b', 'Cash on delivery earns no points (no member is created)', !codMember)
-    // React separates adjacent text with <!-- --> in server HTML.
+    // React chèn <!-- --> giữa các đoạn chữ liền nhau trong HTML phía server.
     const account = (await shopper.page('/account/orders')).replaceAll('<!-- -->', '')
     const sees = { paid: account.includes(paid?.orderCode), cod: account.includes(cod?.orderCode), points: account.includes(`${member?.loyalty_points} điểm`) }
     check('ONLINE-06c', 'The customer sees both orders and their points on /account', sees.paid && sees.cod && sees.points, JSON.stringify(sees))
@@ -329,8 +328,8 @@ async function run() {
     check('ONLINE-07', 'Both orders are on the online orders page', ordersPage.includes(paid?.orderCode) && ordersPage.includes(cod?.orderCode))
   }
 
-  // --- Next.js admin pages, signed in as the same admin ---
-  // Bookings and accounts are read from Java; orders and menu pages read the frontend's admin_* store.
+  // --- Các trang admin Next.js, đăng nhập bằng chính admin đó --- Phiếu đặt và tài khoản đọc từ
+  // Java; trang đơn hàng và thực đơn đọc kho admin_* của frontend.
   const cookie = `dalatcafe_session=${ADMIN}`
   const pages = [
     ['/admin', null], ['/admin/pos', null], ['/admin/orders', null], ['/admin/menu', null], ['/admin/tables', null],

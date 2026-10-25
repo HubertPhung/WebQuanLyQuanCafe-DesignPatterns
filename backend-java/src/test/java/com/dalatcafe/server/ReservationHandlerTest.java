@@ -38,7 +38,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/** Concurrent bookings: the chain checks and the save must happen as one step. */
+/** Đặt bàn đồng thời: kiểm tra chuỗi và lưu phải diễn ra trong một bước. */
 class ReservationHandlerTest {
     private static final int TABLE_ID = 3;
     private static final Instant SLOT = LocalDate.now().plusDays(2).atTime(LocalTime.of(15, 0))
@@ -72,7 +72,7 @@ class ReservationHandlerTest {
 
     @Test
     void twoBookingsForTheSameSlotCannotBothPassTheChain() throws Exception {
-        // Pause a scan before saving; either request may reach the booking lock first.
+        // Tạm dừng một lần quét trước khi lưu; request nào cũng có thể chiếm khóa đặt bàn trước.
         reservations.pauseNextScan();
         CompletableFuture<HttpResponse<String>> first = book();
         assertTrue(reservations.scanPaused.await(5, TimeUnit.SECONDS));
@@ -104,7 +104,7 @@ class ReservationHandlerTest {
     void aBookingIsTransferredToPosOnlyOnceUnderConcurrentRequests() throws Exception {
         String code = data(book().get(10, TimeUnit.SECONDS)).get("id").toString();
         reservations.findByReservationCode(code).orElseThrow().setDateTime(Instant.now());
-        // The first transfer has checked that no order exists but not saved it yet.
+        // Lượt chuyển đầu đã kiểm tra chưa có đơn nhưng chưa lưu đơn.
         orders.pauseNextLookup();
         CompletableFuture<HttpResponse<String>> first = send("POST", "/api/reservations/" + code + "/transfer-pos", null);
         assertTrue(orders.lookupPaused.await(5, TimeUnit.SECONDS));
@@ -165,7 +165,7 @@ class ReservationHandlerTest {
         return (Map<String, Object>) ((Map<String, Object>) Json.parse(response.body())).get("data");
     }
 
-    /** Can hold one schedule read until a booking is saved (or 500 ms pass). */
+    /** Có thể giữ một lần đọc lịch cho tới khi một phiếu được lưu (hoặc qua 500 ms). */
     private static final class PausingReservationDao extends InMemoryReservationDao {
         final CountDownLatch scanPaused = new CountDownLatch(1);
         private final CountDownLatch saved = new CountDownLatch(1);
@@ -193,7 +193,7 @@ class ReservationHandlerTest {
         }
     }
 
-    /** Can hold one order lookup until an order is saved (or 500 ms pass). */
+    /** Có thể giữ một lần tra cứu đơn cho tới khi một đơn được lưu (hoặc qua 500 ms). */
     private static final class PausingOrderDao extends InMemoryOrderDao {
         final CountDownLatch lookupPaused = new CountDownLatch(1);
         private final CountDownLatch saved = new CountDownLatch(1);

@@ -3,7 +3,7 @@ package com.dalatcafe.patterns.facade;
 import java.util.Set;
 
 /**
- * One requested drink: menu item, quantity and the customizations stacked on it.
+ * Một đồ uống được gọi: món, số lượng và các tùy chỉnh xếp chồng lên nó.
  */
 public final class CheckoutLine {
     private final int menuItemId;

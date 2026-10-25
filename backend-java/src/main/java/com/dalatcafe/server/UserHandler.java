@@ -14,9 +14,9 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * /api/users (ADMIN): list accounts, create staff accounts with a role, change a role, rename,
- * reset a password or disable an account. The last active admin can be neither demoted nor
- * disabled, and an admin cannot lock themself out.
+ * /api/users (ADMIN): liệt kê tài khoản, tạo tài khoản nhân viên kèm vai trò, đổi vai trò, đổi tên,
+ * đặt lại mật khẩu hoặc khóa tài khoản. Quản trị viên đang hoạt động cuối cùng không thể bị hạ
+ * quyền hay khóa, và quản trị viên không thể tự khóa chính mình.
  */
 public class UserHandler extends ApiHandler {
     private final IUserDao users;
@@ -63,7 +63,8 @@ public class UserHandler extends ApiHandler {
         sendOk(exchange, 201, AuthHandler.toJson(user), "Account created");
     }
 
-    // Synchronized so two concurrent demotions cannot both pass the last-admin check.
+    // Đồng bộ hóa để hai lượt hạ quyền đồng thời không cùng vượt qua bước kiểm tra quản trị viên
+    // cuối cùng.
     private synchronized void update(HttpExchange exchange, int id) throws IOException {
         Map<String, Object> body = readJsonBody(exchange);
         UserAccount actor = AuthHandler.currentUser(exchange);

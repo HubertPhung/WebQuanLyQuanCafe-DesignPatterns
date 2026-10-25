@@ -17,7 +17,7 @@ public final class TableAvailabilityValidator extends ReservationValidatorHandle
         this(reservationDao, DEFAULT_DURATION);
     }
 
-    /** The same slot duration applies to both requested and existing bookings. */
+    /** Cùng một độ dài khung giờ áp dụng cho cả phiếu đang xin và các phiếu đã có. */
     public TableAvailabilityValidator(IReservationDao reservationDao, Duration duration) {
         this.reservationDao = Objects.requireNonNull(reservationDao, "Reservation DAO must not be null");
         this.duration = Objects.requireNonNull(duration, "Duration must not be null");
@@ -42,7 +42,7 @@ public final class TableAvailabilityValidator extends ReservationValidatorHandle
                     || (reservation.getId() != null && reservation.getId().equals(existing.getId()))) {
                 continue;
             }
-            // Unknown persisted state cannot safely establish availability.
+            // Trạng thái lưu không rõ ràng thì không thể khẳng định an toàn là bàn còn trống.
             if (existing.getDateTime() == null || existing.getStatus() == null) {
                 return ValidationResult.invalid("Lịch của bàn thiếu dữ liệu; vui lòng kiểm tra lại.");
             }
@@ -58,7 +58,7 @@ public final class TableAvailabilityValidator extends ReservationValidatorHandle
         return checkNext(reservation);
     }
 
-    /** Half-open slots: a table can be booked again exactly when the previous slot ends. */
+    /** Khung giờ nửa mở: một bàn được đặt lại đúng lúc khung trước kết thúc. */
     public static boolean slotsOverlap(Instant first, Instant second, Duration duration) {
         return first.isBefore(second.plus(duration)) && second.isBefore(first.plus(duration));
     }

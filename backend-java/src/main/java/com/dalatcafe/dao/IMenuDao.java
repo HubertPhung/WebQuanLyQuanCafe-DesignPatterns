@@ -6,8 +6,8 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Data Access Object interface for MenuItem. Availability is the in-stock switch only;
- * quantities are not tracked.
+ * Interface Data Access Object cho MenuItem. Món bán hay không chỉ do công tắc in-stock; không theo
+ * dõi số lượng tồn.
  */
 public interface IMenuDao {
     List<MenuItem> findAll();

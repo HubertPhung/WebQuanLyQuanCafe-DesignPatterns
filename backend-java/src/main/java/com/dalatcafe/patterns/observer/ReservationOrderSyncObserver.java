@@ -6,7 +6,7 @@ import com.dalatcafe.model.ReservationStatus;
 
 import java.util.Objects;
 
-/** Keeps a seated booking's history consistent when its POS ticket is cancelled. */
+/** Giữ lịch sử của phiếu đặt bàn đã nhận bàn khớp với thực tế khi phiếu POS của nó bị hủy. */
 public class ReservationOrderSyncObserver implements IOrderObserver {
     private final IReservationDao reservations;
 

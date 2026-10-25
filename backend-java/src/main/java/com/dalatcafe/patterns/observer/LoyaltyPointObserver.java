@@ -19,7 +19,7 @@ public class LoyaltyPointObserver implements IOrderObserver {
         this.customerId = customerId;
     }
 
-    /** Points are earned as soon as the money is taken, not when the kitchen finishes. */
+    /** Điểm được cộng ngay khi thu tiền, không đợi quầy pha chế làm xong. */
     @Override
     public void onOrderPaid(Order order) {
         Objects.requireNonNull(order, "Order must not be null");

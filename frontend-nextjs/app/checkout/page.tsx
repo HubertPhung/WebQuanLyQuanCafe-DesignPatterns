@@ -4,7 +4,7 @@ import { requirePageRole } from '@/lib/auth/session'
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Thanh toán · Đà Lạt Cafe' }
 
-// Ordering needs an account, so the order shows up in its history and earns its points.
+// Đặt món cần tài khoản, để đơn hiện trong lịch sử và được cộng điểm.
 export default async function CheckoutPage() {
   const session = await requirePageRole('CUSTOMER', '/checkout')
   return <CheckoutForm account={{ name: session.name, email: session.email }} />

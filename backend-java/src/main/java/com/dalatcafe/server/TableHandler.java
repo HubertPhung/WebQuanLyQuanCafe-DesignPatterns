@@ -23,7 +23,7 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * GET /api/tables and PUT|PATCH /api/tables/{id}[/status]: floor plan and table status updates.
+ * GET /api/tables và PUT|PATCH /api/tables/{id}[/status]: sơ đồ bàn và cập nhật trạng thái bàn.
  */
 public class TableHandler extends ApiHandler {
     private final ITableDao tableDao;
@@ -133,7 +133,7 @@ public class TableHandler extends ApiHandler {
         for (var reservation : reservationDao.findAll()) {
             if (reservation.getStatus() == ReservationStatus.CANCELLED) continue;
             if (reservation.getId() != null && reservation.isNoShowAt(now, grace)) continue;
-            // Incomplete persisted schedules must never advertise their tables as available.
+            // Lịch đã lưu không đầy đủ thì không bao giờ được báo các bàn của nó là còn trống.
             if (reservation.getDateTime() == null || reservation.getStatus() == null
                     || TableAvailabilityValidator.slotsOverlap(slot, reservation.getDateTime(), TableAvailabilityValidator.DEFAULT_DURATION)) {
                 booked.addAll(reservation.getTableIds());
@@ -158,7 +158,7 @@ public class TableHandler extends ApiHandler {
         }
         Table table;
         synchronized (tableDao) {
-            // A new table joins the requested branch; an edited one stays where it is.
+            // Bàn mới vào chi nhánh được yêu cầu; bàn đang sửa giữ nguyên chi nhánh.
             Table existing = id == null ? null : tableDao.findById(id).orElseThrow(() -> ApiException.notFound("Table not found"));
             String branch = existing != null ? existing.getBranch() : com.dalatcafe.model.Branches.orDefault(requestedBranch);
             // Names are unique within a branch: both branches can have a "Bàn 01".

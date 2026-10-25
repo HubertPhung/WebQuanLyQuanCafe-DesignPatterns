@@ -4,7 +4,7 @@ import { mkdtemp, rm, mkdir, writeFile, readFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
-// Uses the installed Chrome and its DevTools protocol; no browser dependency is added.
+// Dùng Chrome đã cài và giao thức DevTools của nó; không thêm thư viện trình duyệt nào.
 export async function testTableBrowser(base, auth) {
   const profile = await mkdtemp(path.join(os.tmpdir(), 'cafe-table-browser-'))
   const chrome = spawn(process.env.CHROME_PATH ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe', ['--headless=new', '--disable-gpu', '--no-first-run', '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'], { windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] })
@@ -57,7 +57,7 @@ export async function testTableBrowser(base, auth) {
     await call('Network.setCookie', { name, value: value.join('='), url: base })
     await call('Page.navigate', { url: `${base}/admin/tables` })
     await wait(`document.querySelector('button') && document.body.innerText.includes('Thêm bàn mới')`)
-    // Let React finish hydration before clicking the real controls.
+    // Để React hydrate xong rồi mới bấm vào các điều khiển thật.
     await new Promise(resolve => setTimeout(resolve, 1000))
     await click('+ Thêm bàn mới')
     await wait(`!!document.querySelector('#table-name')`)

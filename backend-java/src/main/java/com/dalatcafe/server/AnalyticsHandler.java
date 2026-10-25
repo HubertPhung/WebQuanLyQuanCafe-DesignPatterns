@@ -27,9 +27,10 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * GET /api/analytics/overview?days=7[&branch=id] (MANAGER+): revenue (total, today, yesterday and per day),
- * payment mix, order counts by status, best sellers, fulfillment time and floor occupancy, computed from the DAOs on each call.
- * Revenue counts paid orders only; refunded or cancelled orders are excluded.
+ * GET /api/analytics/overview?days=7[&branch=id] (MANAGER+): doanh thu (tổng, hôm nay, hôm qua và
+ * theo từng ngày), cơ cấu thanh toán, số đơn theo trạng thái, món bán chạy, thời gian phục vụ và tỷ
+ * lệ bàn có khách, tính lại từ DAO mỗi lần gọi. Doanh thu chỉ tính đơn đã thanh toán; đơn hoàn tiền
+ * hoặc đã hủy bị loại.
  */
 public class AnalyticsHandler extends ApiHandler {
     static final ZoneId STORE_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
@@ -69,7 +70,7 @@ public class AnalyticsHandler extends ApiHandler {
                 return days;
             }
         } catch (NumberFormatException ignored) {
-            // Falls through to the error below.
+            // Rơi xuống lỗi bên dưới.
         }
         throw ApiException.badRequest("days must be a whole number between 1 and " + MAX_DAYS);
     }
@@ -78,7 +79,7 @@ public class AnalyticsHandler extends ApiHandler {
         return overview(now, days, null);
     }
 
-    /** {@code branch} limits orders and tables to one branch; null covers the whole shop. */
+    /** {@code branch} giới hạn đơn và bàn trong một chi nhánh; null là cả quán. */
     Map<String, Object> overview(Instant now, int days, String branch) {
         LocalDate today = now.atZone(STORE_ZONE).toLocalDate();
         LocalDate yesterday = today.minusDays(1);
@@ -143,7 +144,7 @@ public class AnalyticsHandler extends ApiHandler {
                 if (order.getPaymentMethod() != null) {
                     paymentMix.merge(order.getPaymentMethod(), order.getTotal(), Double::sum);
                 }
-                // Best sellers cover the same window as the chart.
+                // Món bán chạy tính trong cùng khoảng thời gian với biểu đồ.
                 for (OrderItem item : order.getItems()) {
                     double[] totals = items.computeIfAbsent(item.getName(), name -> new double[2]);
                     totals[0] += item.getQty();
@@ -184,7 +185,10 @@ public class AnalyticsHandler extends ApiHandler {
         return data;
     }
 
-    /** Average minutes from creation to completion, one decimal; 0 when nothing finished. */
+    /**
+     * Số phút trung bình từ lúc tạo tới lúc hoàn tất, một chữ số thập phân; 0 khi chưa có đơn nào
+     * xong.
+     */
     private static double fulfillmentMinutes(List<Order> completed) {
         if (completed.isEmpty()) {
             return 0;

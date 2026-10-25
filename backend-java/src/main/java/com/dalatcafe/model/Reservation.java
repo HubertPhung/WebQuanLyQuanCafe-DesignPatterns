@@ -8,12 +8,15 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Reservation entity representing a table booking by a guest.
+ * Thực thể Reservation: một phiếu đặt bàn của khách.
  */
 public class Reservation implements Serializable {
     private static final long serialVersionUID = 1L;
 
-    /** The arrival grace period ends only unseated bookings, never a seated guest's visit. */
+    /**
+     * Thời gian chờ khách đến chỉ hủy các phiếu chưa nhận bàn, không bao giờ cắt ngang lượt của
+     * khách đã ngồi.
+     */
     public boolean isNoShowAt(Instant now, int graceMinutes) {
         return dateTime != null && (status == ReservationStatus.PENDING || status == ReservationStatus.CONFIRMED)
                 && !now.isBefore(dateTime.plusSeconds(graceMinutes * 60L));
@@ -34,7 +37,10 @@ public class Reservation implements Serializable {
         this.userId = userId;
     }
 
-    /** Old guest bookings have no account id; their contact email can identify the account. */
+    /**
+     * Phiếu đặt bàn cũ của khách không có id tài khoản; email liên hệ của phiếu dùng để nhận ra tài
+     * khoản.
+     */
     public boolean belongsToAccount(int accountId, String accountEmail) {
         if (userId != null) return userId == accountId;
         return accountEmail != null && !accountEmail.isBlank() && email != null
@@ -195,7 +201,10 @@ public class Reservation implements Serializable {
         this.createdAt = createdAt;
     }
 
-    /** Keyed on reservationCode alone (unique in `reservations.reservation_code`) so equals and hashCode agree; without one, only itself. */
+    /**
+     * So sánh chỉ theo reservationCode (duy nhất trong `reservations.reservation_code`) để equals
+     * và hashCode khớp nhau; nếu không có mã thì chỉ bằng chính nó.
+     */
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

@@ -26,7 +26,7 @@ const fields: Field[] = [
   { key: 'pointRedeemValueVnd', label: 'Giá trị 1 điểm khi đổi (đ)', type: 'number', hint: 'Mặc định 1 điểm = 1.000 đ' },
 ]
 
-// Edits the SystemConfigManager Singleton through PUT /api/config (ADMIN).
+// Sửa Singleton SystemConfigManager qua PUT /api/config (ADMIN).
 export function StoreSettingsForm({ config }: { config: StoreConfig | null }) {
   const [values, setValues] = useState(() =>
     Object.fromEntries(fields.map((field) => [field.key, config ? String(config[field.key]) : ''])),

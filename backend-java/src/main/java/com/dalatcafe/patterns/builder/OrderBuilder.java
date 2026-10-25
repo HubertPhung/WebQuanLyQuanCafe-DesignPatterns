@@ -51,7 +51,7 @@ public class OrderBuilder {
         return addItem(null, beverage, quantity);
     }
 
-    /** Keeps the menu item behind the drink, so stock and sales can be traced back to it. */
+    /** Giữ lại món trong thực đơn ứng với đồ uống, để truy được doanh số về đúng món đó. */
     public OrderBuilder addItem(Integer menuItemId, IBeverage beverage, int quantity) {
         Objects.requireNonNull(beverage, "Beverage must not be null");
         if (quantity <= 0) {
@@ -85,15 +85,15 @@ public class OrderBuilder {
     }
 
     /**
-     * Lets the builder work out the discount itself: build() hands the finished subtotal to the
-     * rule and stores the result, so the caller never touches the order after build().
+     * Để builder tự tính giảm giá: build() đưa tạm tính đã xong cho quy tắc và lưu kết quả, nên nơi
+     * gọi không bao giờ phải sửa đơn sau build().
      */
     public OrderBuilder discountedBy(DoubleUnaryOperator discountForSubtotal) {
         this.discountRule = Objects.requireNonNull(discountForSubtotal, "Discount rule must not be null");
         return this;
     }
 
-    /** The short random code can repeat, so build() draws again while the store already holds it. */
+    /** Mã ngẫu nhiên ngắn có thể trùng, nên build() rút lại khi kho đã có mã đó. */
     public OrderBuilder avoidingCodes(Predicate<String> codeTaken) {
         this.codeTaken = Objects.requireNonNull(codeTaken, "Code check must not be null");
         return this;

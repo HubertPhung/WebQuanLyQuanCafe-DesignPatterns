@@ -30,11 +30,10 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * GET|POST /api/reservations, PATCH /api/reservations/{code}/status and
- * POST /api/reservations/{code}/transfer-pos.
- * A booking is validated by the Chain of Responsibility (operating hours, capacity,
- * table availability) before being stored; a seated booking becomes a POS order through
- * the {@link ReservationToOrderAdapter}.
+ * GET|POST /api/reservations, PATCH /api/reservations/{code}/status và POST
+ * /api/reservations/{code}/transfer-pos. Phiếu đặt bàn được Chain of Responsibility kiểm tra (giờ
+ * mở cửa, sức chứa, bàn trống) trước khi lưu; phiếu đã nhận bàn trở thành đơn POS thông qua {@link
+ * ReservationToOrderAdapter}.
  */
 public class ReservationHandler extends ApiHandler {
     private static final String TRANSFER = "transfer-pos";
@@ -131,14 +130,14 @@ public class ReservationHandler extends ApiHandler {
             if (qty <= 0) {
                 throw ApiException.badRequest("preOrders qty must be greater than zero");
             }
-            // The booking form is public: name and price come from the menu, never from the client.
+            // Form đặt bàn là công khai: tên và giá lấy từ thực đơn, không bao giờ lấy từ client.
             int menuItemId = requireInt(line, "menuItemId");
             MenuItem item = menuDao.findById(menuItemId)
                     .orElseThrow(() -> ApiException.badRequest("Unknown menu item in preOrders: " + menuItemId));
             reservation.addPreOrder(new OrderItem(item.getId(), item.getName(), qty, item.getSellPrice(), null, null));
         }
 
-        // Checking and saving are one step, or two requests could both claim the same slot.
+        // Kiểm tra và lưu là một bước, nếu không hai request có thể cùng chiếm một khung giờ.
         synchronized (this) {
             expireNoShows(Instant.now());
             ValidationResult result = validationChain.validate(reservation);
@@ -156,13 +155,14 @@ public class ReservationHandler extends ApiHandler {
     }
 
     /**
-     * Edits a pending or confirmed booking: guest details, time, party size and tables. The code,
-     * status and pre-orders stay; the whole chain runs again, skipping the booking itself.
+     * Sửa phiếu đang chờ hoặc đã xác nhận: thông tin khách, giờ, số khách và bàn. Mã phiếu, trạng
+     * thái và món đặt trước giữ nguyên; toàn bộ chuỗi kiểm tra chạy lại và bỏ qua chính phiếu này.
      */
     private void update(HttpExchange exchange, String code) throws IOException {
         Map<String, Object> body = readJsonBody(exchange);
         Reservation edited;
-        // Same lock as create() and transferToPos(): no other booking can take the slot meanwhile.
+        // Cùng khóa với create() và transferToPos(): không phiếu nào khác chiếm được khung giờ
+        // trong lúc này.
         synchronized (this) {
             expireNoShows(Instant.now());
             Reservation current = reservationDao.findByReservationCode(code)
@@ -172,7 +172,8 @@ public class ReservationHandler extends ApiHandler {
                         "Chỉ sửa được phiếu đang chờ hoặc đã xác nhận (" + current.getStatus().getDescription() + ").");
             }
             List<Integer> previousTables = current.getTableIds();
-            // A copy: the in-memory DAO hands out the stored object, which a refused edit must not touch.
+            // Một bản sao: DAO trong bộ nhớ trả về chính đối tượng đã lưu, mà bản sửa bị từ chối
+            // thì không được đụng tới nó.
             edited = new Reservation(current.getId(), current.getReservationCode(), current.getCustomer(),
                     current.getContact(), current.getDateTime(), current.getGuests());
             edited.setStatus(current.getStatus());
@@ -193,7 +194,7 @@ public class ReservationHandler extends ApiHandler {
             if (!reservationDao.save(edited)) {
                 throw new ApiException(503, "DATABASE_UNAVAILABLE", "Could not save reservation " + code);
             }
-            // Tables the booking no longer uses go back to the floor if nothing else holds them.
+            // Các bàn phiếu không còn dùng được trả lại sơ đồ nếu không còn gì khác giữ chúng.
             Reservation released = new Reservation();
             released.setTableIds(previousTables.stream().filter(id -> !edited.getTableIds().contains(id)).toList());
             releaseReservedTables(released, Instant.now());
@@ -202,8 +203,8 @@ public class ReservationHandler extends ApiHandler {
     }
 
     /**
-     * Confirms or cancels a booking. SEATED is reached only through transfer-pos, so the
-     * order and the table are always created together with it.
+     * Xác nhận hoặc hủy phiếu. Trạng thái SEATED chỉ đạt được qua transfer-pos, nên đơn và bàn luôn
+     * được tạo cùng lúc với nó.
      */
     private void updateStatus(HttpExchange exchange, String code) throws IOException {
         Map<String, Object> body = readJsonBody(exchange);
@@ -213,7 +214,7 @@ public class ReservationHandler extends ApiHandler {
         }
         Reservation reservation;
         boolean changed;
-        // Same lock as transferToPos(): a booking cannot be cancelled while it is being seated.
+        // Cùng khóa với transferToPos(): không thể hủy phiếu trong lúc đang xếp khách vào bàn.
         synchronized (this) {
             reservation = reservationDao.findByReservationCode(code)
                     .orElseThrow(() -> ApiException.notFound("Reservation not found: " + code));
@@ -247,7 +248,10 @@ public class ReservationHandler extends ApiHandler {
         sendOk(exchange, 200, toJson(reservation), "Reservation " + code + ": " + target.getDescription());
     }
 
-    /** Releases only pending/confirmed no-shows, never a booking that has been seated. */
+    /**
+     * Chỉ nhả các phiếu đang chờ/đã xác nhận mà khách không đến, không bao giờ nhả phiếu đã nhận
+     * bàn.
+     */
     public synchronized int expireNoShows(Instant now) {
         int expired = 0;
         int grace = SystemConfigManager.getInstance().getAutoCancelMinutes();
@@ -284,7 +288,7 @@ public class ReservationHandler extends ApiHandler {
     private void transferToPos(HttpExchange exchange, String code) throws IOException {
         IPosOrderTarget target;
         Order order;
-        // Checking for an existing order and saving the new one are one step: one booking, one order.
+        // Kiểm tra đơn đã có và lưu đơn mới là một bước: mỗi phiếu một đơn.
         synchronized (this) {
             Reservation reservation = reservationDao.findByReservationCode(code)
                     .orElseThrow(() -> ApiException.notFound("Reservation not found: " + code));
@@ -362,7 +366,7 @@ public class ReservationHandler extends ApiHandler {
             return;
         }
         String name = requireStr(body, "table");
-        // Both branches number their tables alike, so a name is looked up within the requested branch.
+        // Hai chi nhánh đánh số bàn giống nhau, nên tên bàn được tìm trong chi nhánh được yêu cầu.
         String branch = com.dalatcafe.model.Branches.orDefault(branchField(body));
         Table table = tableDao.findAll().stream()
                 .filter(t -> branch.equals(t.getBranch()) && name.equalsIgnoreCase(t.getName()))
@@ -373,7 +377,7 @@ public class ReservationHandler extends ApiHandler {
         reservation.setBranch(table.getBranch());
     }
 
-    /** A booking that names a branch must use that branch's tables. */
+    /** Phiếu có ghi chi nhánh thì phải dùng bàn của chi nhánh đó. */
     private static void requireBranch(Map<String, Object> body, Reservation reservation) {
         String requested = branchField(body);
         if (requested != null && !requested.equals(reservation.getBranch())) {

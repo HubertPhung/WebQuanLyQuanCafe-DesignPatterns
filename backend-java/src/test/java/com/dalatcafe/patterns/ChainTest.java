@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class ChainTest {
     private static final ZoneId CAFE_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
-    // Midnight at the café on the day every fixture booking falls on, so all of them lie ahead.
+    // Nửa đêm ở quán vào ngày mà mọi phiếu đặt mẫu rơi vào, để tất cả đều nằm ở phía trước.
     private static final Clock CLOCK = clockAt("00:00");
     private final SystemConfigManager config = SystemConfigManager.getInstance();
     private CountingTables tables;
@@ -134,7 +134,7 @@ class ChainTest {
         Reservation existing = booking("12:00");
         reservations.entries.add(existing);
         Reservation requested = booking("12:00");
-        // Both IDs and codes are null; entity equality must not skip this conflict.
+        // Cả id lẫn mã đều null; so sánh thực thể không được bỏ qua xung đột này.
         assertFalse(chain.validate(requested).isValid());
         existing.setId(10);
         requested.setId(10);
@@ -264,8 +264,8 @@ class ChainTest {
 
     @Test
     void openingHoursAreReadAsOnePairWhileSettingsChange() throws InterruptedException {
-        // 12:30 is outside both 07:00-12:00 and 13:00-22:00, so every answer must be a refusal
-        // that quotes one of those two pairs, never a mix of an old and a new value.
+        // 12:30 nằm ngoài cả 07:00-12:00 lẫn 13:00-22:00, nên mọi câu trả lời phải là từ chối và
+        // trích một trong hai cặp giờ đó, không bao giờ lẫn giá trị cũ với mới.
         Set<String> consistent = Set.of(
                 "Quán chỉ nhận đặt bàn trong giờ mở cửa (07:00 - 12:00).",
                 "Quán chỉ nhận đặt bàn trong giờ mở cửa (13:00 - 22:00).");
@@ -276,7 +276,7 @@ class ChainTest {
             for (int i = 0; !stop.get(); i++) {
                 LocalTime opening = i % 2 == 0 ? LocalTime.of(13, 0) : LocalTime.of(7, 0);
                 LocalTime closing = i % 2 == 0 ? LocalTime.of(22, 0) : LocalTime.of(12, 0);
-                synchronized (config) { // the critical section ConfigHandler.update runs
+                synchronized (config) { // đoạn găng (critical section) mà ConfigHandler.update chạy
                     config.setOpeningTime(opening);
                     config.setClosingTime(closing);
                 }

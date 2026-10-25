@@ -39,7 +39,7 @@ export async function getMenuItems(): Promise<MenuItem[]> {
   }
 }
 
-// The floor of the branch chosen in the admin header.
+// Sơ đồ bàn của chi nhánh đang chọn ở header admin.
 export async function getTables(): Promise<FloorTable[]> {
   await assertAdminAccess()
   const branch = await getAdminBranch()
@@ -60,7 +60,7 @@ export async function getTables(): Promise<FloorTable[]> {
   }
 }
 
-// Open orders of the chosen branch: the KDS, the POS tabs and the header counts.
+// Đơn đang mở của chi nhánh đang chọn: dùng cho KDS, các tab POS và số đếm trên header.
 export async function getActiveOrders(): Promise<Order[]> {
   await assertAdminAccess()
   await ensureOrderTableGroups()
@@ -79,7 +79,7 @@ export async function getActiveOrders(): Promise<Order[]> {
   }
 }
 
-// Orders of the chosen branch, or of the whole shop for figures that are shared (customers).
+// Đơn của chi nhánh đang chọn, hoặc của cả quán với số liệu dùng chung (khách hàng).
 export async function getOrdersSince(days: number, scope: 'branch' | 'all' = 'branch'): Promise<Order[]> {
   await assertAdminAccess()
   await ensureOrderTableGroups()
@@ -113,7 +113,7 @@ function revenue(orders: Order[]) {
 
 export type DataSource = 'java' | 'local'
 
-// Chart data computed by GET /api/analytics/overview, in the shape the dashboard widgets use.
+// Dữ liệu biểu đồ do GET /api/analytics/overview tính, theo dạng các widget dashboard dùng.
 async function getJavaOverview(days: number) {
   const remote = await fetchAnalytics(days, await getAdminBranch())
   if (!remote.ok) return null
@@ -142,7 +142,8 @@ async function getJavaOverview(days: number) {
   }
 }
 
-// Java's analytics when it answers (orders it priced or imported), otherwise the local store.
+// Thống kê của Java khi nó phản hồi (các đơn nó tính giá hoặc đã nhập), nếu không thì dùng kho cục
+// bộ.
 export async function getOverview(days = 7) {
   const [orders, tables, menu, fromJava] = await Promise.all([
     getOrdersSince(days),
@@ -207,8 +208,8 @@ export async function getOverview(days = 7) {
   }
 }
 
-// What needs a staff action right now, shown in the header bell and as sidebar badges; each
-// entry links to the page that resolves it.
+// Những việc cần nhân viên xử lý ngay, hiện ở chuông header và huy hiệu sidebar; mỗi mục dẫn tới
+// trang xử lý nó.
 export async function getHeaderData() {
   const [active, { reservations }, pendingSync] = await Promise.all([getActiveOrders(), getReservations(), getPendingSyncCount()])
   return {
@@ -219,15 +220,15 @@ export async function getHeaderData() {
       .filter((reservation) => reservation.status === 'Chờ xác nhận')
       .map((reservation) => ({ id: reservation.id, customer: reservation.customer, dateTime: reservation.dateTime, guests: reservation.guests })),
     pendingSync,
-    // Same count as the kitchen tab: every order the bar has not completed yet.
+    // Cùng cách đếm với tab Bếp: mọi đơn quầy pha chế chưa hoàn tất.
     activeCount: active.length,
   }
 }
 
 export type CustomerView = { name: string; orders: number; spent: number; lastVisit: Date; points?: number; rank?: string }
 
-// Loyalty members from GET /api/customers (with points and rank); without Java, a 90-day
-// summary of the local orders by customer name.
+// Thành viên tích điểm từ GET /api/customers (kèm điểm và hạng); không có Java thì tổng hợp 90 ngày
+// đơn cục bộ theo tên khách.
 export async function getCustomers(): Promise<{ customers: CustomerView[]; source: DataSource }> {
   await assertAdminAccess()
   const remote = await fetchCustomers()
@@ -244,7 +245,7 @@ export async function getCustomers(): Promise<{ customers: CustomerView[]; sourc
       })),
     }
   }
-  // Members are shared by both branches, so the summary counts every order.
+  // Thành viên dùng chung cho cả hai chi nhánh, nên phần tổng hợp đếm mọi đơn.
   const orders = await getOrdersSince(90, 'all')
   const customers = new Map<string, CustomerView>()
   for (const order of orders) {
@@ -258,7 +259,7 @@ export async function getCustomers(): Promise<{ customers: CustomerView[]; sourc
   return { customers: [...customers.values()].sort((a, b) => b.spent - a.spent), source: 'local' }
 }
 
-// Orders recorded locally that the Java backend has not received yet.
+// Các đơn ghi cục bộ mà backend Java chưa nhận.
 export async function getPendingSyncCount(): Promise<number> {
   await assertAdminAccess()
   return (await listSyncQueue()).length
@@ -282,7 +283,7 @@ export type ReservationView = {
   preOrders: { name: string; qty: number; price: number }[]
 }
 
-// Java ReservationStatus descriptions → the four labels the reservations page works with.
+// Mô tả ReservationStatus bên Java → bốn nhãn mà trang đặt bàn dùng.
 const javaStatusLabels: Record<string, ReservationStatusLabel> = {
   'Chờ xác nhận': 'Chờ xác nhận',
   'Đã xác nhận đặt bàn': 'Đã đặt',
@@ -301,7 +302,7 @@ function formatSlot(date: Date) {
   }).format(date)
 }
 
-// Bookings of the chosen branch.
+// Phiếu đặt bàn của chi nhánh đang chọn.
 export async function getReservations(): Promise<{ reservations: ReservationView[]; javaOnline: boolean }> {
   await assertAdminAccess()
   const branch = await getAdminBranch()
@@ -345,17 +346,17 @@ export async function getReservations(): Promise<{ reservations: ReservationView
 
 export type OnlineOrderView = Order & { contact: OrderContact }
 
-// Storefront orders, newest first: the order rows the POS and kitchen share, joined with the
-// contact and delivery details placeOnlineOrder stored for them.
-// Storefront orders picked up at or delivered from the chosen branch.
+// Đơn storefront, mới nhất trước: các dòng đơn mà POS và quầy pha chế dùng chung, ghép với thông
+// tin liên hệ và giao hàng mà placeOnlineOrder đã lưu. Chỉ lấy đơn đến lấy tại hoặc giao đi từ chi
+// nhánh đang chọn.
 export async function getOnlineOrders(): Promise<OnlineOrderView[]> {
   await assertAdminAccess()
   const branch = await getAdminBranch()
   return (await joinContactOrders(await listOrderContacts())).filter((order) => order.branch === branch)
 }
 
-// The order rows behind the given contacts, in the contacts' order. The caller has already
-// scoped the contacts (all of them for staff, one account's own for /account).
+// Các dòng đơn ứng với danh sách liên hệ được truyền vào, theo thứ tự của danh sách đó. Nơi gọi đã
+// giới hạn sẵn danh sách (toàn bộ với nhân viên, chỉ của một tài khoản với /account).
 export async function joinContactOrders(contacts: OrderContact[]): Promise<OnlineOrderView[]> {
   await ensureOrderTableGroups()
   if (contacts.length === 0) return []
@@ -380,7 +381,7 @@ export type OrderHistoryItem = Order & {
   tableName: string | null
 }
 
-// All transactions and orders (online, takeaway, dine-in at table/POS), sorted newest first.
+// Mọi giao dịch và đơn hàng (online, mang đi, tại bàn/POS), mới nhất trước.
 export async function getOrderHistory(scope: 'branch' | 'all' = 'branch'): Promise<OrderHistoryItem[]> {
   await assertAdminAccess()
   await ensureOrderTableGroups()

@@ -12,9 +12,9 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Converts the list-valued model fields to and from the JSONB columns
- * {@code orders.items}, {@code reservations.pre_orders} and {@code menu_items.variations}.
- * A malformed stored value reads back as an empty list instead of failing the whole query.
+ * Chuyển các trường dạng danh sách của model sang và từ các cột JSONB {@code orders.items}, {@code
+ * reservations.pre_orders} và {@code menu_items.variations}. Giá trị lưu bị hỏng được đọc thành
+ * danh sách rỗng thay vì làm hỏng cả câu truy vấn.
  */
 final class JsonColumns {
     private static final Logger LOGGER = Logger.getLogger(JsonColumns.class.getName());

@@ -13,7 +13,10 @@ import java.net.URI;
 import java.util.HashMap;
 import java.util.Map;
 
-/** HttpExchange attributes otherwise share the HttpContext map across concurrent requests. */
+/**
+ * Nếu không, thuộc tính của HttpExchange sẽ dùng chung map của HttpContext giữa các request đồng
+ * thời.
+ */
 final class RequestScopedExchange extends HttpExchange {
     private final HttpExchange delegate;
     private final Map<String, Object> attributes = new HashMap<>();

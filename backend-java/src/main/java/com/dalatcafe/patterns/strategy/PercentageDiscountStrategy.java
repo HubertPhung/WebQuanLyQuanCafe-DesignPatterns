@@ -6,7 +6,7 @@ public final class PercentageDiscountStrategy implements IDiscountStrategy {
     private final double rate;
     private final double maxCap;
 
-    /** @param rate fraction between zero and one */
+    /** @param rate tỷ lệ giảm, từ 0 đến 1 */
     public PercentageDiscountStrategy(double rate, double maxCap) {
         DiscountAmounts.requireNonNegative(rate, "Rate");
         if (rate > 1) {

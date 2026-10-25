@@ -1,7 +1,7 @@
 package com.dalatcafe.model;
 
 /**
- * Fulfillment channel for an Order.
+ * Hình thức nhận đơn của một Order.
  */
 public enum OrderType {
     DINE_IN("Dùng tại quán"),

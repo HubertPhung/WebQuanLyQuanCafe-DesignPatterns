@@ -45,7 +45,7 @@ export function CartSheet({
   const router = useRouter()
   const store = useCartStore()
 
-  // Support both controlled props and global Zustand store
+  // Hỗ trợ cả props điều khiển từ ngoài lẫn store Zustand toàn cục
   const isOpen = propsIsOpen !== undefined ? propsIsOpen : store.isOpen
   const setIsOpen = propsOnOpenChange !== undefined ? propsOnOpenChange : store.setIsOpen
   const cart = propsCart !== undefined ? propsCart : store.cart
@@ -128,7 +128,7 @@ export function CartSheet({
             </SheetDescription>
           </SheetHeader>
 
-          {/* Cart Items List */}
+          {/* Danh sách món trong giỏ */}
           <div className="cart-body flex-1 overflow-y-auto px-6 py-4 space-y-4">
             {!lineItems.length ? (
               <div className="empty-menu flex flex-col items-center justify-center py-14 text-center space-y-3">
@@ -230,7 +230,7 @@ export function CartSheet({
                   })}
                 </div>
 
-                {/* Note for Barista */}
+                {/* Ghi chú cho barista */}
                 <div className="option-label pt-2">
                   <label className="mb-1.5 block text-xs font-semibold text-[#5A3E2B]">
                     Ghi chú cho Barista
@@ -246,7 +246,7 @@ export function CartSheet({
                   />
                 </div>
 
-                {/* Promo Code Input Form */}
+                {/* Form nhập mã khuyến mãi */}
                 <form onSubmit={handleApplyPromo} className="promo-form flex gap-2">
                   <input
                     aria-label="Mã giảm giá"
@@ -274,7 +274,7 @@ export function CartSheet({
                   </p>
                 )}
 
-                {/* Bill Summary */}
+                {/* Tóm tắt hóa đơn */}
                 <div className="cart-total space-y-2 border-t border-stone-200/80 pt-4 text-xs">
                   <div className="flex justify-between text-stone-600">
                     <span>Tạm tính</span>
@@ -299,7 +299,7 @@ export function CartSheet({
             )}
           </div>
 
-          {/* Footer CTAs */}
+          {/* Các nút hành động ở chân */}
           {lineItems.length > 0 && (
             <div className="border-t border-stone-200/80 bg-white p-5 space-y-2.5">
               {/* Primary CTA: Tiến hành đặt hàng */}

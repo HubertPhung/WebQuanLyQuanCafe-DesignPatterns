@@ -12,14 +12,6 @@ import java.util.function.Function;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-/**
- * Singleton Pattern (GoF Creational) managing global operational parameters
- * for Đà Lạt Cafe (store info, operating hours, loyalty ratios, table reservation timeouts).
- *
- * Implements Thread-safe Double-Checked Locking with volatile instance and reflection protection.
- * Every setting is read and written under this object's monitor. A caller that needs several
- * settings to belong to one update (such as opening and closing time) holds that monitor itself.
- */
 public final class SystemConfigManager implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
@@ -51,7 +43,7 @@ public final class SystemConfigManager implements Serializable {
     private LocalTime openingTime;
     private LocalTime closingTime;
 
-    /** Where the settings are saved; null until {@link #attachStore} is called (then nothing is saved). */
+    /** Nơi lưu cài đặt; là null cho tới khi gọi {@link #attachStore} (khi đó không có gì được lưu). */
     private transient IConfigDao store;
 
     private SystemConfigManager() {
@@ -62,8 +54,8 @@ public final class SystemConfigManager implements Serializable {
     }
 
     /**
-     * Provides the single, globally accessible instance of SystemConfigManager
-     * using Double-Checked Locking.
+     * Trả về thể hiện duy nhất, dùng chung toàn hệ thống của SystemConfigManager,
+     * khởi tạo theo kỹ thuật Double-Checked Locking.
      */
     public static SystemConfigManager getInstance() {
         if (instance == null) {
@@ -77,7 +69,7 @@ public final class SystemConfigManager implements Serializable {
     }
 
     /**
-     * Resets all parameters to factory defaults.
+     * Đưa mọi tham số về giá trị mặc định ban đầu.
      */
     public synchronized void resetToDefaults() {
         this.storeName = DEFAULT_STORE_NAME;
@@ -93,8 +85,8 @@ public final class SystemConfigManager implements Serializable {
     }
 
     /**
-     * Checks if a given time falls within cafe operating hours (07:00 - 22:00 by default).
-     * A null time means now at the café, whatever time zone the server runs in.
+     * Kiểm tra một thời điểm có nằm trong giờ mở cửa của quán không (mặc định 07:00 - 22:00).
+     * Truyền null nghĩa là giờ hiện tại ở quán, bất kể máy chủ chạy theo múi giờ nào.
      */
     public synchronized boolean isWithinOperatingHours(LocalTime time) {
         if (time == null) {
@@ -104,7 +96,7 @@ public final class SystemConfigManager implements Serializable {
     }
 
     /**
-     * Calculates earned loyalty points based on total spend amount (10,000 VND = 1 point).
+     * Tính số điểm tích lũy nhận được theo tổng tiền chi tiêu (10.000 VNĐ = 1 điểm).
      */
     public synchronized int calculateLoyaltyPoints(double orderAmount) {
         if (orderAmount <= 0 || loyaltyRateVndPerPoint <= 0) {
@@ -114,7 +106,7 @@ public final class SystemConfigManager implements Serializable {
     }
 
     /**
-     * Calculates discount amount when redeeming loyalty points (1 point = 1,000 VND).
+     * Tính số tiền được giảm khi đổi điểm tích lũy (1 điểm = 1.000 VNĐ).
      */
     public synchronized double calculateDiscountFromPoints(int points) {
         if (points <= 0) {
@@ -124,8 +116,8 @@ public final class SystemConfigManager implements Serializable {
     }
 
     /**
-     * Connects a store and loads the saved settings from it, so the values survive a restart.
-     * Keys that are missing or unreadable keep their current value.
+     * Gắn nơi lưu trữ và nạp các cài đặt đã lưu từ đó, để giá trị vẫn còn sau khi khởi động lại.
+     * Khóa bị thiếu hoặc không đọc được thì giữ nguyên giá trị hiện tại.
      */
     public synchronized void attachStore(IConfigDao store) {
         this.store = store;
@@ -146,8 +138,8 @@ public final class SystemConfigManager implements Serializable {
     }
 
     /**
-     * Saves all current settings in one write. Returns false when no store is attached or the
-     * store failed, so the caller can tell the user that the change is not permanent.
+     * Lưu toàn bộ cài đặt hiện tại trong một lần ghi. Trả về false khi chưa gắn nơi lưu trữ hoặc
+     * ghi thất bại, để nơi gọi báo cho người dùng biết thay đổi chưa được lưu lâu dài.
      */
     public synchronized boolean persist() {
         if (store == null) {
@@ -192,7 +184,7 @@ public final class SystemConfigManager implements Serializable {
         return getInstance();
     }
 
-    // Getters and Setters
+    // Getter và setter
 
     public synchronized String getStoreName() {
         return storeName;

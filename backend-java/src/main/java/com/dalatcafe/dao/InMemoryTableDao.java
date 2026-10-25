@@ -10,7 +10,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
- * In-memory implementation of ITableDao using thread-safe collection.
+ * Bản cài đặt ITableDao trong bộ nhớ, dùng collection an toàn đa luồng.
  */
 public class InMemoryTableDao implements ITableDao {
     private final InMemoryDatabase db;

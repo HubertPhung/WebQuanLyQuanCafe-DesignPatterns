@@ -5,7 +5,9 @@ import com.dalatcafe.model.UserAccount;
 import java.util.List;
 import java.util.Optional;
 
-/** Sign-in accounts. Emails are unique (case-insensitive), as are Google subject ids. */
+/**
+ * Tài khoản đăng nhập. Email là duy nhất (không phân biệt hoa thường), Google subject id cũng vậy.
+ */
 public interface IUserDao {
     List<UserAccount> findAll();
 
@@ -15,6 +17,9 @@ public interface IUserDao {
 
     Optional<UserAccount> findByGoogleSubject(String googleSubject);
 
-    /** Inserts (id null, assigns one) or updates. False when the email or Google id is taken. */
+    /**
+     * Thêm mới (id null thì tự cấp) hoặc cập nhật. Trả về false khi email hoặc Google id đã được
+     * dùng.
+     */
     boolean save(UserAccount user);
 }

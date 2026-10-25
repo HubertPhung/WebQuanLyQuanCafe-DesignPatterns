@@ -10,7 +10,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
- * In-memory implementation of ICustomerDao using thread-safe collection.
+ * Bản cài đặt ICustomerDao trong bộ nhớ, dùng collection an toàn đa luồng.
  */
 public class InMemoryCustomerDao implements ICustomerDao {
     private final InMemoryDatabase db;
@@ -66,7 +66,8 @@ public class InMemoryCustomerDao implements ICustomerDao {
     public boolean addOrderRecord(int id, double orderAmount, int earnedPoints) {
         Customer customer = db.getCustomers().get(id);
         if (customer == null) return false;
-        // The live row is shared by every request, so a change must not interleave with another.
+        // Dòng dữ liệu đang dùng được mọi request chia sẻ, nên mỗi thay đổi không được xen vào thay
+        // đổi khác.
         synchronized (customer) {
             customer.addOrderRecord(orderAmount, earnedPoints);
         }

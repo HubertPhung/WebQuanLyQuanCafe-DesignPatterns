@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { syncOfflineOrders } from '@/app/admin/actions'
 
-// Sends orders recorded while the Java backend was down (POST /api/orders/sync).
+// Gửi các đơn đã ghi trong lúc backend Java ngừng hoạt động (POST /api/orders/sync).
 export function OfflineSyncButton({ pending }: { pending: number }) {
   const router = useRouter()
   const [busy, startTransition] = useTransition()

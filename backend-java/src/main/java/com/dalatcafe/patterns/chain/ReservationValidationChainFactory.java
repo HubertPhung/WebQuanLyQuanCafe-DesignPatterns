@@ -17,7 +17,7 @@ public final class ReservationValidationChainFactory {
         return create(tableDao, reservationDao, duration, Clock.systemUTC());
     }
 
-    /** The clock decides which booking times are already in the past. */
+    /** Đồng hồ quyết định thời điểm đặt bàn nào đã thuộc về quá khứ. */
     public static ReservationValidatorHandler create(
             ITableDao tableDao, IReservationDao reservationDao, Duration duration, Clock clock) {
         ReservationValidatorHandler hours = new OperatingHoursValidator(clock);

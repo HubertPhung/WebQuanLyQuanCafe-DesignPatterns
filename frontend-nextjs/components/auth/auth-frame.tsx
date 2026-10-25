@@ -21,7 +21,7 @@ import { branches, HOTLINE } from '@/lib/branches'
 
 const EASE_OUT = [0.22, 1, 0.36, 1] as const
 
-// Pointer effects (tilt, spotlight, parallax) only make sense with a mouse or trackpad.
+// Hiệu ứng theo con trỏ (nghiêng, đèn rọi, thị sai) chỉ có ý nghĩa với chuột hoặc touchpad.
 function useFinePointer() {
   const [fine, setFine] = useState(false)
   useEffect(() => {
@@ -34,9 +34,9 @@ function useFinePointer() {
   return fine
 }
 
-// ---------------------------------------------------------------- brand panel
+// ---------------------------------------------------------------- khung thương hiệu
 
-/** Slow drifting colour fields ("aurora") behind the brand panel. Transform-only animation. */
+/** Các mảng màu trôi chậm ("aurora") phía sau khung thương hiệu. Hiệu ứng chỉ dùng transform. */
 function Aurora() {
   const blobs = [
     { className: 'left-[-15%] top-[-10%] size-[70%] bg-[#B45309]/45', x: [0, 60, -20, 0], y: [0, 40, 80, 0], duration: 22 },
@@ -57,7 +57,7 @@ function Aurora() {
   )
 }
 
-// Fixed positions (no Math.random) so server and client render the same markup.
+// Vị trí cố định (không dùng Math.random) để server và client render cùng một markup.
 const beans = [
   { left: '8%', top: '18%', size: 22, depth: 0.6, rotate: -20, delay: 0 },
   { left: '78%', top: '12%', size: 30, depth: 1, rotate: 35, delay: 1.2 },
@@ -87,7 +87,7 @@ function ParallaxBean({
   mouseX: MotionValue<number>
   mouseY: MotionValue<number>
 }) {
-  // Nearer beans (higher depth) move further with the pointer, which reads as depth.
+  // Hạt cà phê ở gần hơn (độ sâu lớn hơn) dịch xa hơn theo con trỏ, tạo cảm giác chiều sâu.
   const x = useTransform(mouseX, (value) => value * 36 * bean.depth)
   const y = useTransform(mouseY, (value) => value * 36 * bean.depth)
   return (
@@ -123,7 +123,7 @@ function FloatingBeans({ mouseX, mouseY }: { mouseX: MotionValue<number>; mouseY
 
 const rotatingWords = ['từng tách cà phê', 'mỗi buổi sáng', 'những cuộc hẹn']
 
-/** Words blur into focus one by one; the last phrase cycles. */
+/** Các từ lần lượt rõ dần khỏi nhòe; cụm cuối thay đổi vòng tròn. */
 function Headline() {
   const reduce = useReducedMotion()
   const [index, setIndex] = useState(0)
@@ -247,14 +247,14 @@ function BrandPanel() {
   )
 }
 
-// ---------------------------------------------------------------- form side
+// ---------------------------------------------------------------- phía form
 
 const tabs = [
   { href: '/login', label: 'Đăng nhập' },
   { href: '/register', label: 'Tạo tài khoản' },
 ]
 
-// Segmented switch; the pill slides between the two routes because this layout stays mounted.
+// Nút chuyển dạng phân đoạn; viên chọn trượt giữa hai trang vì layout này luôn được giữ.
 function ModeSwitch() {
   const pathname = usePathname()
   const next = useSearchParams().get('next')
@@ -288,8 +288,8 @@ function ModeSwitch() {
 }
 
 /**
- * The form card: tilts toward the pointer, a soft spotlight follows it, and a light beam runs
- * around the border. Flips in when switching between sign-in and sign-up.
+ * Thẻ form: nghiêng về phía con trỏ, một đèn rọi mềm đi theo nó, và một tia sáng chạy quanh viền.
+ * Lật vào khi chuyển giữa đăng nhập và đăng ký.
  */
 function SpotlightCard({ children, flipKey }: { children: React.ReactNode; flipKey: string }) {
   const fine = useFinePointer()
@@ -332,7 +332,7 @@ function SpotlightCard({ children, flipKey }: { children: React.ReactNode; flipK
           style={{ rotateX: tiltX, rotateY: tiltY, transformStyle: 'preserve-3d' }}
           className="relative overflow-hidden rounded-2xl p-[1.5px] shadow-[0_24px_60px_-20px_rgba(62,39,35,0.35)]"
         >
-          {/* Border beam: a conic gradient spinning behind a 1.5px gap */}
+          {/* Tia sáng viền: gradient conic xoay phía sau một khe 1.5px */}
           <div className="absolute inset-0 rounded-2xl bg-stone-200/80" aria-hidden="true" />
           <motion.div
             aria-hidden="true"
@@ -353,12 +353,12 @@ function SpotlightCard({ children, flipKey }: { children: React.ReactNode; flipK
 export function AuthFrame({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   return (
-    // "user": honours prefers-reduced-motion for every framer-motion animation below.
+    // "user": tôn trọng prefers-reduced-motion cho mọi hiệu ứng framer-motion bên dưới.
     <MotionConfig reducedMotion="user">
       <div className="grid min-h-svh bg-[#F7F5F0] text-stone-900 lg:grid-cols-2">
         <BrandPanel />
         <main className="relative flex flex-col items-center justify-center overflow-hidden px-4 py-10 sm:px-8">
-          {/* Dotted texture and a warm glow keep the form side from feeling flat */}
+          {/* Họa tiết chấm và vệt sáng ấm giúp phía form không bị phẳng */}
           <div
             aria-hidden="true"
             className="pointer-events-none absolute inset-0 bg-[radial-gradient(#3E2723_1px,transparent_1px)] [background-size:22px_22px] opacity-[0.06]"

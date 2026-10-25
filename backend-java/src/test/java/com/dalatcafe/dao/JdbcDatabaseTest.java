@@ -40,7 +40,7 @@ class JdbcDatabaseTest {
 
     @Test
     void whitespaceAroundTheUrlIsIgnoredAndAFailedConnectionKeepsThePasswordOut() {
-        // Port 1 refuses at once, so the URL is parsed and a connection is really attempted.
+        // Cổng 1 từ chối ngay lập tức, nên URL được phân tích và thực sự thử kết nối.
         System.setProperty("DATABASE_URL", "  postgresql://postgres:" + PASSWORD + "@127.0.0.1:1/postgres  ");
 
         SQLException error = assertThrows(SQLException.class, JdbcDatabase::getConnection);

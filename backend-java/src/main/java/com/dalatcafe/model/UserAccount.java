@@ -5,8 +5,8 @@ import java.util.Locale;
 import java.util.Objects;
 
 /**
- * A sign-in account. Password accounts store a PBKDF2 hash (never the password); Google
- * accounts store the stable Google subject id. One account may have both.
+ * Một tài khoản đăng nhập. Tài khoản mật khẩu lưu hash PBKDF2 (không bao giờ lưu mật khẩu); tài
+ * khoản Google lưu Google subject id cố định. Một tài khoản có thể có cả hai.
  */
 public class UserAccount {
     private Integer id;
@@ -33,7 +33,7 @@ public class UserAccount {
         this.role = Objects.requireNonNull(role, "Role must not be null");
     }
 
-    /** Emails are compared case-insensitively, so they are stored in lower case. */
+    /** Email được so sánh không phân biệt hoa thường, nên được lưu dạng chữ thường. */
     public static String normalizeEmail(String email) {
         return email == null ? null : email.trim().toLowerCase(Locale.ROOT);
     }
@@ -110,7 +110,7 @@ public class UserAccount {
         this.lastLoginAt = lastLoginAt;
     }
 
-    /** A copy, so callers of the in-memory store cannot change stored accounts by accident. */
+    /** Một bản sao, để nơi gọi kho trong bộ nhớ không vô tình sửa tài khoản đã lưu. */
     public UserAccount copy() {
         UserAccount copy = new UserAccount();
         copy.id = id;

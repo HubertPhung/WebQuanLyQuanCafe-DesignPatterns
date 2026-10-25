@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** The stock endpoint only switches an item on or off for sale; quantities are not tracked. */
+/** Endpoint stock chỉ bật hoặc tắt bán một món; không theo dõi số lượng. */
 class MenuHandlerTest {
     private static final int ITEM_ID = 900;
 

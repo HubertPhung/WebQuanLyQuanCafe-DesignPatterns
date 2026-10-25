@@ -11,7 +11,7 @@ public class KitchenNotificationObserver implements IOrderObserver {
 
     private final Consumer<String> notificationSink;
 
-    /** Default sink is the application log; pass a sink to send tickets to a real display. */
+    /** Đích mặc định là log của ứng dụng; truyền một đích khác để gửi phiếu tới màn hình thật. */
     public KitchenNotificationObserver() {
         this(LOGGER::info);
     }

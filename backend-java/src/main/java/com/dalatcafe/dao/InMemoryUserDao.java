@@ -9,8 +9,8 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * In-memory accounts. Returns and stores copies, and checks uniqueness inside one lock, so two
- * concurrent sign-ups cannot claim the same email.
+ * Tài khoản trong bộ nhớ. Trả về và lưu bản sao, kiểm tra tính duy nhất trong cùng một khóa, nên
+ * hai lượt đăng ký đồng thời không thể chiếm cùng một email.
  */
 public class InMemoryUserDao implements IUserDao {
     private final InMemoryDatabase db;

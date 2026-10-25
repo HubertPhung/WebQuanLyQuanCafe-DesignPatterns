@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import pg from 'pg'
 import { ORDER_CANCELLATION_SCHEMA_SQL } from '../lib/db/order-status-schema'
 
-// All writes target a session-local temporary table and are rolled back.
+// Mọi thao tác ghi nhắm vào một bảng tạm theo phiên và đều được rollback.
 async function main() {
   const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 1 })
   const client = await pool.connect()

@@ -8,12 +8,12 @@ import java.security.SecureRandom;
 import java.util.Base64;
 
 /**
- * PBKDF2-HMAC-SHA256 password hashing (pure Java SE). Stored as
- * {@code pbkdf2_sha256$<iterations>$<salt b64>$<hash b64>} with a random 16-byte salt, so the
- * iteration count can be raised later without breaking existing hashes.
+ * Băm mật khẩu bằng PBKDF2-HMAC-SHA256 (Java SE thuần). Lưu dạng {@code
+ * pbkdf2_sha256$<iterations>$<salt b64>$<hash b64>} với salt ngẫu nhiên 16 byte, nên sau này tăng
+ * số vòng lặp không làm hỏng các hash cũ.
  */
 public final class PasswordHasher {
-    /** OWASP 2023 recommendation for PBKDF2-HMAC-SHA256. */
+    /** Mức khuyến nghị OWASP 2023 cho PBKDF2-HMAC-SHA256. */
     public static final int DEFAULT_ITERATIONS = 600_000;
     private static final String PREFIX = "pbkdf2_sha256";
     private static final int SALT_BYTES = 16;
@@ -26,7 +26,7 @@ public final class PasswordHasher {
         this(DEFAULT_ITERATIONS);
     }
 
-    /** Tests pass a low iteration count to stay fast; production uses the default. */
+    /** Test truyền số vòng lặp thấp để chạy nhanh; production dùng giá trị mặc định. */
     public PasswordHasher(int iterations) {
         if (iterations < 1_000) {
             throw new IllegalArgumentException("Iterations must be at least 1000");
@@ -45,7 +45,7 @@ public final class PasswordHasher {
         return PREFIX + "$" + iterations + "$" + b64.encodeToString(salt) + "$" + b64.encodeToString(hash);
     }
 
-    /** Constant-time comparison; a malformed or missing hash never matches. */
+    /** So sánh trong thời gian cố định; hash sai định dạng hoặc bị thiếu thì không bao giờ khớp. */
     public boolean verify(String password, String stored) {
         if (password == null || stored == null) {
             return false;

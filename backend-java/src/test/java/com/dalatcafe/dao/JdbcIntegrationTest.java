@@ -41,8 +41,8 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Runs the JDBC DAOs against a real PostgreSQL started in the test JVM (no Docker, no shared
- * Supabase), so schema, JSONB columns, foreign keys and the pool are checked in CI.
+ * Chạy các DAO JDBC trên PostgreSQL thật khởi động trong JVM test (không cần Docker, không dùng
+ * Supabase chung), để schema, cột JSONB, khóa ngoại và pool được kiểm tra trên CI.
  */
 class JdbcIntegrationTest {
     private static EmbeddedPostgres postgres;
@@ -114,7 +114,7 @@ class JdbcIntegrationTest {
         assertTrue(reservations.save(booking));
         assertEquals(Branches.BUI_THI_XUAN, reservations.findByReservationCode(booking.getReservationCode()).orElseThrow().getBranch());
 
-        // Other tests count the seeded floor.
+        // Các test khác đếm số bàn mẫu.
         reservations.deleteById(booking.getId());
         orders.deleteById(order.getId());
         tables.deleteById(table.getId());
@@ -339,7 +339,8 @@ class JdbcIntegrationTest {
         }
         Instant seatedAt = tables.findById(9).orElseThrow().getOccupiedSince();
 
-        // A second paid order (or a guest-count change) on the same party must not restart the clock.
+        // Đơn đã thanh toán thứ hai (hoặc thay đổi số khách) của cùng nhóm khách không được đặt lại
+        // đồng hồ.
         assertTrue(tables.updateStatus(9, TableStatus.OCCUPIED, 3));
         assertEquals(seatedAt, tables.findById(9).orElseThrow().getOccupiedSince());
         assertEquals(3, tables.findById(9).orElseThrow().getGuestCount());

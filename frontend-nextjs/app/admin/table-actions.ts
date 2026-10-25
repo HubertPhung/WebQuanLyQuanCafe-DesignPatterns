@@ -24,7 +24,7 @@ export async function saveTableDetails(input: TableDetails, id?: number): Promis
       if (!localImage.startsWith('/') || localImage.length > 2048) throw new Error('Vui lòng tải ảnh lên hoặc dùng đường dẫn ảnh trong trang.')
       details.imageUrl = localImage
     }
-    // A new table joins the branch chosen in the header; an edited one keeps its branch.
+    // Bàn mới vào chi nhánh đang chọn ở header; bàn đang sửa giữ nguyên chi nhánh.
     const located = { ...details, branch: await getAdminBranch() }
     let table: FloorTable
     if (getJavaBackendUrl()) {

@@ -46,7 +46,7 @@ import type { FloorTable, MenuItem, Order, OrderStatus, TableStatus } from '@/li
 import { cn } from '@/lib/utils'
 import { DEFAULT_BRANCH_ID } from '@/lib/branches'
 
-// Default fallback data if server props are undefined
+// Dữ liệu mẫu dự phòng khi server không truyền props
 const defaultTables: FloorTable[] = ([
   { id: 12, name: 'Bar 01', seats: 1, zone: 'Quầy Bar', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: new Date(), imageUrl: '/images/catalog/photo-1501386761578-eac5c94b800a.jpg' },
   { id: 13, name: 'Bar 02', seats: 1, zone: 'Quầy Bar', status: 'occupied', guestCount: 1, occupiedSince: new Date(Date.now() - 15 * 60000), updatedAt: new Date(), imageUrl: '/images/space/counter.jpg' },
@@ -138,8 +138,8 @@ export function DashboardOperationalView({
   reportOrders = [],
   reservations = [],
 }: DashboardOperationalViewProps) {
-  // Normalize tables with zone mapping
-  // Sample data only when the page passed nothing at all; an empty list is a real, quiet shop.
+  // Chuẩn hóa tên khu vực của bàn. Chỉ dùng dữ liệu mẫu khi trang không truyền gì cả; danh sách
+  // rỗng là quán thật đang vắng.
   const normalizedTables = (initialTables ?? defaultTables).map((t) => {
     let zone = t.zone
     if (zone === 'Coffee Bar') zone = 'Quầy Bar'
@@ -170,7 +170,7 @@ export function DashboardOperationalView({
   const pendingReservations = reservations.filter(r => r.status === 'Chờ xác nhận' || r.status === 'Đã đặt').slice(0, 4)
   const money = (value: number) => `${Math.round(value).toLocaleString('vi-VN')} đ`
 
-  // Compute live operational metrics
+  // Tính các chỉ số vận hành trực tiếp
   const activeOrdersCount = orders.filter((o) => o.status !== 'completed' && o.status !== 'cancelled').length
   const brewingOrdersCount = orders.filter((o) => o.status === 'brewing' || o.status === 'pending').length
   const overdueTablesCount = tables.filter((t) => {
@@ -184,10 +184,10 @@ export function DashboardOperationalView({
   const reservedCount = tables.filter((t) => t.status === 'reserved').length
 
   const filteredTables = selectedZone === 'all' ? tables : tables.filter((t) => t.zone === selectedZone)
-  // Zone tabs follow the zones the floor plan really has.
+  // Các tab khu vực theo đúng các khu sơ đồ bàn thực sự có.
   const zones = [...new Set(tables.map((t) => t.zone))]
 
-  // Handle live ticket progression
+  // Xử lý chuyển bước của phiếu trực tiếp
   const handleAdvanceOrder = (orderId: number, nextStatus: OrderStatus) => {
     startTransition(async () => {
       const res = await updateOrderStatus(orderId, nextStatus)
@@ -207,7 +207,7 @@ export function DashboardOperationalView({
     })
   }
 
-  // Handle table quick status change
+  // Xử lý đổi nhanh trạng thái bàn
   const handleSetTableStatus = (tableId: number, newStatus: TableStatus) => {
     startTransition(async () => {
       const table = tables.find(t => t.id === tableId)
@@ -234,7 +234,7 @@ export function DashboardOperationalView({
 
   return (
     <div className="space-y-6 font-sans">
-      {/* 1. Header Operational Context Bar */}
+      {/* 1. Thanh ngữ cảnh vận hành ở đầu trang */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white rounded-xl border border-stone-200/80 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] p-4 md:p-5">
         <div className="space-y-1.5 min-w-0">
           <div className="flex flex-wrap items-center gap-2.5">
@@ -258,7 +258,7 @@ export function DashboardOperationalView({
           </div>
         </div>
 
-        {/* Operational Action Shortcuts */}
+        {/* Phím tắt thao tác vận hành */}
         <div className="flex flex-wrap items-center gap-2.5 shrink-0">
           <Link
             href="/admin/pos"
@@ -287,7 +287,7 @@ export function DashboardOperationalView({
         </div>
       </div>
 
-      {/* 2. Main 70% / 30% Master Operational Grid */}
+      {/* 2. Lưới vận hành chính 70% / 30% */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* ======================================================== */}
         {/* LEFT 70%: LIVE OPERATIONS STREAM (Sơ đồ bàn & KDS Queue) */}
@@ -295,7 +295,7 @@ export function DashboardOperationalView({
         <div className="lg:col-span-8 space-y-6">
           {/* Section A: Sơ đồ bàn theo khu vực thực tế (Zoned Cafe Floor Layout) */}
           <div className="bg-white rounded-xl border border-stone-200/80 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] p-5 md:p-6 space-y-5">
-            {/* Floor Toolbar */}
+            {/* Thanh công cụ sơ đồ bàn */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-stone-200/50">
               <div className="space-y-0.5">
                 <div className="flex items-center gap-2">
@@ -312,7 +312,7 @@ export function DashboardOperationalView({
                 </p>
               </div>
 
-              {/* Status breakdown pills */}
+              {/* Các nhãn thống kê trạng thái */}
               <div className="flex items-center gap-2 text-xs font-semibold">
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800">
                   <span className="size-1.5 rounded-full bg-emerald-600" />
@@ -329,7 +329,7 @@ export function DashboardOperationalView({
               </div>
             </div>
 
-            {/* Zone Filter Tabs */}
+            {/* Các tab lọc khu vực */}
             <div className="flex flex-wrap items-center gap-1.5 bg-stone-100/70 p-1 rounded-lg">
               <button
                 type="button"
@@ -359,7 +359,7 @@ export function DashboardOperationalView({
               ))}
             </div>
 
-            {/* Table Floor Cards Grid */}
+            {/* Lưới thẻ bàn */}
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
               {filteredTables.map((table) => {
                 const isOccupied = table.status === 'occupied'
@@ -370,7 +370,7 @@ export function DashboardOperationalView({
                   : 0
                 const isOverdue = isOccupied && elapsedMins > 60
 
-                // Attached order if occupied
+                // Đơn đi kèm nếu bàn có khách
                 const matchingOrder = isOccupied
                   ? orders.find((o) => (o.tableIds?.length ? o.tableIds : [o.tableId]).includes(table.id) && o.status !== 'completed' && o.status !== 'cancelled')
                   : null
@@ -485,7 +485,7 @@ export function DashboardOperationalView({
               </Link>
             </div>
 
-            {/* Tickets Grid */}
+            {/* Lưới phiếu */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
               {orders
                 .filter((o) => o.status !== 'completed' && o.status !== 'cancelled')
@@ -509,7 +509,7 @@ export function DashboardOperationalView({
                       )}
                     >
                       <div className="space-y-2">
-                        {/* Ticket Code & Time */}
+                        {/* Mã phiếu và thời gian */}
                         <div className="flex items-center justify-between">
                           <span className="font-mono text-xs font-black text-stone-900 tracking-wider">
                             #{order.orderCode}
@@ -520,7 +520,7 @@ export function DashboardOperationalView({
                           </span>
                         </div>
 
-                        {/* Customer / Location Tag */}
+                        {/* Nhãn khách hàng / vị trí */}
                         <div className="flex items-center justify-between text-xs">
                           <span className="font-bold text-stone-800 truncate max-w-[140px]">
                             {order.customer === 'Walk-in' ? 'Khách vãng lai' : order.customer}
@@ -530,7 +530,7 @@ export function DashboardOperationalView({
                           </span>
                         </div>
 
-                        {/* Items list */}
+                        {/* Danh sách món */}
                         <div className="space-y-1 pt-1 border-t border-stone-200/50 text-xs">
                           {order.items.map((item, idx) => (
                             <div key={idx} className="flex items-start justify-between gap-1 leading-snug">
@@ -548,7 +548,7 @@ export function DashboardOperationalView({
                         </div>
                       </div>
 
-                      {/* Ticket Action Button */}
+                      {/* Nút thao tác của phiếu */}
                       <div className="pt-2">
                         {isPending && (
                           <Button
@@ -613,7 +613,7 @@ export function DashboardOperationalView({
         </div>
       </div>
 
-      {/* 3. Interactive Table Quick Inspector Modal */}
+      {/* 3. Hộp thoại xem nhanh bàn */}
       {activeTableDetail && (
         <Dialog open={!!activeTableDetail} onOpenChange={(open) => !open && setActiveTableDetail(null)}>
           <DialogContent className="max-w-md rounded-xl bg-white p-6 shadow-2xl">
@@ -714,7 +714,7 @@ export function DashboardOperationalView({
         </Dialog>
       )}
 
-      {/* 4. Shift Close & Print Modal */}
+      {/* 4. Hộp thoại chốt ca và in */}
       {isShiftModalOpen && (
         <Dialog open={isShiftModalOpen} onOpenChange={setIsShiftModalOpen}>
           <DialogContent className="max-w-md rounded-xl bg-white p-6 shadow-2xl">

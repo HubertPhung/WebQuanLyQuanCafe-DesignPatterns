@@ -2,7 +2,7 @@ package com.dalatcafe.patterns.chain;
 
 import java.util.Objects;
 
-/** Immutable result of reservation validation. */
+/** Kết quả bất biến của việc kiểm tra đặt bàn. */
 public final class ValidationResult {
     private static final ValidationResult VALID = new ValidationResult(true, null);
     private final boolean valid;

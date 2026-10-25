@@ -9,18 +9,21 @@ import java.util.Objects;
 import java.util.logging.Logger;
 
 /**
- * Authentication settings of the server.
+ * Cài đặt xác thực của server.
  *
- * @param jwtSecret       HS256 key shared with the Next.js frontend ({@code AUTH_JWT_SECRET})
- * @param serviceKey      key the frontend sends when it reports a verified Google sign-in
- *                        ({@code AUTH_SERVICE_KEY}); without one, Google sign-in is refused
- * @param allowRoleHeader also trust a bare {@code X-User-Role} header (development and tests only)
- * @param tokenTtl        lifetime of an access token
+ * @param jwtSecret       khóa HS256 dùng chung với frontend Next.js ({@code AUTH_JWT_SECRET})
+ * @param serviceKey      key frontend gửi kèm khi báo một lượt đăng nhập Google đã xác minh
+ *                        ({@code AUTH_SERVICE_KEY}); không có key thì đăng nhập Google bị từ chối
+ * @param allowRoleHeader tin cả header {@code X-User-Role} trần (chỉ dùng khi phát triển và test)
+ * @param tokenTtl        thời hạn của một access token
  */
 public record AuthSettings(byte[] jwtSecret, String serviceKey, boolean allowRoleHeader, Duration tokenTtl) {
     private static final Logger LOGGER = Logger.getLogger(AuthSettings.class.getName());
     public static final Duration DEFAULT_TTL = Duration.ofHours(8);
-    /** Development-only secret, identical to the frontend's default, so a local run needs no setup. */
+    /**
+     * Khóa bí mật chỉ dùng khi phát triển, giống mặc định của frontend, để chạy local không cần cấu
+     * hình.
+     */
     public static final String DEV_SECRET = "dalatcafe-dev-only-secret-change-me-0123456789";
 
     public AuthSettings {
@@ -29,15 +32,15 @@ public record AuthSettings(byte[] jwtSecret, String serviceKey, boolean allowRol
         jwtSecret = jwtSecret.clone();
     }
 
-    /** Random keys and the legacy role header: what the existing REST tests run with. */
+    /** Khóa ngẫu nhiên và header vai trò kiểu cũ: cấu hình mà các test REST hiện có đang dùng. */
     public static AuthSettings withRoleHeader() {
         return new AuthSettings(randomBytes(32), base64(randomBytes(24)), true, DEFAULT_TTL);
     }
 
     /**
-     * Reads AUTH_JWT_SECRET, AUTH_SERVICE_KEY, AUTH_ALLOW_ROLE_HEADER and AUTH_TOKEN_HOURS.
-     * With APP_ENV=production a missing or short secret stops the server instead of falling
-     * back to the development secret.
+     * Đọc AUTH_JWT_SECRET, AUTH_SERVICE_KEY, AUTH_ALLOW_ROLE_HEADER và AUTH_TOKEN_HOURS. Với
+     * APP_ENV=production, thiếu khóa bí mật hoặc khóa quá ngắn sẽ dừng server thay vì dùng khóa
+     * phát triển.
      */
     public static AuthSettings fromEnvironment(Map<String, String> env) {
         String secret = env.get("AUTH_JWT_SECRET");

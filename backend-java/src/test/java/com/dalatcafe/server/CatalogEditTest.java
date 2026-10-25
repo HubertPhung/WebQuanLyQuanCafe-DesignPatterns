@@ -24,7 +24,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/** Editing and removing menu items, and editing a booking, through the REST API. */
+/** Sửa và xóa món, sửa phiếu đặt bàn qua REST API. */
 class CatalogEditTest {
     private static final int DRINK_ID = 903;
 
@@ -99,7 +99,7 @@ class CatalogEditTest {
                 "{\"name\":\"X\",\"category\":\"Tea\",\"sellPrice\":1}").statusCode());
         assertEquals("Tra dao", drink().getName());
         assertEquals(40_000.0, drink().getSellPrice());
-        // Keeping its own name is not a conflict.
+        // Giữ tên của chính nó không bị tính là trùng.
         assertEquals(200, call("PUT", "/api/menu/" + DRINK_ID, "MANAGER",
                 "{\"name\":\"tra dao\",\"category\":\"Tea\",\"sellPrice\":41000}").statusCode());
     }
@@ -110,7 +110,7 @@ class CatalogEditTest {
         assertEquals(200, call("DELETE", "/api/menu/" + DRINK_ID, "MANAGER", null).statusCode());
         assertTrue(DaoFactory.getInstance().getMenuDao().findById(DRINK_ID).isEmpty());
         assertEquals(404, call("DELETE", "/api/menu/" + DRINK_ID, "MANAGER", null).statusCode());
-        // The on/off switch stays a STAFF action.
+        // Công tắc bật/tắt bán vẫn là thao tác của STAFF.
         assertEquals(200, call("PATCH", "/api/menu/1/stock", "STAFF", "{\"inStock\":false}").statusCode());
     }
 
@@ -149,19 +149,19 @@ class CatalogEditTest {
         String first = book(3, 2, at(3, 10));
         String second = book(4, 2, at(3, 15));
 
-        // Moving onto a table already booked at that time fails the chain.
+        // Chuyển sang bàn đã có lịch vào giờ đó thì chuỗi kiểm tra từ chối.
         HttpResponse<String> clash = call("PUT", "/api/reservations/" + second, "STAFF", "{\"customer\":\"Binh\",\"contact\":\"0911000333\","
                 + "\"dateTime\":\"" + at(3, 10) + "\",\"tableId\":3,\"guests\":2}");
         assertEquals(400, clash.statusCode(), clash.body());
         assertEquals(List.of(4), stored(second).getTableIds());
         assertEquals("An", stored(second).getCustomer());
 
-        // Too many guests for the table also fails, and nothing changes.
+        // Quá nhiều khách so với bàn cũng bị từ chối, và không có gì thay đổi.
         assertEquals(400, call("PUT", "/api/reservations/" + first, "STAFF", "{\"customer\":\"An\",\"contact\":\"0911000111\","
                 + "\"dateTime\":\"" + at(3, 10) + "\",\"tableId\":3,\"guests\":9}").statusCode());
         assertEquals(2, stored(first).getGuests());
 
-        // Moving within its own slot is fine: the booking does not clash with itself.
+        // Dời giờ trong khung của chính nó thì được: phiếu không trùng với chính nó.
         assertEquals(200, call("PUT", "/api/reservations/" + first, "STAFF", "{\"customer\":\"An\",\"contact\":\"0911000111\","
                 + "\"dateTime\":\"" + at(3, 11) + "\",\"tableId\":3,\"guests\":3}").statusCode());
     }

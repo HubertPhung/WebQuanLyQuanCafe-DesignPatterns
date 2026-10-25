@@ -1,11 +1,11 @@
 import 'server-only'
 import { pool } from '@/lib/db'
 
-// Two small helper tables that sit next to the admin_* tables:
-//   admin_menu_links  frontend menu item id -> Java menu item id (the two menus number independently)
-//   admin_sync_queue  codes of orders recorded locally that the Java backend has not received yet
-// They are created on first use with IF NOT EXISTS and never touch the admin_* tables. Without a
-// database, or when they cannot be created, an in-memory copy (same lifetime as the mock store) is used.
+// Hai bảng phụ nhỏ nằm cạnh các bảng admin_*: admin_menu_links (id món frontend -> id món Java, vì
+// hai thực đơn đánh số độc lập) và admin_sync_queue (mã các đơn ghi cục bộ mà backend Java chưa
+// nhận). Chúng được tạo ở lần dùng đầu bằng IF NOT EXISTS và không bao giờ đụng tới các bảng
+// admin_*. Không có database, hoặc không tạo được bảng, thì dùng bản sao trong bộ nhớ (cùng vòng
+// đời với mock store).
 
 type Memory = { menuLinks: Map<number, number>; syncQueue: Set<string> }
 
@@ -32,14 +32,14 @@ function tablesReady(): Promise<boolean> {
       () => true,
       (error: unknown) => {
         console.warn('Could not create the link tables, keeping links in memory:', error)
-        ready = null // try again on the next call
+        ready = null // thử lại ở lần gọi sau
         return false
       },
     )
   return ready
 }
 
-// Runs the SQL path when the tables exist, otherwise (or when the query fails) the memory path.
+// Chạy nhánh SQL khi bảng tồn tại, nếu không (hoặc truy vấn lỗi) thì chạy nhánh bộ nhớ.
 async function withStore<T>(sql: () => Promise<T>, fallback: () => T): Promise<T> {
   if (await tablesReady()) {
     try {

@@ -1,4 +1,4 @@
-// Shop branches shown on the storefront footer and the sign-in panel. One place to edit.
+// Các chi nhánh của quán, hiện ở chân trang storefront và khung đăng nhập. Sửa ở một chỗ duy nhất.
 export type Branch = {
   id: 'phan-dinh-phung' | 'bui-thi-xuan'
   name: string
@@ -33,8 +33,8 @@ export const branches: Branch[] = [
   },
 ]
 
-// Tables, orders and bookings belong to one branch; the menu, customers and accounts are shared.
-// The ids are the ones the Java backend stores (com.dalatcafe.model.Branches).
+// Bàn, đơn và phiếu đặt bàn thuộc về một chi nhánh; thực đơn, khách hàng và tài khoản dùng chung.
+// Id trùng với id backend Java lưu (com.dalatcafe.model.Branches).
 export type BranchId = 'phan-dinh-phung' | 'bui-thi-xuan'
 export const DEFAULT_BRANCH_ID: BranchId = 'phan-dinh-phung'
 

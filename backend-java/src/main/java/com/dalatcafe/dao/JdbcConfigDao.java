@@ -11,9 +11,9 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * JDBC PostgreSQL implementation of IConfigDao (table {@code store_config}, one row per setting).
- * All settings of one save are written in a single transaction, so a restart never reads half of
- * an update.
+ * Bản cài đặt IConfigDao bằng JDBC PostgreSQL (bảng {@code store_config}, mỗi cài đặt một dòng).
+ * Các cài đặt của một lần lưu được ghi trong cùng một transaction, nên khởi động lại không bao giờ
+ * đọc phải bản cập nhật dở dang.
  */
 public class JdbcConfigDao implements IConfigDao {
     private static final Logger LOGGER = Logger.getLogger(JdbcConfigDao.class.getName());

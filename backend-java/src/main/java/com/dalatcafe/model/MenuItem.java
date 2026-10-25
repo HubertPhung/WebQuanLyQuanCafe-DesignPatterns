@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * MenuItem entity representing a beverage, food item, or inventory ingredient.
+ * Thực thể MenuItem: một đồ uống, món ăn hoặc nguyên liệu.
  */
 public class MenuItem implements Serializable {
     private static final long serialVersionUID = 1L;
@@ -16,7 +16,7 @@ public class MenuItem implements Serializable {
     private Integer id;
     private String name;
     private String category;
-    private String kind; // "menu" or "ingredient"
+    private String kind; // "menu" hoặc "ingredient"
     private String unit;
     private double costPrice;
     private double sellPrice;

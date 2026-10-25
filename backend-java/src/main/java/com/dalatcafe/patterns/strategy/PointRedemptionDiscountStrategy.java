@@ -6,10 +6,9 @@ import com.dalatcafe.patterns.singleton.SystemConfigManager;
 import java.util.Objects;
 
 /**
- * Stacks a loyalty-point redemption on top of another strategy (voucher or member tier).
- * Only as many points as the remaining subtotal can absorb are used; the count is exposed
- * through {@link #getPointsUsed()} so the caller deducts exactly what was applied.
- * One instance serves one checkout.
+ * Xếp chồng việc đổi điểm tích lũy lên một strategy khác (voucher hoặc hạng thành viên). Chỉ dùng
+ * số điểm mà phần tạm tính còn lại hấp thụ được; số điểm đó được trả qua {@link #getPointsUsed()}
+ * để nơi gọi trừ đúng số đã áp dụng. Mỗi instance phục vụ một lần checkout.
  */
 public final class PointRedemptionDiscountStrategy implements IDiscountStrategy {
     private final IDiscountStrategy base;
@@ -30,7 +29,7 @@ public final class PointRedemptionDiscountStrategy implements IDiscountStrategy 
         double baseDiscount = base.calculateDiscount(subtotal, customer);
         SystemConfigManager config = SystemConfigManager.getInstance();
         double pointsDiscount;
-        // Size the redemption and price it with the same point value.
+        // Tính số điểm đổi và quy ra tiền theo cùng một giá trị điểm.
         synchronized (config) {
             int pointValue = config.getPointRedeemValueVnd();
             double room = Math.max(0, subtotal - baseDiscount);
@@ -41,7 +40,7 @@ public final class PointRedemptionDiscountStrategy implements IDiscountStrategy 
         return DiscountAmounts.clamp(subtotal, baseDiscount + pointsDiscount);
     }
 
-    /** Points actually applied by the last {@link #calculateDiscount} call. */
+    /** Số điểm thực sự đã áp dụng ở lần gọi {@link #calculateDiscount} gần nhất. */
     public int getPointsUsed() {
         return pointsUsed;
     }

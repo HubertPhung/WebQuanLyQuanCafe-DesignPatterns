@@ -1,8 +1,7 @@
 package com.dalatcafe.server;
 
 /**
- * Business/validation failure carrying the HTTP status and standardized error code
- * from docs/API_SPEC.md section 1.3.
+ * Lỗi nghiệp vụ/kiểm tra dữ liệu, mang mã HTTP và mã lỗi chuẩn theo docs/API_SPEC.md mục 1.3.
  */
 public class ApiException extends RuntimeException {
     private final int status;

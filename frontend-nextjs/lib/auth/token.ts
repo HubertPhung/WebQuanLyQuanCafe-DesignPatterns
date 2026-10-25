@@ -1,19 +1,19 @@
 import { jwtVerify } from 'jose'
 import { isRole, type Role } from './roles'
 
-// Access tokens are issued by the Java backend (TokenService, HS256) and verified here with
-// the same AUTH_JWT_SECRET. No server-only import: proxy.ts uses this file too.
+// Access token do backend Java cấp (TokenService, HS256) và được kiểm tra ở đây bằng cùng
+// AUTH_JWT_SECRET. Không import server-only: proxy.ts cũng dùng file này.
 
 export const SESSION_COOKIE = 'dalatcafe_session'
 
-// Same value as the Java AuthSettings.DEV_SECRET, so a local run works without any setup.
+// Cùng giá trị với AuthSettings.DEV_SECRET bên Java, để chạy local không cần cấu hình gì.
 const DEV_SECRET = 'dalatcafe-dev-only-secret-change-me-0123456789'
 
 export type SessionClaims = { userId: number; email: string; name: string; role: Role; expiresAt: number }
 
 let warned = false
 
-/** The shared secret, or null in production when it is missing (sign-in is then refused). */
+/** Khóa bí mật dùng chung, hoặc null ở production khi thiếu (lúc đó đăng nhập bị từ chối). */
 export function jwtSecret(): Uint8Array | null {
   const secret = process.env.AUTH_JWT_SECRET
   if (secret && secret.length >= 32) return new TextEncoder().encode(secret)
@@ -40,6 +40,6 @@ export async function verifySessionToken(token: string | undefined): Promise<Ses
       expiresAt: payload.exp,
     }
   } catch {
-    return null // bad signature, expired or malformed
+    return null // sai chữ ký, hết hạn hoặc sai định dạng
   }
 }

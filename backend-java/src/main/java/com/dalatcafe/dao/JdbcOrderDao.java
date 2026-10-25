@@ -12,7 +12,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * JDBC PostgreSQL implementation of IOrderDao.
+ * Bản cài đặt IOrderDao bằng JDBC PostgreSQL.
  */
 public class JdbcOrderDao implements IOrderDao {
     private static final Logger LOGGER = Logger.getLogger(JdbcOrderDao.class.getName());
@@ -147,7 +147,7 @@ public class JdbcOrderDao implements IOrderDao {
                  PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
                 String code = order.getOrderCode();
                 boolean generated = code == null || code.isBlank();
-                // A unique placeholder until the id is known; renamed to AC-0001 style below.
+                // Giá trị tạm duy nhất cho tới khi biết id; bên dưới sẽ đổi sang dạng AC-0001.
                 ps.setString(1, generated ? "TMP-" + UUID.randomUUID() : code);
                 ps.setString(2, order.getCustomer());
                 if (order.getTableId() != null) {
@@ -286,8 +286,8 @@ public class JdbcOrderDao implements IOrderDao {
             }
         }
 
-        // setItems and setDiscountAmount recalculate totals, so they go first and the stored
-        // amounts (what the customer actually paid) are written last.
+        // setItems và setDiscountAmount tính lại tổng tiền, nên gọi chúng trước, rồi mới ghi các số
+        // tiền đã lưu (số khách thật sự đã trả) sau cùng.
         order.setItems(JsonColumns.toItems(rs.getString("items")));
         order.setDiscountAmount(rs.getDouble("discount_amount"));
         order.setSubtotal(rs.getDouble("subtotal"));

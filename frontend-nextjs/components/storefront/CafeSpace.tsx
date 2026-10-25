@@ -7,7 +7,7 @@ import { Armchair, Leaf, Sun } from 'lucide-react'
 
 const EASE_OUT = [0.22, 1, 0.36, 1] as const
 
-// Photos: Unsplash License (free to use). Self-hosted in /public/images/space.
+// Ảnh: giấy phép Unsplash (dùng miễn phí). Lưu tại /public/images/space.
 const photos = [
   {
     src: '/images/space/garden.jpg',
@@ -38,7 +38,7 @@ const highlights = [
   { icon: Armchair, title: 'Ngồi lâu cũng thoải mái', text: 'Ghế gỗ êm, bàn rộng cho nhóm bạn, và những góc riêng để đọc sách hay làm việc.' },
 ]
 
-// "Góc cà phê": an introduction to the shop's space, revealed as it scrolls into view.
+// "Góc cà phê": giới thiệu không gian quán, hiện dần khi cuộn tới.
 export function CafeSpace() {
   return (
     <div className="mt-8">

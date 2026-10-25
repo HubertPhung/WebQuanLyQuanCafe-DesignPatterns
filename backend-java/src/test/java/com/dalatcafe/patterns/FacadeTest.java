@@ -70,7 +70,7 @@ class FacadeTest {
         assertEquals(100_000, order.getSubtotal());
         assertEquals(30_000, order.getDiscountAmount());
         assertEquals(75_600, order.getTotal());
-        // Paid orders wait on the KDS; the kitchen completes them later.
+        // Đơn đã thanh toán chờ trên KDS; quầy pha chế hoàn tất chúng sau.
         assertEquals(OrderStatus.PENDING, order.getStatus());
         assertTrue(completed.isEmpty());
         assertEquals(PaymentStatus.PAID, order.getPaymentStatus());
@@ -104,7 +104,7 @@ class FacadeTest {
 
     @Test
     void anyQuantityIsSoldWhileTheItemIsOnSale() {
-        // Quantities are not tracked, so only the in-stock switch can refuse a line.
+        // Không theo dõi số lượng, nên chỉ công tắc in-stock mới từ chối được một dòng.
         CheckoutResult result = facade.checkout(request(50, PaymentMethod.CASH, Set.of(), false));
         assertTrue(result.isSuccess(), result.getMessage());
         assertEquals(50, result.getOrder().getItems().get(0).getQty());
@@ -147,7 +147,7 @@ class FacadeTest {
             @Override
             public java.util.Optional<Order> findByOrderCode(String code) {
                 looked.add(code);
-                // The first random code is already on an older order.
+                // Mã ngẫu nhiên đầu tiên đã thuộc về một đơn cũ hơn.
                 return looked.size() == 1 ? java.util.Optional.of(existing) : super.findByOrderCode(code);
             }
         };

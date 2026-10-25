@@ -39,7 +39,7 @@ function initials(name: string) {
 const itemClass =
   'flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-stone-700 hover:bg-stone-100 hover:text-stone-900 cursor-pointer transition-colors'
 
-// Signed-in customer or staff member from the session cookie; a sign-in link otherwise.
+// Khách hàng hoặc nhân viên đã đăng nhập (lấy từ cookie phiên); nếu không thì hiện link đăng nhập.
 export function AccountDropdown({ className, account }: AccountDropdownProps) {
   const router = useRouter()
 

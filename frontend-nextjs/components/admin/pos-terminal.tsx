@@ -52,10 +52,10 @@ function unitPrice(line: Line) {
 
 const keypadKeys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '000', '0', 'del']
 
-// Same numbers as the Java backend (SystemConfigManager, LoyaltyTierDiscountStrategy), so the
-// preview matches the receipt: tier discount first, then points on what is left, VAT last.
+// Cùng các con số với backend Java (SystemConfigManager, LoyaltyTierDiscountStrategy), để bản xem
+// trước khớp với hóa đơn: giảm theo hạng trước, rồi trừ điểm trên phần còn lại, VAT sau cùng.
 const POINTS_PER_REDEMPTION = 20
-// Default value of one point; the page passes the live value from GET /api/config.
+// Giá trị mặc định của một điểm; trang truyền giá trị thực từ GET /api/config.
 const DEFAULT_VND_PER_POINT = 1000
 const tierRates: Record<string, number> = { bronze: 0, silver: 0.05, gold: 0.1, vip: 0.15 }
 const rankLabels: Record<string, string> = { bronze: 'Đồng', silver: 'Bạc', gold: 'Vàng', vip: 'VIP' }
@@ -113,7 +113,7 @@ export function PosTerminal({
   const deliveryFee = shippingFee(orderType)
   const total = afterDiscount + tax + deliveryFee
   const change = Number(tendered || 0) - total
-  // The cash field is optional; once filled in, a paid cash sale must be covered.
+  // Ô tiền mặt là tùy chọn; khi đã nhập, đơn tiền mặt đã thanh toán phải đủ tổng tiền.
   const countsCash = payment === 'cash' && tendered !== ''
   const cashShort = countsCash && change < 0
   const selectedTable = tables.find(table => String(table.id) === tableId)
@@ -140,7 +140,7 @@ export function PosTerminal({
       const nextKey = lineKey(line.menuItemId, customizations)
       const target = current.find((candidate) => candidate.key === nextKey)
       if (!target) return current.map((candidate) => (candidate.key === key ? { ...candidate, key: nextKey, customizations } : candidate))
-      // The same drink with this exact set is already on the bill: merge the quantities.
+      // Cùng đồ uống với đúng bộ tùy chọn này đã có trong hóa đơn: cộng dồn số lượng.
       return current
         .filter((candidate) => candidate.key !== key)
         .map((candidate) => (candidate.key === nextKey ? { ...candidate, qty: candidate.qty + line.qty } : candidate))
@@ -207,7 +207,7 @@ export function PosTerminal({
       })
       setLines([])
       setTendered('')
-      // Points changed on the server; look the member up again for the next order.
+      // Điểm trên server đã thay đổi; tra cứu lại thành viên cho đơn tiếp theo.
       if (member) setMemberState({ kind: 'idle' })
       setUsePoints(false)
     })
@@ -217,7 +217,7 @@ export function PosTerminal({
     <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 font-sans text-stone-900">
       {/* CỘT TRÁI: DANH MỤC & MÓN (7 cols) */}
       <div className="xl:col-span-7 space-y-4">
-        {/* Category Pills */}
+        {/* Các nút chọn danh mục */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
           {categories.map((c) => (
             <button
@@ -236,7 +236,7 @@ export function PosTerminal({
           ))}
         </div>
 
-        {/* Big Touch Item Cards with Images */}
+        {/* Thẻ món lớn dễ chạm, có ảnh */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5">
           {visible.map((item) => (
             <button
@@ -245,7 +245,7 @@ export function PosTerminal({
               onClick={() => addLine(item)}
               className="group flex flex-col overflow-hidden rounded-2xl border border-stone-200/90 bg-white hover:border-[#5A3E2B]/70 hover:shadow-md transition-all text-left cursor-pointer active:scale-98 shadow-2xs"
             >
-              {/* Product Thumbnail */}
+              {/* Ảnh thu nhỏ của món */}
               <div className="relative h-28 sm:h-32 w-full overflow-hidden bg-stone-100 shrink-0">
                 {item.imageUrl ? (
                   <img
@@ -264,7 +264,7 @@ export function PosTerminal({
                 </span>
               </div>
 
-              {/* Product Details */}
+              {/* Thông tin món */}
               <div className="p-3 flex flex-1 flex-col justify-between gap-2">
                 <span className="font-bold text-xs sm:text-sm text-stone-900 group-hover:text-[#5A3E2B] leading-snug line-clamp-2">
                   {item.name}
@@ -334,7 +334,7 @@ export function PosTerminal({
           </div>
         </div>
 
-        {/* Member loyalty banner: looked up in the Java customer store (GET /api/customers?phone=) */}
+        {/* Băng thông tin thành viên: tra cứu trong kho khách hàng Java (GET /api/customers?phone=) */}
         {memberState.kind !== 'idle' && (
           <div
             role="status"
@@ -393,7 +393,7 @@ export function PosTerminal({
                       </span>
                     </div>
                   </div>
-                  {/* Quantity controls */}
+                  {/* Nút tăng giảm số lượng */}
                   <div className="flex items-center gap-1.5 bg-stone-100 border border-stone-200 rounded-lg p-0.5">
                     <button
                       type="button"
@@ -413,7 +413,7 @@ export function PosTerminal({
                   </div>
                 </div>
 
-                {/* Size L & toppings: priced by the Java Decorators */}
+                {/* Size L và topping: tính giá bởi các Decorator bên Java */}
                 <div className="flex flex-wrap gap-1.5" role="group" aria-label={`Tùy chọn cho ${line.name}`}>
                   {posCustomizations.map((option) => {
                     const active = line.customizations.includes(option.id)
@@ -448,7 +448,7 @@ export function PosTerminal({
           )}
         </div>
 
-        {/* Bill Summary */}
+        {/* Tóm tắt hóa đơn */}
         <div className="space-y-1.5 border-t border-stone-100 pt-3 text-xs">
           <div className="flex justify-between text-stone-500">
             <span>Tạm tính</span>
@@ -472,7 +472,7 @@ export function PosTerminal({
           </div>
           {deliveryFee > 0 && <div className="flex items-center justify-between text-sm"><span>Phí giao hàng</span><span>{deliveryFee.toLocaleString('vi-VN')} đ</span></div>}
 
-          {/* Big Total Price Highlight */}
+          {/* Tổng tiền nổi bật */}
           <div className="flex items-baseline justify-between pt-2 border-t border-stone-100">
             <span className="text-sm font-bold text-stone-900">Tổng thanh toán:</span>
             <span className="text-3xl font-black text-[#5A3E2B] tabular-nums">
@@ -481,7 +481,7 @@ export function PosTerminal({
           </div>
         </div>
 
-        {/* Payment Methods */}
+        {/* Phương thức thanh toán */}
         <div className="grid grid-cols-3 gap-2 text-xs pt-1">
           {(['cash', 'qr', 'card'] as const).map((m) => (
             <button
@@ -523,7 +523,7 @@ export function PosTerminal({
           </div>
         )}
 
-        {/* Primary Action Buttons */}
+        {/* Các nút thao tác chính */}
         <div className="grid grid-cols-2 gap-2.5 pt-2">
           <Button
             type="button"

@@ -1,5 +1,5 @@
-// Upgrade the CHECK constraint installed by the original database bootstrap.
-// Keep this atomic: other connections must never see an unconstrained status column.
+// Nâng cấp ràng buộc CHECK do bản khởi tạo database ban đầu tạo ra. Giữ thao tác nguyên tử: các kết
+// nối khác không bao giờ được thấy cột trạng thái không có ràng buộc.
 export const ORDER_CANCELLATION_SCHEMA_SQL = `
 DO $$
 BEGIN

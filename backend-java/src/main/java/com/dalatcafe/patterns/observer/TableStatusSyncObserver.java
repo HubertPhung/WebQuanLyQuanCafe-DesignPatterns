@@ -10,9 +10,9 @@ import com.dalatcafe.model.TableStatus;
 import java.util.Objects;
 
 /**
- * Keeps the floor plan in step with dine-in orders: an open order seats its table (OCCUPIED),
- * and the table goes to CLEANING once the kitchen completes the order. When built with an
- * order DAO, the table stays seated while another order on it is still open.
+ * Giữ sơ đồ bàn khớp với đơn ăn tại chỗ: đơn đang mở thì bàn có khách (OCCUPIED), và bàn chuyển
+ * sang CLEANING khi quầy pha chế hoàn tất đơn. Khi được tạo kèm order DAO, bàn vẫn giữ trạng thái
+ * có khách nếu trên bàn còn đơn khác đang mở.
  */
 public class TableStatusSyncObserver implements IOrderObserver {
     private final ITableDao tableDao;

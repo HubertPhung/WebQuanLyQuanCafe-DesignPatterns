@@ -21,7 +21,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Covers the three fixes: settings that survive a restart, the Builder's discount step, observer order. */
+/**
+ * Kiểm tra ba bản sửa: cài đặt còn nguyên sau khi khởi động lại, bước giảm giá của Builder, thứ tự
+ * observer.
+ */
 class PatternFixesTest {
 
     @AfterEach
@@ -31,7 +34,7 @@ class PatternFixesTest {
         config.resetToDefaults();
     }
 
-    // ---- Singleton: persistence ----
+    // ---- Singleton: lưu bền ----
 
     @Test
     void settingsSurviveARestart() {
@@ -43,10 +46,10 @@ class PatternFixesTest {
         config.setMaxReservationGuests(35);
         assertTrue(config.persist());
 
-        config.resetToDefaults(); // what a fresh process starts with
+        config.resetToDefaults(); // những gì một tiến trình mới bắt đầu với
         assertEquals("Đà Lạt Cafe", config.getStoreName());
 
-        config.attachStore(store); // what main() does on startup
+        config.attachStore(store); // những gì main() làm khi khởi động
         assertEquals("Đà Lạt Cafe - Chi nhánh 2", config.getStoreName());
         assertEquals(LocalTime.of(6, 30), config.getOpeningTime());
         assertEquals(35, config.getMaxReservationGuests());
@@ -67,7 +70,7 @@ class PatternFixesTest {
         assertEquals(42, config.getMaxReservationGuests());
     }
 
-    // ---- Builder: discount is a build step ----
+    // ---- Builder: giảm giá là một bước của build ----
 
     @Test
     void builderComputesTheDiscountFromTheFinishedSubtotal() {
@@ -89,7 +92,7 @@ class PatternFixesTest {
         assertThrows(IllegalStateException.class, builder::build);
     }
 
-    // ---- Observer: priority and failure isolation ----
+    // ---- Observer: ưu tiên và cô lập lỗi ----
 
     @Test
     void observersAreToldInPriorityOrderNotAttachOrder() {
@@ -119,7 +122,7 @@ class PatternFixesTest {
 
     @Test
     void kitchenObserverDefaultsToTheLogNotTheConsole() {
-        // Constructing with the default sink must not throw and must accept events.
+        // Tạo với đích mặc định không được ném ngoại lệ và phải nhận sự kiện.
         new KitchenNotificationObserver().onOrderPaid(sampleOrder());
     }
 

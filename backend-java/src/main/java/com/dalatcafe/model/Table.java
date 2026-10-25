@@ -5,7 +5,7 @@ import java.time.Instant;
 import java.util.Objects;
 
 /**
- * Table entity representing a physical seating table on the floor plan.
+ * Thực thể Table: một bàn thật trên sơ đồ bàn.
  */
 public class Table implements Serializable {
     private static final long serialVersionUID = 1L;

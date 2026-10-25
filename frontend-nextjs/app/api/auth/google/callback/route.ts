@@ -10,7 +10,7 @@ function back(request: NextRequest, error: string) {
   return response
 }
 
-// GET /api/auth/google/callback?code=...&state=...: Google sends the browser back here.
+// GET /api/auth/google/callback?code=...&state=...: Google đưa trình duyệt quay lại đây.
 export async function GET(request: NextRequest) {
   const config = googleConfig()
   if (!config) return back(request, 'google_not_configured')

@@ -6,8 +6,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Minimal JSON reader/writer (pure Java SE, no third-party library).
- * Parsed values are Map (LinkedHashMap), List, String, Double, Boolean or null.
+ * Bộ đọc/ghi JSON tối giản (Java SE thuần, không dùng thư viện bên thứ ba). Giá trị đọc ra là Map
+ * (LinkedHashMap), List, String, Double, Boolean hoặc null.
  */
 public final class Json {
     private static final int MAX_DEPTH = 64;
@@ -21,7 +21,7 @@ public final class Json {
         this.text = text;
     }
 
-    /** Thrown for malformed JSON input. */
+    /** Ném ra khi JSON đầu vào sai định dạng. */
     public static final class JsonException extends RuntimeException {
         public JsonException(String message) {
             super(message);
@@ -57,7 +57,7 @@ public final class Json {
         return out.toString();
     }
 
-    // ---- reading ----
+    // ---- đọc ----
 
     private Object readValue(int depth) {
         if (depth > MAX_DEPTH) {
@@ -242,7 +242,7 @@ public final class Json {
         }
     }
 
-    // ---- writing ----
+    // ---- ghi ----
 
     private static void write(StringBuilder out, Object value) {
         if (value == null) {

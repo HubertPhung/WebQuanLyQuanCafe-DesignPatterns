@@ -14,8 +14,8 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * GET /api/customers (optionally ?phone=... for the POS member lookup): loyalty members with
- * their points and rank.
+ * GET /api/customers (có thể kèm ?phone=... để POS tra cứu thành viên): các thành viên tích điểm
+ * kèm số điểm và hạng.
  */
 public class CustomerHandler extends ApiHandler {
     private final ICustomerDao customerDao;

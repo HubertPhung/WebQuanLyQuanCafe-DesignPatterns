@@ -57,8 +57,8 @@ export async function shopify<T>(query: string, variables: Record<string, unknow
   return result.data
 }
 
-// Shopify when a store is connected; otherwise (or when Shopify fails) the café's own menu, so
-// every product a guest can order is one the POS, Java and the kitchen know.
+// Shopify khi đã kết nối cửa hàng; nếu không (hoặc khi Shopify lỗi) thì dùng chính thực đơn của
+// quán, để mọi món khách đặt được đều là món mà POS, Java và quầy pha chế biết.
 export async function getProducts(): Promise<Product[]> {
   const domain = process.env.SHOPIFY_STORE_DOMAIN?.replace(/^https?:\/\//, '').replace(/\/$/, '')
   if (!domain || !process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN) {

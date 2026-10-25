@@ -4,7 +4,7 @@ import java.io.Serializable;
 import java.util.Objects;
 
 /**
- * Variation option for a MenuItem (e.g. Size L, Hot, Iced, Pour-over grind).
+ * Tùy chọn biến thể của một MenuItem (ví dụ Size L, Nóng, Đá, xay cho pha phin).
  */
 public class Variation implements Serializable {
     private static final long serialVersionUID = 1L;

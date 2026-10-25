@@ -7,7 +7,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { SignJWT } from 'jose'
 
-// Read-only smoke test: opens the cancellation dialog, then keeps the real order.
+// Smoke test chỉ đọc: mở hộp thoại hủy, rồi giữ lại đơn thật.
 if (existsSync('.env.local')) loadEnvFile('.env.local')
 const base = process.env.TEST_BASE_URL ?? 'http://localhost:3000'
 const token = await new SignJWT({ role: 'ADMIN', name: 'KDS UI test', email: 'admin@test.local' })

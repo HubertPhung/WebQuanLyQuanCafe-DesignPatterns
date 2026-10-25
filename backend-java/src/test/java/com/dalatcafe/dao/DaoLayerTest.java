@@ -26,7 +26,7 @@ class DaoLayerTest {
     @BeforeEach
     void setUp() {
         db = InMemoryDatabase.getInstance();
-        db.reset(); // Reset to fresh baseline for each test
+        db.reset(); // Đặt lại dữ liệu mẫu sạch cho mỗi test
         tableDao = new InMemoryTableDao(db);
         menuDao = new InMemoryMenuDao(db);
         orderDao = new InMemoryOrderDao(db);
@@ -92,7 +92,7 @@ class DaoLayerTest {
             assertEquals(2, t1.getGuestCount());
             assertNotNull(t1.getOccupiedSince());
 
-            // Transition back to AVAILABLE
+            // Chuyển về lại AVAILABLE
             tableDao.updateStatus(1, TableStatus.AVAILABLE, 0);
             Table t1Cleared = tableDao.findById(1).orElseThrow();
             assertEquals(TableStatus.AVAILABLE, t1Cleared.getStatus());
@@ -281,14 +281,14 @@ class DaoLayerTest {
 
             assertEquals(CustomerRank.BRONZE, customerDao.findById(id).orElseThrow().getRank());
 
-            // Add order 700k -> upgrade to SILVER
+            // Thêm đơn 700k -> lên hạng SILVER
             assertTrue(customerDao.addOrderRecord(id, 700000.0, 70));
             Customer silverCustomer = customerDao.findById(id).orElseThrow();
             assertEquals(CustomerRank.SILVER, silverCustomer.getRank());
             assertEquals(700000.0, silverCustomer.getTotalSpent());
             assertEquals(70, silverCustomer.getLoyaltyPoints());
 
-            // Redeem 30 points
+            // Đổi 30 điểm
             assertTrue(customerDao.redeemPoints(id, 30));
             assertEquals(40, customerDao.findById(id).orElseThrow().getLoyaltyPoints());
         }
@@ -366,9 +366,9 @@ class DaoLayerTest {
         @DisplayName("DaoFactory should safely remain in IN_MEMORY when JDBC is unavailable")
         void testSafeFallback() {
             DaoFactory factory = DaoFactory.getInstance();
-            factory.setMode(DaoMode.JDBC); // When offline, this should safely fallback to IN_MEMORY
+            factory.setMode(DaoMode.JDBC); // Khi offline, phải chuyển an toàn sang IN_MEMORY
             assertNotNull(factory.getTableDao());
-            // System should not crash
+            // Hệ thống không được sập
             assertFalse(factory.getTableDao().findAll().isEmpty());
         }
 
@@ -377,7 +377,8 @@ class DaoLayerTest {
         void testJdbcAvailabilitySafety() {
             assertDoesNotThrow(() -> {
                 boolean available = JdbcDatabase.isAvailable();
-                // In CI / test environment without live PostgreSQL, it should safely return false without exception
+                // Trong CI / môi trường test không có PostgreSQL thật, phải trả về false một cách
+                // an toàn, không ném ngoại lệ
                 assertFalse(available);
             });
         }

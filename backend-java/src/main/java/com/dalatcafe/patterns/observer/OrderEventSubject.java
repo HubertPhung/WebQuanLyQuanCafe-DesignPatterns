@@ -11,15 +11,13 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Subject of the Observer pattern. The list is copy-on-write because checkout attaches a
- * per-customer observer while other request threads may be broadcasting.
- *
- * Observers are told in priority order (lower number first, attach order inside one priority),
- * so a dependency such as "update the table before the kitchen sees the ticket" is written down
- * in the code that attaches them, not left to the order of the attach lines.
+ * Subject của Observer pattern. Danh sách dùng copy-on-write vì checkout gắn observer theo từng
+ * khách trong khi các luồng request khác có thể đang phát sự kiện. Observer được báo theo thứ tự ưu
+ * tiên (số nhỏ trước, cùng ưu tiên thì theo thứ tự gắn), nên một phụ thuộc như "cập nhật bàn trước
+ * khi quầy thấy phiếu" được ghi rõ ở chỗ gắn observer, không phó mặc cho thứ tự các dòng attach.
  */
 public class OrderEventSubject {
-    /** Priority used by {@link #attach(IOrderObserver)}. */
+    /** Mức ưu tiên mà {@link #attach(IOrderObserver)} dùng. */
     public static final int DEFAULT_PRIORITY = 100;
 
     private static final Logger LOGGER = Logger.getLogger(OrderEventSubject.class.getName());
@@ -32,7 +30,7 @@ public class OrderEventSubject {
         attach(observer, DEFAULT_PRIORITY);
     }
 
-    /** Lower priority numbers are notified first. Attaching the same observer twice keeps the first. */
+    /** Số ưu tiên nhỏ hơn được báo trước. Gắn cùng một observer hai lần thì giữ lần đầu. */
     public synchronized void attach(IOrderObserver observer, int priority) {
         Objects.requireNonNull(observer, "Observer must not be null");
         for (Entry entry : observers) {
@@ -78,9 +76,9 @@ public class OrderEventSubject {
     }
 
     /**
-     * Every observer hears the event even when an earlier one fails: a missing table must not
-     * cost the kitchen its ticket. Each failure is logged with the observer's name; the first is
-     * rethrown afterwards, the rest suppressed.
+     * Mọi observer đều nhận sự kiện kể cả khi một observer trước đó lỗi: thiếu bàn không được làm
+     * quầy pha chế mất phiếu. Mỗi lỗi được ghi log kèm tên observer; lỗi đầu tiên được ném lại sau
+     * cùng, các lỗi sau gộp vào dạng suppressed.
      */
     private void notifyAll(Consumer<IOrderObserver> event) {
         RuntimeException failure = null;

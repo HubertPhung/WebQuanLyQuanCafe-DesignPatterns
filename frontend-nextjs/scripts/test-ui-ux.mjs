@@ -10,14 +10,14 @@ import { loadEnvFile } from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { SignJWT } from 'jose'
 
-// Match the local Next.js server's signing key without overriding CI's environment.
+// Khớp khóa ký của server Next.js local mà không ghi đè biến môi trường của CI.
 const localEnvFile = fileURLToPath(new URL('../.env.local', import.meta.url))
 if (existsSync(localEnvFile)) loadEnvFile(localEnvFile)
 
 const BASE_URL = process.env.TEST_BASE_URL || 'http://localhost:3000'
 
-// Session cookies for the admin pages, signed like the Java TokenService does (HS256). The
-// secret must match the server's AUTH_JWT_SECRET; locally both fall back to the dev secret.
+// Cookie phiên cho các trang admin, ký giống TokenService bên Java (HS256). Khóa bí mật phải khớp
+// AUTH_JWT_SECRET của server; ở local cả hai cùng dùng khóa dev.
 const JWT_SECRET = new TextEncoder().encode(process.env.AUTH_JWT_SECRET || 'dalatcafe-dev-only-secret-change-me-0123456789')
 
 async function sessionCookie(role, secret = JWT_SECRET) {
@@ -86,7 +86,7 @@ async function ensureServerRunning() {
     await new Promise((r) => setTimeout(r, 1000))
     if (await checkServer(BASE_URL)) {
       console.log(`✓ Next.js server successfully booted and ready at ${BASE_URL}!\n`)
-      // brief pause for routes to warm up
+      // dừng ngắn để các route khởi động
       await new Promise((r) => setTimeout(r, 1000))
       return
     }
@@ -112,7 +112,7 @@ async function fetchPage(url, options = {}) {
 async function runStorefrontTests() {
   console.log('\n--- 1. TESTING STOREFRONT UI/UX ---')
 
-  // TC-SF-01: Header & Brand Navigation
+  // TC-SF-01: Header và điều hướng thương hiệu
   try {
     const res = await fetchPage(`${BASE_URL}/`)
     if (res.status === 200 && res.body.includes('Đà Lạt Cafe') && res.body.includes('Staff Portal')) {
@@ -124,7 +124,7 @@ async function runStorefrontTests() {
     recordTest('TC-SF-01', 'Storefront Brand & Navigation Links', 'Storefront', 'FAIL', err.message)
   }
 
-  // TC-SF-02: Hero Section & Call to Actions
+  // TC-SF-02: Phần Hero và các nút kêu gọi hành động
   try {
     const res = await fetchPage(`${BASE_URL}/`)
     const hasHero = res.body.includes('Artisan coffee') && res.body.includes('Find your cup') && res.body.includes('Explore our beans')
@@ -137,7 +137,7 @@ async function runStorefrontTests() {
     recordTest('TC-SF-02', 'Hero Section Content & CTAs', 'Storefront', 'FAIL', err.message)
   }
 
-  // TC-SF-03: Menu Catalog Display from the café menu (Shopify not configured)
+  // TC-SF-03: Hiển thị thực đơn từ menu của quán (chưa cấu hình Shopify)
   try {
     const res = await fetchPage(`${BASE_URL}/`)
     const hasProducts = res.body.includes('Cà phê Latte Vani Mịn') && res.body.includes('Trà Đào Cam Sả')
@@ -151,10 +151,10 @@ async function runStorefrontTests() {
     recordTest('TC-SF-03', 'Catalog Display from the Café Menu', 'Storefront', 'FAIL', err.message)
   }
 
-  // TC-SF-04: Category Tabs & Filtering Elements
+  // TC-SF-04: Tab danh mục và các thành phần lọc
   try {
     const res = await fetchPage(`${BASE_URL}/`)
-    // Tabs follow the menu's own categories.
+    // Các tab theo đúng danh mục của thực đơn.
     const hasCategories = ['All favorites', 'Cà phê', 'Cà phê ủ lạnh'].every(c => res.body.includes(c))
     if (hasCategories) {
       recordTest('TC-SF-04', 'Category Tabs & Toolbar Controls', 'Storefront', 'PASS', 'Menu category filters rendered')
@@ -165,7 +165,7 @@ async function runStorefrontTests() {
     recordTest('TC-SF-04', 'Category Tabs & Toolbar Controls', 'Storefront', 'FAIL', err.message)
   }
 
-  // TC-SF-05: Accessibility & Semantic Structure
+  // TC-SF-05: Khả năng truy cập và cấu trúc ngữ nghĩa
   try {
     const res = await fetchPage(`${BASE_URL}/`)
     const hasA11y = res.body.includes('aria-label="Search coffee menu"') &&
@@ -180,7 +180,7 @@ async function runStorefrontTests() {
     recordTest('TC-SF-05', 'Accessibility & ARIA Attributes', 'Storefront', 'FAIL', err.message)
   }
 
-  // TC-SF-06: Journal & Footer Sections
+  // TC-SF-06: Góc kiến thức và chân trang
   try {
     const res = await fetchPage(`${BASE_URL}/`)
     const hasFooter = res.body.includes('NOTES FROM THE COFFEE BAR') && res.body.includes('©') && res.body.includes('Staff portal')
@@ -193,7 +193,7 @@ async function runStorefrontTests() {
     recordTest('TC-SF-06', 'Journal & Footer Brand Story', 'Storefront', 'FAIL', err.message)
   }
 
-  // TC-SF-07: Branch contact, cafe space gallery and the compact cart button
+  // TC-SF-07: Liên hệ chi nhánh, thư viện ảnh không gian quán và nút giỏ hàng gọn
   try {
     const res = await fetchPage(`${BASE_URL}/`)
     const ok = res.status === 200 &&
@@ -214,7 +214,7 @@ async function runCartAndWishlistTests() {
 
   let cookieHeader = ''
 
-  // TC-API-01: Favorites API (GET & POST)
+  // TC-API-01: API yêu thích (GET và POST)
   try {
     const postFav = await fetch(`${BASE_URL}/api/favorites`, {
       method: 'POST',
@@ -236,7 +236,8 @@ async function runCartAndWishlistTests() {
     recordTest('TC-API-01', 'Toggle Wishlist / Favorites Item', 'Cart & Wishlist', 'FAIL', err.message)
   }
 
-  // TC-API-02: Cart Add Item (ordering needs a signed-in account; a guest is sent to sign in)
+  // TC-API-02: Thêm món vào giỏ (đặt món cần tài khoản đã đăng nhập; khách vãng lai được đưa đi
+  // đăng nhập)
   try {
     const addDrink = JSON.stringify({
       action: 'add',
@@ -265,7 +266,7 @@ async function runCartAndWishlistTests() {
 
     const cartData = await postCart.json()
     const addedLine = cartData.lines?.nodes?.[0]
-    // Size L is its own variant and the sugar choice is kept on the line.
+    // Size L là biến thể riêng và lựa chọn đường được giữ trên dòng.
     if (
       guestBlocked &&
       postCart.status === 200 &&
@@ -277,7 +278,7 @@ async function runCartAndWishlistTests() {
       
       const lineId = cartData.lines.nodes[0].id
 
-      // TC-API-03: Cart Update Quantity
+      // TC-API-03: Cập nhật số lượng trong giỏ
       const qtyRes = await fetch(`${BASE_URL}/api/cart`, {
         method: 'POST',
         headers: {
@@ -294,7 +295,7 @@ async function runCartAndWishlistTests() {
         recordTest('TC-API-03', 'Update Item Quantity in Cart (+/-)', 'Cart & Wishlist', 'FAIL', `Qty update failed: ${JSON.stringify(qtyData)}`)
       }
 
-      // TC-API-04: Cart Note
+      // TC-API-04: Ghi chú giỏ hàng
       const noteRes = await fetch(`${BASE_URL}/api/cart`, {
         method: 'POST',
         headers: {
@@ -311,7 +312,7 @@ async function runCartAndWishlistTests() {
         recordTest('TC-API-04', 'Add Barista Order Note to Cart', 'Cart & Wishlist', 'FAIL', `Note update failed`)
       }
 
-      // TC-API-05: Cart Discount Code
+      // TC-API-05: Mã giảm giá trong giỏ
       const promoRes = await fetch(`${BASE_URL}/api/cart`, {
         method: 'POST',
         headers: {
@@ -365,7 +366,8 @@ async function runAdminUITests() {
     }
   }
 
-  // TC-ADM-11: the header's branch switch (admin_branch cookie) shows that branch's floor only
+  // TC-ADM-11: nút chuyển chi nhánh trên header (cookie admin_branch) chỉ hiện sơ đồ bàn của chi
+  // nhánh đó
   try {
     const first = await fetchPage(`${BASE_URL}/admin/tables`, { headers: { Cookie: adminCookie } })
     const second = await fetchPage(`${BASE_URL}/admin/tables`, { headers: { Cookie: `${adminCookie}; admin_branch=bui-thi-xuan` } })
@@ -380,7 +382,7 @@ async function runAdminUITests() {
     recordTest('TC-ADM-11', 'Branch Switch Shows Only That Branch', 'Admin UI', 'FAIL', err.message)
   }
 
-  // TC-ADM-10: the header has no search box; its bell links each alert to the page that resolves it
+  // TC-ADM-10: header không có ô tìm kiếm; chuông dẫn mỗi thông báo tới trang xử lý nó
   try {
     const res = await fetchPage(`${BASE_URL}/admin`, { headers: { Cookie: adminCookie } })
     const noSearch = !res.body.includes('role="search"') && !res.body.includes('Tìm kiếm nhanh')
@@ -399,11 +401,11 @@ async function runAdminUITests() {
 async function runAdminMutationTests() {
   console.log('\n--- 4. TESTING ADMIN SERVER ACTIONS & STATE MUTATIONS ---')
 
-  // We can test Server Actions by dynamically importing or calling mock store functions directly!
+  // Có thể test Server Action bằng cách import động hoặc gọi thẳng các hàm của mock store!
   try {
     const { getMockActiveOrders, updateMockOrderStatus, updateMockTableStatus, createMockOrder, setMockItemInStock, createMockMenuItem, getMockTables, getMockMenuItems } = await import('../lib/db/mock-store.ts')
 
-    // TC-ACT-01: Create Order
+    // TC-ACT-01: Tạo đơn
     const orderRes = createMockOrder({
       lines: [{ menuItemId: 1, qty: 2 }],
       customer: 'Automated Tester',
@@ -412,7 +414,7 @@ async function runAdminMutationTests() {
       paymentMethod: 'card',
       paid: true,
     })
-    // Quantities are not tracked: only an unknown or switched-off item refuses a line.
+    // Không theo dõi số lượng: chỉ món không tồn tại hoặc đang tắt bán mới từ chối một dòng.
     const unknownItem = createMockOrder({
       lines: [{ menuItemId: 999999, qty: 1 }],
       customer: 'Automated Unknown Item',
@@ -428,7 +430,7 @@ async function runAdminMutationTests() {
       recordTest('TC-ACT-01', 'Place Order via POS', 'Admin Actions', 'FAIL', `${orderRes.error ?? ''} unknown=${JSON.stringify(unknownItem)} tableSeated=${tableSeated}`)
     }
 
-    // TC-ACT-02: Kitchen Status Progression
+    // TC-ACT-02: Chuyển trạng thái ở quầy pha chế
     const activeOrders = getMockActiveOrders()
     const targetOrder = activeOrders.find(o => o.customer === 'Automated Tester') || activeOrders[0]
     if (targetOrder) {
@@ -444,7 +446,7 @@ async function runAdminMutationTests() {
       recordTest('TC-ACT-02', 'Progress Ticket through Kitchen Display', 'Admin Actions', 'FAIL', 'No active order found')
     }
 
-    // TC-ACT-03: Table Status Update
+    // TC-ACT-03: Cập nhật trạng thái bàn
     const tableUpdateRes = updateMockTableStatus(1, 'occupied', 2)
     const tables = getMockTables()
     const table1 = tables.find(t => t.id === 1)
@@ -454,19 +456,19 @@ async function runAdminMutationTests() {
       recordTest('TC-ACT-03', 'Change Table Status & Guests', 'Admin Actions', 'FAIL', 'Table status failed')
     }
 
-    // TC-ACT-04: Inventory Toggle
+    // TC-ACT-04: Bật/tắt bán món
     const stockRes = setMockItemInStock(1, false)
     const menu = getMockMenuItems()
     const item1 = menu.find(m => m.id === 1)
     if (stockRes.ok && item1?.inStock === false) {
-      // Toggle back to true
+      // Bật lại về true
       setMockItemInStock(1, true)
       recordTest('TC-ACT-04', 'Toggle Menu Item Stock Availability', 'Admin Actions', 'PASS', 'Item marked out of stock and restored')
     } else {
       recordTest('TC-ACT-04', 'Toggle Menu Item Stock Availability', 'Admin Actions', 'FAIL', 'Stock toggle failed')
     }
 
-    // TC-ACT-05: Create Menu Item
+    // TC-ACT-05: Tạo món
     const createItemRes = createMockMenuItem({
       name: 'Matcha Blossom Latte',
       category: 'Specialty',
@@ -486,7 +488,7 @@ async function runAdminMutationTests() {
       recordTest('TC-ACT-05', 'Add New Menu Item to Catalog & POS', 'Admin Actions', 'FAIL', createItemRes.error)
     }
 
-    // TC-ACT-06: Completing a dine-in ticket frees the table for cleaning (mirrors the Java Observer)
+    // TC-ACT-06: Hoàn tất phiếu ăn tại chỗ thì bàn được nhả để dọn (giống Observer bên Java)
     updateMockTableStatus(6, 'available', 0)
     createMockOrder({
       lines: [{ menuItemId: 1, qty: 1 }],
@@ -506,7 +508,8 @@ async function runAdminMutationTests() {
       recordTest('TC-ACT-06', 'Paid Order Seats Table, Completed Ticket Sends It to Cleaning', 'Admin Actions', 'FAIL', `seated=${seated}, after=${freed?.status}`)
     }
 
-    // TC-ACT-07: An order priced by Java (member discount, redeemed points) keeps Java's totals locally
+    // TC-ACT-07: Đơn do Java tính giá (giảm giá thành viên, đổi điểm) giữ nguyên tổng tiền của Java
+    // ở cục bộ
     createMockOrder({
       lines: [{ menuItemId: 1, qty: 1 }],
       customer: 'Loyalty Tester',
@@ -524,7 +527,7 @@ async function runAdminMutationTests() {
       recordTest('TC-ACT-07', 'Mirror Java Receipt Totals After Point Redemption', 'Admin Actions', 'FAIL', `total=${priced?.total}`)
     }
 
-    // TC-ACT-08: Offline sync loads queued orders back by their code
+    // TC-ACT-08: Đồng bộ offline nạp lại các đơn trong hàng đợi theo mã
     const { getMockOrdersByCode } = await import('../lib/db/mock-store.ts')
     const queued = getMockOrdersByCode(['AC-9001', 'AC-NOT-THERE'])
     if (queued.length === 1 && queued[0].orderCode === 'AC-9001' && queued[0].items.length === 1) {
@@ -533,7 +536,7 @@ async function runAdminMutationTests() {
       recordTest('TC-ACT-08', 'Load Offline Orders by Code for Java Sync', 'Admin Actions', 'FAIL', `found=${queued.length}`)
     }
 
-    // TC-ACT-09: A new menu item reports its id so it can be linked to the Java menu item
+    // TC-ACT-09: Món mới trả về id để liên kết với món bên Java
     const linked = createMockMenuItem({
       name: 'Atiso Cold Tea', category: 'Tea', kind: 'menu', unit: 'cups',
       costPrice: 1, sellPrice: 3.5, recipe: '', imageUrl: '', variations: [],
@@ -545,10 +548,11 @@ async function runAdminMutationTests() {
       recordTest('TC-ACT-09', 'New Menu Item Returns Its Id for the Java Link', 'Admin Actions', 'FAIL', linked.error ?? 'id missing')
     }
 
-    // TC-ACT-10: With Java offline, the local reservation fallback refuses what the Java chain refuses
+    // TC-ACT-10: Khi Java offline, bản dự phòng đặt bàn cục bộ từ chối đúng những gì chuỗi Java từ
+    // chối
     const { createMockReservation, updateMockReservationStatus } = await import('../lib/db/mock-store.ts')
     const bookedTable = getMockTables().find(t => t.seats >= 2)
-    // A month ahead so no seeded booking shares the slot; UTC 03:00 is 10:00 in Đà Lạt.
+    // Một tháng sau để không phiếu mẫu nào trùng khung giờ; 03:00 UTC là 10:00 ở Đà Lạt.
     const at = (utcHour, utcMinute = 0) => {
       const day = new Date(Date.now() + 30 * 86400000)
       day.setUTCHours(utcHour, utcMinute, 0, 0)
@@ -567,7 +571,8 @@ async function runAdminMutationTests() {
       recordTest('TC-ACT-10', 'Offline Reservation Fallback Applies the Java Chain Rules', 'Admin Actions', 'FAIL', JSON.stringify({ accepted, sameSlot, lateNight, pastSlot, afterCancel }))
     }
 
-    // TC-ACT-11: With Java offline, cash tendered below the total is refused as the Java Facade does
+    // TC-ACT-11: Khi Java offline, tiền mặt khách đưa ít hơn tổng tiền bị từ chối như Facade bên
+    // Java
     const cashOrder = (customer, paymentMethod, tenderedAmount) => createMockOrder({
       lines: [{ menuItemId: 1, qty: 1 }], customer, tableId: null, orderType: 'pickup', paymentMethod, paid: true, tenderedAmount,
     })
@@ -581,8 +586,8 @@ async function runAdminMutationTests() {
       recordTest('TC-ACT-11', 'Offline Cash Sale Must Be Covered by the Cash Tendered', 'Admin Actions', 'FAIL', JSON.stringify({ short, shortRecorded, covered, card }))
     }
 
-    // TC-ACT-12: Orders and bookings belong to a branch: a table decides it, pickup names it,
-    // and one booking cannot join tables of both branches
+    // TC-ACT-12: Đơn và phiếu đặt thuộc một chi nhánh: bàn quyết định chi nhánh, đơn đến lấy tự ghi
+    // chi nhánh, và một phiếu không ghép được bàn của hai chi nhánh
     const secondTable = getMockTables().find(t => t.branch === 'bui-thi-xuan')
     const secondTables = getMockTables().filter(t => t.branch === 'bui-thi-xuan')
     createMockOrder({ lines: [{ menuItemId: 1, qty: 1 }], customer: 'Branch Dine-in', tableId: secondTable.id, orderType: 'dine-in', paymentMethod: 'card', paid: true })
@@ -600,7 +605,7 @@ async function runAdminMutationTests() {
       recordTest('TC-ACT-12', 'Orders and Bookings Belong to One Branch', 'Admin Actions', 'FAIL', JSON.stringify({ tables: secondTables.length, dineIn: branchOf('Branch Dine-in'), pickup: branchOf('Branch Pickup'), mixed, wrongBranch, joined, joinedBranch }))
     }
 
-    // TC-ACT-13: A menu item can be edited and removed; a name another item uses is refused
+    // TC-ACT-13: Món có thể sửa và xóa; tên mà món khác đang dùng bị từ chối
     const { updateMockMenuItem, deleteMockMenuItem, updateMockReservation } = await import('../lib/db/mock-store.ts')
     const editable = createMockMenuItem({
       name: 'Edit Me Latte', category: 'Specialty', kind: 'menu', unit: 'ly',
@@ -622,8 +627,8 @@ async function runAdminMutationTests() {
       recordTest('TC-ACT-13', 'Edit and Delete a Menu Item', 'Admin Actions', 'FAIL', JSON.stringify({ renamed, edited, clash, removed, gone }))
     }
 
-    // TC-ACT-14: A booking can be edited (time, guests, tables) without clashing with itself;
-    // a move onto a booked table or a cancelled booking is refused and changes nothing
+    // TC-ACT-14: Phiếu đặt có thể sửa (giờ, số khách, bàn) mà không trùng với chính nó; chuyển sang
+    // bàn đã có lịch hoặc sửa phiếu đã hủy bị từ chối và không đổi gì
     const freeTables = getMockTables().filter(t => t.branch === 'phan-dinh-phung' && t.seats >= 4)
     const base = { customer: 'Edit Booking', contact: '0900000030', email: null, note: null, guests: 2 }
     const own = createMockReservation({ ...base, dateTime: at(4), tableId: freeTables[0].id })
@@ -715,7 +720,7 @@ async function runAuthTests() {
         const offSite = ['//evil.com', '/\\evil.com', '/\t/evil.com', '/\n/evil.com', '/\\\t\\evil.com', 'https://evil.com', 'evil.com']
           .filter((next) => safeNext(next) !== null)
         const kept = safeNext('/admin/pos?tab=kitchen#ticket') === '/admin/pos?tab=kitchen#ticket'
-        // The form posts its hidden "next" field; it must come out empty for an off-site target.
+        // Form gửi trường ẩn "next"; với đích ngoài trang thì trường này phải trống.
         const res = await fetchPage(`${BASE_URL}/login?next=${encodeURIComponent('/\t/evil.com')}`)
         const field = res.body.match(/<input[^>]*name="next"[^>]*>/)?.[0] ?? ''
         const ok = offSite.length === 0 && kept && res.status === 200 && field.includes('value=""')

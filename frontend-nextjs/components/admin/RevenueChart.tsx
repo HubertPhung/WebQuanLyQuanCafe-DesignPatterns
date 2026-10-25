@@ -43,7 +43,7 @@ export function RevenueChart({ data = defaultRevenueData }: RevenueChartProps) {
 
   return (
     <div className="rounded-xl border border-stone-200/80 bg-white p-6 md:p-8 min-h-[420px] md:min-h-[460px] shadow-sm transition-all duration-300 hover:shadow-md hover:border-stone-300 flex flex-col justify-between gap-6">
-      {/* Header with Title and Mode Switcher */}
+      {/* Phần đầu với tiêu đề và nút đổi kiểu biểu đồ */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl md:text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
@@ -56,7 +56,7 @@ export function RevenueChart({ data = defaultRevenueData }: RevenueChartProps) {
           </p>
         </div>
 
-        {/* Toggle Area vs Bar */}
+        {/* Chuyển giữa biểu đồ vùng và cột */}
         <div className="flex items-center gap-1.5 rounded-lg bg-stone-100 p-1.5 border border-stone-200 self-start sm:self-auto">
           <Button
             size="sm"
@@ -85,7 +85,7 @@ export function RevenueChart({ data = defaultRevenueData }: RevenueChartProps) {
         </div>
       </div>
 
-      {/* Chart Visualization Area */}
+      {/* Vùng hiển thị biểu đồ */}
       <div className="w-full">
         <ChartContainer config={revenueConfig} className="aspect-auto h-72 md:h-[320px] w-full">
           {chartMode === 'area' ? (

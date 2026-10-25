@@ -13,7 +13,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * JDBC PostgreSQL implementation of IReservationDao.
+ * Bản cài đặt IReservationDao bằng JDBC PostgreSQL.
  */
 public class JdbcReservationDao implements IReservationDao {
     private static final Logger LOGGER = Logger.getLogger(JdbcReservationDao.class.getName());
@@ -145,7 +145,7 @@ public class JdbcReservationDao implements IReservationDao {
                  PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
                 String code = res.getReservationCode();
                 boolean generated = code == null || code.isBlank();
-                // A unique placeholder until the id is known; renamed to RES-0001 style below.
+                // Giá trị tạm duy nhất cho tới khi biết id; bên dưới sẽ đổi sang dạng RES-0001.
                 ps.setString(1, generated ? "TMP-" + UUID.randomUUID() : code);
                 ps.setString(2, res.getCustomer());
                 ps.setString(3, res.getContact());

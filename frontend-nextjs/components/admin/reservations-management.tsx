@@ -33,7 +33,7 @@ export type ReservationStatus = ReservationStatusLabel
 type Reservation = ReservationView
 
 const emptyForm = { customer: '', contact: '', email: '', date: '', time: '10:00', guests: '2', tableId: '', note: '' }
-// tableId value that keeps the tables a joined booking already has.
+// Giá trị tableId để giữ các bàn mà phiếu ghép đang có.
 const KEEP_GROUP = 'group'
 
 const formDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' })
@@ -159,7 +159,7 @@ export function ReservationsManagement({
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [selectedRes, setSelectedRes] = useState<Reservation | null>(null)
   const [creating, setCreating] = useState(false)
-  // The booking being edited; the create form is reused, filled with its values.
+  // Phiếu đang được sửa; dùng lại form tạo phiếu, điền sẵn giá trị của nó.
   const [editing, setEditing] = useState<Reservation | null>(null)
   const [form, setForm] = useState(emptyForm)
   const [pending, startTransition] = useTransition()
@@ -198,7 +198,8 @@ export function ReservationsManagement({
 
   const handleStatusChange = (res: Reservation, newStatus: ReservationStatus) => {
     startTransition(async () => {
-      // Java bookings go through PATCH /api/reservations/{code}/status; local ones stay in the mock store.
+      // Phiếu bên Java đi qua PATCH /api/reservations/{code}/status; phiếu cục bộ nằm trong mock
+      // store.
       const result = await updateReservationStatus(res.id, res.source, newStatus)
       if (!result.ok) {
         toast.error(result.error)
@@ -212,7 +213,8 @@ export function ReservationsManagement({
 
   const handleTransferToPOS = (res: Reservation) => {
     startTransition(async () => {
-      // ReservationToOrderAdapter (Java, or its frontend mirror for local bookings) opens the POS order.
+      // ReservationToOrderAdapter (bên Java, hoặc bản sao phía frontend cho phiếu cục bộ) mở đơn
+      // POS.
       const result = await transferReservationToPos(res.id, res.source, res.guests)
       if (!result.ok) {
         toast.error(result.error)
@@ -249,7 +251,7 @@ export function ReservationsManagement({
     setForm(emptyForm)
   }
 
-  // Tables the form books: one chosen table, or the joined tables an edited booking keeps.
+  // Các bàn form sẽ đặt: một bàn đã chọn, hoặc các bàn ghép mà phiếu đang sửa giữ lại.
   const chosenTables = form.tableId === KEEP_GROUP && editing ? bookingTables(editing) : form.tableId ? [Number(form.tableId)] : []
   const chosenTaken = chosenTables.some(id => bookedTableIds.has(id))
 
@@ -265,7 +267,7 @@ export function ReservationsManagement({
       contact: form.contact,
       email: form.email,
       note: form.note,
-      // Local time at the café (UTC+7), as the Java OperatingHoursValidator expects.
+      // Giờ địa phương ở quán (UTC+7), đúng như OperatingHoursValidator bên Java mong đợi.
       dateTime: new Date(`${form.date}T${form.time}:00+07:00`).toISOString(),
       guests,
       tableId: chosenTables[0],
@@ -472,7 +474,7 @@ export function ReservationsManagement({
               </div>
               {selectedRes.note && <div className="rounded-lg border border-stone-200 bg-stone-50 p-3.5 text-stone-700"><p className="mb-1 text-xs text-stone-500">Ghi chú của khách</p><p className="break-words">{selectedRes.note}</p></div>}
 
-              {/* Pre-ordered items list */}
+              {/* Danh sách món đặt trước */}
               <div>
                 <h4 className="font-bold text-xs text-stone-900 mb-2 flex items-center gap-1.5">
                   <UtensilsCrossed className="size-4 text-[#5A3E2B]" />

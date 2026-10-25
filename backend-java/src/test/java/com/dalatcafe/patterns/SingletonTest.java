@@ -60,7 +60,7 @@ class SingletonTest {
             for (int i = 0; i < threadCount; i++) {
                 executor.submit(() -> {
                     try {
-                        startLatch.await(); // Wait for all threads to align
+                        startLatch.await(); // Chờ mọi luồng sẵn sàng
                         instances.add(SystemConfigManager.getInstance());
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
@@ -70,7 +70,7 @@ class SingletonTest {
                 });
             }
 
-            startLatch.countDown(); // Release all threads simultaneously
+            startLatch.countDown(); // Thả mọi luồng chạy cùng lúc
             doneLatch.await();
             executor.shutdown();
 
@@ -134,21 +134,21 @@ class SingletonTest {
         @Test
         @DisplayName("isWithinOperatingHours should validate opening/closing boundaries accurately")
         void testOperatingHoursCheck() {
-            // Before opening (07:00)
+            // Trước giờ mở cửa (07:00)
             assertFalse(config.isWithinOperatingHours(LocalTime.of(6, 59, 59)));
             assertFalse(config.isWithinOperatingHours(LocalTime.of(5, 0)));
 
-            // Exact boundary opening (07:00)
+            // Đúng mốc mở cửa (07:00)
             assertTrue(config.isWithinOperatingHours(LocalTime.of(7, 0)));
 
-            // Middle of day
+            // Giữa ngày
             assertTrue(config.isWithinOperatingHours(LocalTime.of(12, 30)));
             assertTrue(config.isWithinOperatingHours(LocalTime.of(18, 45)));
 
-            // Exact boundary closing (22:00)
+            // Đúng mốc đóng cửa (22:00)
             assertTrue(config.isWithinOperatingHours(LocalTime.of(22, 0)));
 
-            // After closing (22:00)
+            // Sau giờ đóng cửa (22:00)
             assertFalse(config.isWithinOperatingHours(LocalTime.of(22, 0, 1)));
             assertFalse(config.isWithinOperatingHours(LocalTime.of(23, 30)));
         }

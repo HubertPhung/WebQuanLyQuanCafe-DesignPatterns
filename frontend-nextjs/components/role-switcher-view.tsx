@@ -52,7 +52,7 @@ export function RoleSwitcherView({
   const { data: cart, mutate: mutateCart } = useSWR<Cart | null>('/api/cart', fetcher)
   const { data: favorites = [], mutate: mutateFavorites } = useSWR<string[]>('/api/favorites', fetcher)
 
-  // Sync SWR cart to Zustand global store
+  // Đồng bộ giỏ hàng SWR vào store toàn cục Zustand
   useEffect(() => {
     if (cart) {
       useCartStore.getState().setCart(cart)
@@ -94,12 +94,12 @@ export function RoleSwitcherView({
 
   return (
     <div className="bg-[#FAF8F5] text-stone-900 min-h-screen selection:bg-amber-100 selection:text-amber-900 font-sans">
-      {/* 1. DEDICATED CUSTOMER STOREFRONT */}
+      {/* 1. STOREFRONT DÀNH RIÊNG CHO KHÁCH HÀNG */}
       <main className="min-h-screen">
-        {/* Modular Sticky Header with AccountDropdown & CartSheet */}
+        {/* Header dính theo cuộn, có AccountDropdown và CartSheet */}
         <Header account={account} favoritesCount={favorites.length} />
 
-        {/* Hero Section Component */}
+        {/* Phần Hero */}
         <Hero
           onBrowseBeans={() => {
             const el = document.getElementById('menu')
@@ -112,7 +112,7 @@ export function RoleSwitcherView({
           }}
         />
 
-        {/* Brand Values Strip */}
+        {/* Dải giá trị thương hiệu */}
         <section className="values-strip" aria-label="Giá trị cốt lõi cà phê Đà Lạt Cafe">
           <span>
             <Bean />
@@ -132,7 +132,7 @@ export function RoleSwitcherView({
           </span>
         </section>
 
-        {/* Menu Catalog Component */}
+        {/* Thực đơn */}
         <DrinkMenu
           products={products}
           catalogError={catalogError}
@@ -141,7 +141,7 @@ export function RoleSwitcherView({
           onAddToCart={handleAddToCart}
         />
 
-        {/* Whole Bean Feature Showcase */}
+        {/* Giới thiệu cà phê hạt nguyên */}
         {products
           .filter((p) => p.productType === 'Whole Bean')
           .map((p) => (
@@ -162,7 +162,7 @@ export function RoleSwitcherView({
             </section>
           ))}
 
-        {/* Coffee Story Section */}
+        {/* Câu chuyện cà phê */}
         <section className="story-section section-shell scroll-mt-24 lg:min-h-[calc(100vh-106px)] flex items-center" id="story">
           <div className="story-image">
             <img src="/images/hero.png" alt="Tách cà phê ấm áp, được chế tác từ tâm" loading="lazy" />
@@ -187,7 +187,7 @@ export function RoleSwitcherView({
           </div>
         </section>
 
-        {/* Educational Coffee Journal Section */}
+        {/* Góc kiến thức cà phê */}
         <section id="journal" className="journal section-shell scroll-mt-24 py-12 md:py-16">
           <p className="eyebrow">
             GÓC CÀ PHÊ · KHÔNG GIAN QUÁN <span className="sr-only">NOTES FROM THE COFFEE BAR</span>
@@ -199,7 +199,7 @@ export function RoleSwitcherView({
           </p>
           <CafeSpace />
 
-          {/* Inline margin: the unlayered ".journal>h2 { margin-top }" rule would override a Tailwind class. */}
+          {/* Margin viết inline: quy tắc ".journal>h2 { margin-top }" không nằm trong layer sẽ thắng class Tailwind. */}
           <h2 style={{ marginTop: '4rem' }}>Hành trình cho một tách cà phê trọn vị.</h2>
           <div className="journal-grid">
             {[
@@ -225,10 +225,10 @@ export function RoleSwitcherView({
           </div>
         </section>
 
-        {/* Reservation Modal for Customer Table Booking */}
+        {/* Hộp thoại đặt bàn cho khách */}
         <ReservationDialog />
 
-        {/* Footer Component */}
+        {/* Chân trang */}
         <CoffeeFooter storeDomain={storeDomain} />
       </main>
     </div>

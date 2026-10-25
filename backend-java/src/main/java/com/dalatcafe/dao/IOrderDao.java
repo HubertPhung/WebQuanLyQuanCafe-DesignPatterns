@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Data Access Object interface for Order entity.
+ * Interface Data Access Object cho thực thể Order.
  */
 public interface IOrderDao {
     List<Order> findAll();
@@ -20,7 +20,9 @@ public interface IOrderDao {
     boolean save(Order order);
     boolean updateStatus(int id, OrderStatus status);
     boolean updatePaymentStatus(int id, PaymentStatus paymentStatus);
-    /** All rows must still be unpaid; implementations commit every payment status together. */
+    /**
+     * Mọi dòng phải còn chưa thanh toán; bản cài đặt ghi trạng thái thanh toán của tất cả cùng lúc.
+     */
     default boolean markPaidTogether(List<Integer> ids, PaymentMethod method, java.util.function.BooleanSupplier payment) { return false; }
     boolean deleteById(int id);
 }

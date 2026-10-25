@@ -6,7 +6,7 @@ public abstract class ReservationValidatorHandler {
     protected ReservationValidatorHandler nextHandler;
 
     public void setNext(ReservationValidatorHandler next) {
-        // Reject cycles when assembling or extending a chain.
+        // Từ chối vòng lặp khi lắp hoặc nối dài chuỗi.
         for (ReservationValidatorHandler handler = next; handler != null; handler = handler.nextHandler) {
             if (handler == this) {
                 throw new IllegalArgumentException("Validation chain must not contain a cycle");

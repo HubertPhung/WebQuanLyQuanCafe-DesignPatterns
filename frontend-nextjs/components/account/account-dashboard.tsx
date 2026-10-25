@@ -52,8 +52,8 @@ function initials(name: string) {
     .toUpperCase()
 }
 
-// Customer account area: the signed-in user, their online orders and addresses, and the
-// membership of the phone on their latest order (all loaded by the server page).
+// Khu vực tài khoản khách hàng: người dùng đang đăng nhập, đơn online và địa chỉ của họ, cùng hạng
+// thành viên của số điện thoại trong đơn gần nhất (tất cả do trang server nạp).
 export function AccountDashboard({
   user,
   currentTab,
@@ -74,7 +74,7 @@ export function AccountDashboard({
 
   return (
     <div className="min-h-screen bg-[#FAF8F5] text-stone-900 font-sans pb-16">
-      {/* Top Header */}
+      {/* Phần đầu trang */}
       <header className="border-b border-stone-200/80 bg-white sticky top-0 z-40">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2 group">
@@ -95,7 +95,7 @@ export function AccountDashboard({
 
       <main className="max-w-6xl mx-auto px-4 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Left Sidebar: Profile Card & Navigation Tabs */}
+          {/* Thanh bên trái: thẻ hồ sơ và các tab điều hướng */}
           <div className="lg:col-span-4 space-y-6">
             <div className="rounded-2xl border border-stone-200/80 bg-white p-6 shadow-xs text-center space-y-4">
               <Avatar className="size-20 mx-auto border-3 border-amber-200 shadow-sm">
@@ -109,7 +109,7 @@ export function AccountDashboard({
                 <p className="text-xs text-stone-500 break-all">{user.email}</p>
               </div>
 
-              {/* Loyalty Tier Box: Java ranks members by lifetime spend; points come from paid orders. */}
+              {/* Ô hạng thành viên: Java xếp hạng theo tổng chi tiêu; điểm đến từ các đơn đã thanh toán. */}
               <div className="rounded-xl bg-gradient-to-r from-amber-50 to-amber-100/60 p-3.5 border border-amber-200/70 text-left space-y-1.5">
                 {member && tier ? (
                   <>
@@ -142,7 +142,7 @@ export function AccountDashboard({
               </div>
             </div>
 
-            {/* Navigation Tabs */}
+            {/* Các tab điều hướng */}
             <nav className="rounded-2xl border border-stone-200/80 bg-white p-2 shadow-xs space-y-1 text-xs font-semibold">
               <Link
                 href="/account/orders"
@@ -205,9 +205,9 @@ export function AccountDashboard({
             </nav>
           </div>
 
-          {/* Right Main Content Panel */}
+          {/* Khung nội dung chính bên phải */}
           <div className="lg:col-span-8 space-y-6">
-            {/* TAB: ORDERS */}
+            {/* TAB: ĐƠN HÀNG */}
             {currentTab === 'orders' && (
               <>
               <ReservationHistory reservations={overview.reservations} unavailable={overview.reservationsUnavailable} />
@@ -257,7 +257,7 @@ export function AccountDashboard({
               </>
             )}
 
-            {/* TAB: VOUCHERS */}
+            {/* TAB: VOUCHER */}
             {currentTab === 'vouchers' && (
               <div className="rounded-2xl border border-stone-200/80 bg-white p-6 shadow-xs space-y-5">
                 <h3 className="font-bold text-lg text-stone-900 flex items-center gap-2">
@@ -292,7 +292,7 @@ export function AccountDashboard({
               </div>
             )}
 
-            {/* TAB: ADDRESSES */}
+            {/* TAB: ĐỊA CHỈ */}
             {currentTab === 'addresses' && (
               <div className="rounded-2xl border border-stone-200/80 bg-white p-6 shadow-xs space-y-5">
                 <h3 className="font-bold text-lg text-stone-900 flex items-center gap-2">
@@ -326,7 +326,7 @@ export function AccountDashboard({
               </div>
             )}
 
-            {/* TAB: SETTINGS */}
+            {/* TAB: CÀI ĐẶT */}
             {currentTab === 'settings' && (
               <div className="rounded-2xl border border-stone-200/80 bg-white p-6 shadow-xs space-y-5">
                 <h3 className="font-bold text-lg text-stone-900 flex items-center gap-2">

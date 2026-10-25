@@ -21,7 +21,7 @@ export const viewport: Viewport = {
 }
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  // proxy.ts already redirected visitors; this is the authoritative check for every admin page.
+  // proxy.ts đã chuyển hướng khách; đây mới là bước kiểm tra chính thức cho mọi trang admin.
   const session = await requirePageRole('STAFF', '/admin')
   const [header, branch] = await Promise.all([getHeaderData(), getAdminBranch()])
 
@@ -30,7 +30,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <SidebarProvider data-admin className="bg-[#F7F5F0] text-stone-900 font-sans antialiased">
           <AdminSidebar role={session.role} badges={{ orders: header.activeCount, reservations: header.pendingReservations.length }} />
           <SidebarInset className="min-w-0 relative bg-[#F7F5F0] text-stone-900 overflow-x-hidden">
-            {/* Ambient subtle warm coffee glow accents */}
+            {/* Các vệt sáng ấm nhẹ màu cà phê làm nền */}
             <div
               className="pointer-events-none absolute -top-40 right-1/4 -z-10 size-96 rounded-full bg-amber-500/5 blur-3xl"
               aria-hidden="true"

@@ -10,7 +10,7 @@ const EASE_OUT = [0.22, 1, 0.36, 1] as const
 const inputClass =
   'h-11 w-full rounded-xl border border-stone-300 bg-white px-3.5 text-base text-stone-900 shadow-2xs transition-[border-color,box-shadow] duration-200 placeholder:text-stone-400 focus:border-[#5A3E2B] focus:outline-none focus:ring-4 focus:ring-amber-600/15 aria-[invalid=true]:border-rose-400 aria-[invalid=true]:ring-rose-500/15 sm:text-sm'
 
-// Fields fade in one after another when the card appears.
+// Các ô nhập lần lượt hiện dần khi thẻ xuất hiện.
 const list = { shown: { transition: { staggerChildren: 0.05, delayChildren: 0.08 } } }
 const item = { hidden: { opacity: 0, y: 8 }, shown: { opacity: 1, y: 0, transition: { duration: 0.3, ease: EASE_OUT } } }
 
@@ -88,7 +88,7 @@ function PasswordField({
   )
 }
 
-// Same rule as the Java backend (8+ characters with a letter and a digit), plus two bonus points.
+// Cùng quy tắc với backend Java (từ 8 ký tự, có chữ cái và chữ số), cộng thêm hai điểm thưởng.
 function strength(password: string) {
   if (!password) return 0
   let score = 0
@@ -163,7 +163,7 @@ function SubmitButton({ pending, idle, busy }: { pending: boolean; idle: string;
       whileTap={pending ? undefined : { scale: 0.98 }}
       className="group relative flex h-11 w-full cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-xl bg-gradient-to-r from-[#3E2723] via-[#5A3E2B] to-[#3E2723] text-sm font-bold text-white shadow-[0_6px_16px_rgba(62,39,35,0.25)] transition-colors duration-200 hover:bg-[#5A3E2B] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-600/30 disabled:cursor-wait disabled:opacity-80"
     >
-      {/* Light sweep on hover */}
+      {/* Vệt sáng lướt qua khi rê chuột */}
       <span
         aria-hidden="true"
         className="pointer-events-none absolute inset-y-0 left-0 w-1/3 -translate-x-full -skew-x-12 bg-gradient-to-r from-transparent via-white/30 to-transparent transition-transform duration-700 ease-out group-hover:translate-x-[400%] motion-reduce:hidden"
@@ -269,7 +269,7 @@ export function ChangePasswordForm() {
   )
 }
 
-// Customers can continue with Google; hidden when the server has no Google OAuth client.
+// Khách hàng có thể tiếp tục bằng Google; ẩn đi khi server không có Google OAuth client.
 export function GoogleSignIn({ next, enabled }: { next: string; enabled: boolean }) {
   if (!enabled) return null
   return (

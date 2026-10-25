@@ -26,7 +26,7 @@ class ConfigHandlerTest {
             for (int i = 0; !stop.get(); i++) {
                 LocalTime opening = i % 2 == 0 ? LocalTime.of(13, 0) : LocalTime.of(7, 0);
                 LocalTime closing = i % 2 == 0 ? LocalTime.of(22, 0) : LocalTime.of(12, 0);
-                synchronized (config) { // the critical section ConfigHandler.update runs
+                synchronized (config) { // đoạn găng (critical section) mà ConfigHandler.update chạy
                     config.setOpeningTime(opening);
                     config.setClosingTime(closing);
                 }

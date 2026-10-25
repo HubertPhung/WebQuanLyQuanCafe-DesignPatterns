@@ -21,12 +21,11 @@ import java.util.Objects;
 import java.util.regex.Pattern;
 
 /**
- * /api/auth: sign-up, password sign-in, Google sign-in reported by the frontend, the current
- * account, and password change. Successful sign-ins answer with an HS256 access token.
- *
- * Sign-up always creates a CUSTOMER; staff roles are given by an admin through /api/users.
- * Wrong email and wrong password get the same answer (and take about the same time), and a
- * {@link LoginThrottle} locks an email after repeated failures.
+ * /api/auth: đăng ký, đăng nhập bằng mật khẩu, đăng nhập Google do frontend báo về, tài khoản hiện
+ * tại và đổi mật khẩu. Đăng nhập thành công trả về access token HS256. Đăng ký luôn tạo CUSTOMER;
+ * vai trò nhân viên do quản trị viên cấp qua /api/users. Sai email và sai mật khẩu nhận cùng một
+ * câu trả lời (và tốn thời gian gần như nhau), và {@link LoginThrottle} khóa email sau nhiều lần
+ * sai liên tiếp.
  */
 public class AuthHandler extends ApiHandler {
     private static final Pattern EMAIL = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
@@ -38,7 +37,7 @@ public class AuthHandler extends ApiHandler {
     private final TokenService tokens;
     private final LoginThrottle throttle;
     private final String serviceKey;
-    /** Verified against when the email is unknown, so both failures cost the same time. */
+    /** Dùng để đối chiếu khi email không tồn tại, để hai kiểu thất bại tốn thời gian như nhau. */
     private final String dummyHash;
 
     public AuthHandler(IUserDao users, PasswordHasher hasher, TokenService tokens, LoginThrottle throttle, String serviceKey) {
@@ -124,12 +123,11 @@ public class AuthHandler extends ApiHandler {
     }
 
     /**
-     * The frontend verified the Google ID token (signature, audience, issuer, nonce) and reports
-     * the result here with the shared service key. Matches by Google id, then links an existing
-     * customer account with the same verified email, otherwise creates a CUSTOMER.
-     *
-     * Google sign-in is for customers only: staff, manager and admin accounts keep signing in with
-     * their password, so the lockout and the admin's control over those accounts always apply.
+     * Frontend đã kiểm tra Google ID token (chữ ký, audience, issuer, nonce) và báo kết quả về đây
+     * bằng service key dùng chung. Tìm theo Google id, sau đó gắn vào tài khoản khách hàng có cùng
+     * email đã xác minh, nếu không có thì tạo CUSTOMER mới. Đăng nhập Google chỉ dành cho khách
+     * hàng: tài khoản nhân viên, quản lý và quản trị vẫn đăng nhập bằng mật khẩu, để cơ chế khóa và
+     * quyền kiểm soát của quản trị viên luôn áp dụng.
      */
     private void google(HttpExchange exchange) throws IOException {
         String presented = exchange.getRequestHeaders().getFirst("X-Service-Key");
@@ -215,7 +213,7 @@ public class AuthHandler extends ApiHandler {
         return name;
     }
 
-    /** 8 to 128 characters with at least one letter and one digit. */
+    /** Từ 8 đến 128 ký tự, có ít nhất một chữ cái và một chữ số. */
     static String password(Map<String, Object> body, String key) {
         Object raw = body.get(key);
         String password = raw instanceof String s ? s : null;
@@ -227,7 +225,10 @@ public class AuthHandler extends ApiHandler {
         return password;
     }
 
-    /** A password to check, exactly as typed: {@link #password} stores new ones untrimmed. */
+    /**
+     * Mật khẩu cần kiểm tra, đúng như đã gõ: {@link #password} lưu mật khẩu mới mà không cắt khoảng
+     * trắng.
+     */
     private static String presentedPassword(Map<String, Object> body, String key) {
         Object raw = body.get(key);
         if (raw != null && !(raw instanceof String)) {

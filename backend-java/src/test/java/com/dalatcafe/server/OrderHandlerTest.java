@@ -38,7 +38,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/** Order lifecycle against a DAO that hands out copies, as the JDBC DAO does. */
+/** Vòng đời đơn trên một DAO trả về bản sao, giống DAO JDBC. */
 class OrderHandlerTest {
     private static final String CODE = "AC-RACE-01";
 
@@ -75,7 +75,7 @@ class OrderHandlerTest {
 
     @Test
     void cancellingWhileACashierPaysNeverLeavesTheChargedOrderUnpaid() throws Exception {
-        // The cancel reads the unpaid order, then the payment arrives before it writes back.
+        // Lệnh hủy đọc đơn chưa thanh toán, rồi lệnh thanh toán tới trước khi lệnh hủy ghi lại.
         orders.pauseNextLookup();
         CompletableFuture<HttpResponse<String>> cancel =
                 send("PATCH", "/api/orders/" + CODE + "/status", "{\"status\":\"cancelled\"}");
@@ -84,7 +84,7 @@ class OrderHandlerTest {
                 .get(10, TimeUnit.SECONDS);
 
         assertEquals(200, cancel.get(10, TimeUnit.SECONDS).statusCode());
-        // The payment waits for the cancel, then finds the order closed and takes no money.
+        // Lệnh thanh toán chờ lệnh hủy, rồi thấy đơn đã đóng và không thu tiền.
         assertEquals(409, pay.statusCode(), pay.body());
         Order stored = orders.findByOrderCode(CODE).orElseThrow();
         assertEquals(OrderStatus.CANCELLED, stored.getStatus());
@@ -103,10 +103,11 @@ class OrderHandlerTest {
 
         assertEquals(200, sync.statusCode(), sync.body());
         assertTrue(sync.body().contains("\"created\":3"), sync.body());
-        // Fulfillment time in analytics is completedAt - createdAt: the sync time would inflate it.
+        // Thời gian phục vụ trong thống kê là completedAt - createdAt: dùng thời điểm đồng bộ sẽ
+        // làm nó bị đội lên.
         assertEquals("2026-10-17T02:12:00Z", orders.findByOrderCode("AC-0911-OFF").orElseThrow().getCompletedAt().toString());
         assertNull(orders.findByOrderCode("AC-0912-OFF").orElseThrow().getCompletedAt(), "an open order is not completed");
-        // A completion time before the creation time is clamped to the creation time, with a warning.
+        // Thời điểm hoàn tất sớm hơn thời điểm tạo được kẹp bằng thời điểm tạo, kèm cảnh báo.
         assertEquals("2026-10-17T02:00:00Z", orders.findByOrderCode("AC-0913-OFF").orElseThrow().getCompletedAt().toString());
         assertTrue(sync.body().contains("completed before it was created"), sync.body());
         assertTrue(orders.findByOrderCode("AC-0914-OFF").isEmpty(), "not an ISO-8601 instant");
@@ -175,7 +176,7 @@ class OrderHandlerTest {
         dineIn.recalculateTotals();
         orders.save(dineIn);
 
-        // The paid broadcast stalls until the completed broadcast arrives (or 500 ms pass).
+        // Sự kiện đã thanh toán bị giữ lại cho tới khi sự kiện hoàn tất tới (hoặc qua 500 ms).
         CountDownLatch paidEventStarted = new CountDownLatch(1);
         CountDownLatch completedEventSent = new CountDownLatch(1);
         events.attach(new IOrderObserver() {
@@ -204,7 +205,8 @@ class OrderHandlerTest {
 
         assertEquals(200, pay.get(10, TimeUnit.SECONDS).statusCode());
         assertEquals(200, complete.statusCode(), complete.body());
-        // A late "paid" broadcast must not seat the table again after the order was completed.
+        // Sự kiện "đã thanh toán" tới muộn không được xếp khách vào bàn lần nữa sau khi đơn đã hoàn
+        // tất.
         assertEquals(TableStatus.CLEANING, tables.findById(tableId).orElseThrow().getStatus());
     }
 
@@ -216,7 +218,10 @@ class OrderHandlerTest {
         return client.sendAsync(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
     }
 
-    /** Stores and returns copies, and can hold one lookup until a payment is saved (or 500 ms pass). */
+    /**
+     * Lưu và trả về bản sao, có thể giữ một lần tra cứu cho tới khi một lần thanh toán được lưu
+     * (hoặc qua 500 ms).
+     */
     private static final class SnapshotOrderDao extends InMemoryOrderDao {
         final CountDownLatch lookupPaused = new CountDownLatch(1);
         private final CountDownLatch paymentSaved = new CountDownLatch(1);

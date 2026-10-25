@@ -109,7 +109,7 @@ function fail(error: unknown): ActionResult {
 
 type LocalOrderRef = Pick<Order, 'orderCode' | 'tableId' | 'tableIds' | 'paymentMethod' | 'status' | 'paymentStatus'>
 
-// Resolve ids only within the configured store; mock ids can refer to unrelated orders.
+// Chỉ tìm id trong kho đang cấu hình; id của mock có thể trỏ tới đơn không liên quan.
 async function findLocalOrder(orderId: number): Promise<LocalOrderRef | null> {
   await ensureOrderTableGroups()
   if (isDbConfigured && db) {
@@ -123,8 +123,9 @@ async function findLocalOrder(orderId: number): Promise<LocalOrderRef | null> {
   return mock ?? null
 }
 
-// Java only knows the orders it priced or opened, and for those its answer is final.
-// Unreachable, or 404 for an order recorded locally (e.g. while Java was down): keep it local.
+// Java chỉ biết những đơn nó đã tính tiền hoặc mở, và với các đơn đó câu trả lời của nó là cuối
+// cùng. Không kết nối được, hoặc 404 với đơn ghi cục bộ (ví dụ lúc Java ngừng hoạt động): giữ ở cục
+// bộ.
 function javaRefusal(result: JavaResult<unknown>): string | null {
   if (result.ok || result.unreachable || result.status === 404) return null
   return result.error
@@ -134,7 +135,7 @@ export async function updateOrderStatus(orderId: number, status: OrderStatus): P
   try {
     await assertAdminAccess()
     if (!Number.isInteger(orderId) || !orderStatuses.includes(status)) throw new Error('Trạng thái đơn không hợp lệ.')
-    // Apply the database upgrade before changing Java, so a legacy CHECK cannot split the stores.
+    // Nâng cấp database trước khi đổi bên Java, để ràng buộc CHECK cũ không làm hai kho lệch nhau.
     await ensureOrderCancellation()
     const local = await findLocalOrder(orderId)
     if (!local) return { ok: false, error: 'Không tìm thấy đơn hàng.' }
@@ -167,7 +168,8 @@ export async function updateOrderStatus(orderId: number, status: OrderStatus): P
           .where(and(eq(adminOrders.id, orderId), sql`(${adminOrders.status} not in ('completed', 'cancelled') or ${adminOrders.status} = ${status})`))
           .returning({ id: adminOrders.id })
         if (!changed.length) return false
-        // Mirrors the Java TableStatusSyncObserver: a finished dine-in order frees its table for cleaning.
+        // Bản sao của TableStatusSyncObserver bên Java: đơn ăn tại chỗ hoàn tất thì bàn chuyển sang
+        // dọn dẹp.
         if ((status === 'completed' || status === 'cancelled') && local?.tableId) {
           for (const tableId of local.tableIds?.length ? local.tableIds : [local.tableId]) {
             const rows = await tx.execute<{ remaining: boolean }>(sql`select exists(select 1 from admin_orders where id <> ${orderId} and status not in ('completed', 'cancelled') and (table_id = ${tableId} or table_ids @> ${JSON.stringify([tableId])}::jsonb)) as remaining`)
@@ -223,7 +225,8 @@ export async function markOrderPaid(orderId: number): Promise<ActionResult> {
   }
 }
 
-// Digits only, as the Java customer store keeps phone numbers ("0908 123 456" -> "0908123456").
+// Chỉ giữ chữ số, giống cách kho khách hàng Java lưu số điện thoại ("0908 123 456" ->
+// "0908123456").
 function normalizePhone(raw: string | undefined): string | null {
   const digits = (raw ?? '').replace(/\D/g, '')
   return digits.length >= 8 && digits.length <= 15 ? digits : null
@@ -232,7 +235,7 @@ function normalizePhone(raw: string | undefined): string | null {
 export type Member = { name: string; phone: string; points: number; rank: string }
 export type MemberLookup = { ok: true; member: Member | null; offline: boolean } | { ok: false; error: string }
 
-// POS member lookup through GET /api/customers?phone=... (members live in the Java store).
+// Tra cứu thành viên ở POS qua GET /api/customers?phone=... (thành viên nằm ở kho Java).
 export async function lookupMember(phone: string): Promise<MemberLookup> {
   try {
     await assertAdminAccess()
@@ -263,10 +266,10 @@ type NewOrderInput = {
   orderType: string
   paymentMethod: string
   paid: boolean
-  // Member phone and the loyalty points to redeem; redeeming needs the Java backend.
+  // Số điện thoại thành viên và số điểm muốn đổi; đổi điểm cần backend Java.
   customerPhone?: string
   useLoyaltyPoints?: number
-  // Optional cash handed over for a paid cash order; it must cover the total.
+  // Tiền mặt khách đưa (tùy chọn) cho đơn tiền mặt đã thanh toán; phải đủ tổng tiền.
   tenderedAmount?: number
 }
 
@@ -274,7 +277,7 @@ type LocalMenuItem = Pick<MenuItem, 'id' | 'name' | 'kind' | 'inStock' | 'variat
 
 type CheckoutOutcome =
   | { kind: 'accepted'; receipt: CheckoutReceipt }
-  // javaDown: Java did not answer, so pushing the local copy right away is pointless.
+  // javaDown: Java không phản hồi, nên đẩy bản cục bộ ngay lúc này là vô ích.
   | { kind: 'local'; javaDown: boolean }
   | { kind: 'rejected'; error: string }
 
@@ -283,15 +286,16 @@ async function loadLocalMenu(ids: number[]): Promise<LocalMenuItem[]> {
     try {
       return await db.select().from(adminMenuItems).where(inArray(adminMenuItems.id, ids))
     } catch {
-      // Same degradation as the writes below: an unreachable database means the mock store.
+      // Cùng cách xử lý như các thao tác ghi bên dưới: database không kết nối được thì dùng mock
+      // store.
     }
   }
   return getMockMenuItems().filter((item) => ids.includes(item.id))
 }
 
-// The two stores number their menus independently; menu-link keeps the id pairs.
-// A line the backend cannot price (unknown item, paid variation) keeps the order local.
-// Size L and toppings are sent as Java customizations, priced there by the Decorators.
+// Hai kho đánh số món độc lập; menu-link giữ các cặp id. Dòng mà backend không tính giá được (món
+// lạ, biến thể có phụ thu) khiến đơn được giữ ở cục bộ. Size L và topping được gửi thành
+// customization của Java và tính giá bởi các Decorator ở đó.
 async function toJavaLines(
   lines: LocalOrderInput['lines'],
   localMenu: LocalMenuItem[],
@@ -324,7 +328,7 @@ async function forwardCheckout(
   extra: Pick<CheckoutPayload, 'voucherCode' | 'note'> = {},
   asService = false,
 ): Promise<CheckoutOutcome> {
-  // POST /api/checkout always takes payment, so open tabs are recorded locally and synced.
+  // POST /api/checkout luôn thu tiền, nên hóa đơn mở (chưa trả) được ghi cục bộ rồi đồng bộ sau.
   if (!order.paid) return { kind: 'local', javaDown: false }
   const lines = await toJavaLines(order.lines, localMenu)
   if (lines === 'unreachable') return { kind: 'local', javaDown: true }
@@ -345,7 +349,7 @@ async function forwardCheckout(
   return receipt.unreachable ? { kind: 'local', javaDown: true } : { kind: 'rejected', error: receipt.error }
 }
 
-// Order codes the frontend issues itself; Java-priced orders keep the code Java returned.
+// Mã đơn do frontend tự cấp; đơn do Java tính giá giữ mã mà Java trả về.
 function newLocalOrderCode() {
   const stamp = Date.now().toString(36).toUpperCase().slice(-6)
   const random = Math.floor(Math.random() * 36 ** 3).toString(36).toUpperCase().padStart(3, '0')
@@ -377,11 +381,11 @@ async function recordOrderLocally(input: LocalOrderInput, quantities: Map<number
       }
     })
 
-    // Java's receipt wins when it priced the order (member discount, redeemed points).
+    // Hóa đơn của Java được ưu tiên khi Java tính giá đơn (giảm giá thành viên, đổi điểm).
     const subtotal = input.totals?.subtotal ?? Math.round(items.reduce((sum, item) => sum + item.price * item.qty, 0) * 100) / 100
     const total = input.totals?.total ?? Math.round(subtotal * (1 + TAX_RATE) * 100) / 100 + shippingFee(input.orderType)
     const tenderError = cashTenderError(input, total)
-    // Returned, not thrown: a throw here falls back to the in-memory store.
+    // Trả về chứ không ném lỗi: ném ở đây sẽ rơi sang kho trong bộ nhớ.
     if (tenderError) return { ok: false, error: tenderError }
     const customer = input.customer.trim().slice(0, 60) || 'Walk-in'
 
@@ -464,15 +468,16 @@ export async function createOrder(input: NewOrderInput): Promise<ActionResult> {
       orderType,
       paymentMethod,
       paid: input.paid,
-      // Only a cash payment taken now has cash to count.
+      // Chỉ thanh toán tiền mặt ngay lúc này mới có tiền mặt để đếm.
       tenderedAmount: input.paid && paymentMethod === 'cash' ? tendered : undefined,
-      // The POS sells for the branch chosen in the header; its tables are the only ones it shows.
+      // POS bán cho chi nhánh đang chọn ở header; nó chỉ hiện bàn của chi nhánh đó.
       branch: await getAdminBranch(),
     }
 
     return await withPosTableLock(order.tableId, async () => {
       await assertPosTableAvailable(order.tableId, order.branch ?? DEFAULT_BRANCH_ID)
-      // Check availability locally first so the backend never charges for an order we cannot record.
+      // Kiểm tra món còn bán ở cục bộ trước, để backend không bao giờ thu tiền cho đơn mà ta không
+      // ghi lại được.
       const localMenu = await loadLocalMenu([...quantities.keys()])
       const unavailable = lines.some((line) => {
         const item = localMenu.find((candidate) => candidate.id === line.menuItemId)
@@ -483,7 +488,7 @@ export async function createOrder(input: NewOrderInput): Promise<ActionResult> {
       const member: MemberCheckout = customerPhone ? { customerPhone, useLoyaltyPoints: points || undefined } : {}
       const outcome = await forwardCheckout(order, localMenu, member)
       if (outcome.kind === 'rejected') return { ok: false, error: outcome.error }
-      // Points live in the Java store; charging full price instead would surprise the member.
+      // Điểm nằm ở kho Java; thu đủ tiền thay vì đổi điểm sẽ khiến thành viên bất ngờ.
       if (outcome.kind === 'local' && points > 0) {
         return { ok: false, error: 'Redeeming points needs the Java backend, which could not price this order. Retry or remove the points.' }
       }
@@ -501,7 +506,7 @@ export async function createOrder(input: NewOrderInput): Promise<ActionResult> {
       refresh()
       if (!res.ok) return res
       if (!receipt) {
-        // Java has not seen this order: queue it, and push it at once unless Java just failed to answer.
+        // Java chưa thấy đơn này: đưa vào hàng đợi, và đẩy ngay trừ khi Java vừa không phản hồi.
         await enqueueSync(orderCode)
         if (outcome.kind === 'local' && outcome.javaDown) {
           return { ok: true, message: `${res.message} Saved offline; it will be sent to the Java backend when it is back.` }
@@ -533,7 +538,7 @@ export type OnlineOrderInput = {
   address?: string
   payment: keyof typeof onlinePayments
   note?: string
-  // The branch that prepares the order: pickup happens there, delivery leaves from there.
+  // Chi nhánh làm đơn: khách đến lấy tại đó, giao hàng xuất phát từ đó.
   branch?: BranchId
 }
 
@@ -549,8 +554,9 @@ function readCart(raw: string | undefined): Cart | null {
   }
 }
 
-// Cash on delivery is not charged now, so Java does not price it: the same rules apply here
-// (menu price, size L surcharge, the voucher as Java validates it, VAT on what is left).
+// Tiền mặt khi nhận hàng chưa thu lúc này, nên Java không tính giá đơn: các quy tắc giống hệt được
+// áp dụng ở đây (giá thực đơn, phụ thu size L, voucher theo cách Java kiểm tra, VAT trên phần còn
+// lại).
 async function cashOnDeliveryTotals(lines: LocalOrderInput['lines'], localMenu: LocalMenuItem[], voucherCode?: string) {
   const byId = new Map(localMenu.map((item) => [item.id, item]))
   const raw = lines.reduce((sum, line) => sum + (byId.get(line.menuItemId)!.sellPrice + customizationSurcharge(line.customizations ?? [])) * line.qty, 0)
@@ -565,10 +571,10 @@ async function cashOnDeliveryTotals(lines: LocalOrderInput['lines'], localMenu: 
   return { subtotal, total: Math.round((subtotal - discount) * (1 + TAX_RATE) * 100) / 100 }
 }
 
-// Storefront checkout, open to guests. What is ordered and at what price comes from the
-// server-side cart and the menu, never from the request. A paid order (VietQR, card) is charged
-// through Java's POST /api/checkout like a POS sale; cash on delivery is recorded here and
-// synced to Java. Either way the kitchen display gets the ticket.
+// Checkout của storefront, mở cho khách vãng lai. Món gì và giá bao nhiêu lấy từ giỏ hàng phía
+// server và thực đơn, không bao giờ lấy từ request. Đơn trả trước (VietQR, thẻ) được thu tiền qua
+// POST /api/checkout của Java như một lượt bán ở POS; tiền mặt khi nhận hàng được ghi ở đây rồi
+// đồng bộ sang Java. Cả hai cách thì màn hình pha chế đều nhận được phiếu.
 export async function placeOnlineOrder(input: OnlineOrderInput): Promise<OnlineOrderResult> {
   try {
     const session = await getSession()
@@ -635,11 +641,12 @@ export async function placeOnlineOrder(input: OnlineOrderInput): Promise<OnlineO
       let receipt: CheckoutReceipt | undefined
       let totals: { subtotal: number; total: number }
       if (paid) {
-        // Only money taken now earns points (cash on delivery does not): the buyer's phone becomes a member.
+        // Chỉ tiền thu ngay mới được cộng điểm (tiền mặt khi nhận hàng thì không): số điện thoại
+        // người mua trở thành thành viên.
         const member: MemberCheckout = { customerPhone: phone, enrollMember: true, customerEmail: email ?? session.email }
         const outcome = await forwardCheckout(order, localMenu, member, { voucherCode, note: javaNote }, true)
         if (outcome.kind === 'rejected') return { ok: false, error: outcome.error }
-        // Online payment is taken by Java; without it nothing may be charged or promised.
+        // Thanh toán online do Java thu; không có Java thì không được thu tiền hay hứa hẹn gì.
         if (outcome.kind === 'local') {
           return { ok: false, error: 'Chưa thể thanh toán trực tuyến lúc này. Hãy thử lại sau ít phút hoặc chọn thanh toán khi nhận hàng.' }
         }
@@ -719,11 +726,11 @@ type NewReservationInput = {
   dateTime: string
   guests: number
   tableId: number
-  // A booking that joins several tables; tableId is then the first of them.
+  // Phiếu ghép nhiều bàn; khi đó tableId là bàn đầu tiên.
   tableIds?: number[]
 }
 
-// Shared by creating and editing a booking from the admin page.
+// Dùng chung cho tạo và sửa phiếu đặt bàn ở trang admin.
 function bookingFields(input: NewReservationInput) {
   const customer = input.customer.trim().slice(0, 60)
   const contact = input.contact.trim().slice(0, 30)
@@ -748,8 +755,8 @@ function bookingFields(input: NewReservationInput) {
   }
 }
 
-// "Sửa phiếu" on /admin/reservations: Java bookings through PUT /api/reservations/{code}, which runs
-// the whole chain again; local ones through the same rules in the mock store.
+// "Sửa phiếu" ở /admin/reservations: phiếu bên Java đi qua PUT /api/reservations/{code}, vốn chạy
+// lại toàn bộ chuỗi kiểm tra; phiếu cục bộ đi qua cùng các quy tắc trong mock store.
 export async function updateReservation(code: string, source: 'java' | 'local', input: NewReservationInput): Promise<ActionResult> {
   try {
     await assertAdminAccess()
@@ -777,14 +784,16 @@ export async function createReservation(input: NewReservationInput): Promise<Act
     const customer = input.customer.trim().slice(0, 60)
     const contact = input.contact.trim().slice(0, 30)
     if (!customer || !contact) throw new Error('Customer name and contact are required.')
-    // The upper limit is Java's configurable maxReservationGuests; the local fallback checks the default.
+    // Giới hạn trên là maxReservationGuests cấu hình được bên Java; bản dự phòng cục bộ kiểm tra
+    // theo giá trị mặc định.
     if (!Number.isInteger(input.guests) || input.guests < 1) {
       throw new Error('Guests must be a whole number of at least 1.')
     }
     if (!Number.isInteger(input.tableId)) throw new Error('Choose a table.')
     const dateTime = new Date(input.dateTime)
     if (Number.isNaN(dateTime.getTime())) throw new Error('Choose a valid date and time.')
-    // Answered before the network round trip; createMockReservation repeats it with the other Java rules.
+    // Trả lời trước khi gọi mạng; createMockReservation kiểm tra lại cùng các quy tắc khác của
+    // Java.
     if (hasReservationTimePassed(dateTime)) {
       throw new Error('Choose a date and time that has not passed yet.')
     }
@@ -800,20 +809,20 @@ export async function createReservation(input: NewReservationInput): Promise<Act
       branch: await getAdminBranch(),
     }
 
-    // Java runs the full validation chain (hours, capacity, availability); its verdict is final.
+    // Java chạy đủ chuỗi kiểm tra (giờ mở cửa, sức chứa, bàn trống); kết luận của nó là cuối cùng.
     const remote = await createJavaReservation(booking)
     if (remote.ok) {
       refresh()
       return { ok: true, message: `Reservation ${remote.data.id} received by the Java backend.` }
     }
     if (!remote.unreachable) return { ok: false, error: remote.error }
-    // With a real database the bookings live only in Java: a local copy could not see them (double
-    // booking) and would vanish on restart, so nothing is promised until Java is back.
+    // Khi có database thật, phiếu đặt chỉ nằm ở Java: bản sao cục bộ không thấy được chúng (đặt
+    // trùng) và sẽ mất khi khởi động lại, nên không hứa gì cho tới khi Java hoạt động lại.
     if (isDbConfigured || getJavaBackendUrl()) {
       return { ok: false, error: 'Chưa kiểm tra được lịch bàn do mất kết nối. Chưa ghi nhận đặt bàn, vui lòng thử lại.' }
     }
 
-    // Demo mode without a database: the local store applies the same chain with the Java defaults.
+    // Chế độ demo không có database: kho cục bộ áp cùng chuỗi kiểm tra với mặc định của Java.
     const res = createMockReservation({ ...booking, email: booking.email ?? null, note: booking.note ?? null, dateTime })
     refresh()
     return res.ok ? { ok: true, message: `Reservation ${res.code} saved locally.` } : { ok: false, error: res.error ?? 'Failed' }
@@ -822,7 +831,8 @@ export async function createReservation(input: NewReservationInput): Promise<Act
   }
 }
 
-// Mirrors an order opened elsewhere (Java Adapter) into the frontend store so KDS and the floor plan show it.
+// Chép một đơn được mở ở nơi khác (Adapter bên Java) vào kho frontend để KDS và sơ đồ bàn hiển thị
+// nó.
 async function recordExternalOrder(input: ExternalOrderInput): Promise<ActionResult> {
   await ensureOrderTableGroups()
   if (!isDbConfigured || !db) {
@@ -865,8 +875,8 @@ async function recordExternalOrder(input: ExternalOrderInput): Promise<ActionRes
   }
 }
 
-// "Chuyển sang POS": a backend reservation goes through POST /api/reservations/{code}/transfer-pos
-// (ReservationToOrderAdapter in Java); a reservation that only exists locally uses the frontend mirror.
+// "Chuyển sang POS": phiếu ở backend đi qua POST /api/reservations/{code}/transfer-pos
+// (ReservationToOrderAdapter bên Java); phiếu chỉ có ở cục bộ dùng bản sao phía frontend.
 export async function transferReservationToPos(code: string, source: 'java' | 'local', guests = 1): Promise<ActionResult> {
   try {
     await assertAdminAccess()
@@ -880,7 +890,7 @@ export async function transferReservationToPos(code: string, source: 'java' | 'l
 
     const remote = await transferJavaReservation(code)
     if (!remote.ok) {
-      // The booking lives in Java, so there is nothing local to fall back to.
+      // Phiếu đặt nằm ở Java, nên không có gì cục bộ để dự phòng.
       return { ok: false, error: remote.unreachable ? 'Java backend is unreachable; try again shortly.' : remote.error }
     }
     const order = remote.data
@@ -900,7 +910,7 @@ export async function transferReservationToPos(code: string, source: 'java' | 'l
   }
 }
 
-// The Java id of a frontend menu item; the two stores number their menus independently.
+// Id bên Java của một món frontend; hai kho đánh số món độc lập.
 async function javaMenuIdFor(itemId: number): Promise<number | undefined> {
   const [local] = await loadLocalMenu([itemId])
   if (!local) return undefined
@@ -913,8 +923,8 @@ const javaReservationStatus = {
   'Đã hủy': 'cancelled',
 } as const
 
-// Status dropdown on /admin/reservations. "Hoàn thành" (seated) is reached only through
-// "Sang POS", so the order and the table are always opened together with it.
+// Ô chọn trạng thái ở /admin/reservations. "Hoàn thành" (đã nhận bàn) chỉ đạt được qua "Sang POS",
+// nên đơn và bàn luôn được mở cùng lúc với nó.
 export async function updateReservationStatus(
   code: string,
   source: 'java' | 'local',
@@ -933,7 +943,7 @@ export async function updateReservationStatus(
     }
     const remote = await updateJavaReservationStatus(code, javaReservationStatus[status])
     if (!remote.ok) {
-      // The booking lives in Java, so there is nothing local to fall back to.
+      // Phiếu đặt nằm ở Java, nên không có gì cục bộ để dự phòng.
       return { ok: false, error: remote.unreachable ? 'Java backend is unreachable; try again shortly.' : remote.error }
     }
     refresh()
@@ -988,7 +998,7 @@ function money(value: number, label: string) {
   return Math.round(value * 100) / 100
 }
 
-// The validated catalog fields shared by creating and editing a menu item.
+// Các trường thực đơn đã kiểm tra, dùng chung cho tạo và sửa món.
 function catalogFields(input: NewItemInput): MenuCatalogInput {
   const name = input.name.trim().slice(0, 80)
   const category = input.category.trim().slice(0, 40)
@@ -1009,8 +1019,8 @@ function catalogFields(input: NewItemInput): MenuCatalogInput {
   }
 }
 
-// Java prices POS orders, so an edit or a removal must reach it first. Without a Java backend
-// configured (demo mode) only the local catalog changes.
+// Java tính giá đơn POS, nên thao tác sửa hay xóa phải tới Java trước. Khi không cấu hình backend
+// Java (chế độ demo) thì chỉ thực đơn cục bộ thay đổi.
 async function javaCatalogRefusal(result: JavaResult<unknown>): Promise<string | null> {
   if (result.ok) return null
   if (result.unreachable) return getJavaBackendUrl() ? 'Backend Java chưa phản hồi, thực đơn chưa thay đổi. Vui lòng thử lại.' : null
@@ -1063,7 +1073,7 @@ export async function createMenuItem(input: NewItemInput): Promise<ActionResult>
     let catalogInput = catalogFields(input)
     const name = catalogInput.name
 
-    // Upgrade legacy image storage before Java accepts a new item.
+    // Nâng cấp cột lưu ảnh kiểu cũ trước khi Java nhận món mới.
     await ensureMenuImageStorage()
     const remote = await createJavaMenuItem(catalogInput)
     let javaId: number | undefined
@@ -1071,7 +1081,8 @@ export async function createMenuItem(input: NewItemInput): Promise<ActionResult>
       javaId = remote.data.id
     } else if (!remote.unreachable) {
       if (remote.status !== 409) return { ok: false, error: remote.error }
-      // A previous partial save can already exist in Java. Recover its real data on retry.
+      // Một lần lưu dở trước đó có thể đã tồn tại bên Java. Khôi phục dữ liệu thật của nó khi thử
+      // lại.
       const catalog = await fetchMenu()
       if (!catalog.ok) return { ok: false, error: 'Chưa tải được thực đơn để đồng bộ món. Vui lòng thử lại.' }
       const existing = catalog.data.find(item => normalizeMenuName(item.name) === normalizeMenuName(name))
@@ -1094,8 +1105,8 @@ export async function createMenuItem(input: NewItemInput): Promise<ActionResult>
   }
 }
 
-// Local copies of the given orders: the database first, then the mock store for the rest
-// (an order lands in the mock store when a database write failed).
+// Bản sao cục bộ của các đơn được hỏi: tìm trong database trước, phần còn lại tìm trong mock store
+// (đơn rơi vào mock store khi ghi database thất bại).
 async function loadOrdersByCode(codes: string[]): Promise<Order[]> {
   await ensureOrderTableGroups()
   let found: Order[] = []
@@ -1103,7 +1114,7 @@ async function loadOrdersByCode(codes: string[]): Promise<Order[]> {
     try {
       found = await db.select().from(adminOrders).where(inArray(adminOrders.orderCode, codes))
     } catch {
-      // Fall through to the mock store.
+      // Rơi xuống dùng mock store.
     }
   }
   const missing = codes.filter((code) => !found.some((order) => order.orderCode === code))
@@ -1115,7 +1126,7 @@ async function loadWholeLocalMenu(): Promise<LocalMenuItem[]> {
     try {
       return await db.select().from(adminMenuItems)
     } catch {
-      // Fall through to the mock store.
+      // Rơi xuống dùng mock store.
     }
   }
   return getMockMenuItems()
@@ -1123,14 +1134,14 @@ async function loadWholeLocalMenu(): Promise<LocalMenuItem[]> {
 
 type PushSummary = { sent: number; failed: string[]; unreachable: boolean }
 
-// Sends queued local orders to POST /api/orders/sync (idempotent by order code) and removes
-// the ones Java now has. Orders that Java refuses stay queued with the reason reported.
+// Gửi các đơn cục bộ trong hàng đợi tới POST /api/orders/sync (idempotent theo mã đơn) và gỡ những
+// đơn Java đã có. Đơn bị Java từ chối vẫn ở trong hàng đợi kèm lý do.
 async function pushQueuedOrders(codes: string[], asService = false): Promise<PushSummary> {
   const summary: PushSummary = { sent: 0, failed: [], unreachable: false }
   if (codes.length === 0) return summary
   const orders = await loadOrdersByCode(codes)
   const gone = codes.filter((code) => !orders.some((order) => order.orderCode === code))
-  await dequeueSync(gone) // nothing left locally to send
+  await dequeueSync(gone) // không còn gì ở cục bộ để gửi
 
   const menu = await loadWholeLocalMenu()
   const javaIds = await resolveJavaMenuIds(menu)
@@ -1198,7 +1209,7 @@ export async function syncOfflineOrders(): Promise<ActionResult> {
   }
 }
 
-// Store settings live in the Java SystemConfigManager Singleton, so there is no local fallback.
+// Cài đặt quán nằm trong Singleton SystemConfigManager bên Java, nên không có bản dự phòng cục bộ.
 export async function updateStoreSettings(change: StoreConfigChange): Promise<ActionResult> {
   try {
     await assertAdminAccess('ADMIN')
@@ -1215,7 +1226,7 @@ export async function updateStoreSettings(change: StoreConfigChange): Promise<Ac
 
 const accountRoles = ['CUSTOMER', 'STAFF', 'MANAGER', 'ADMIN'] as const
 
-// Accounts live in the Java backend (/api/users, ADMIN); there is no local fallback.
+// Tài khoản nằm ở backend Java (/api/users, ADMIN); không có bản dự phòng cục bộ.
 function accountError(result: Extract<JavaResult<unknown>, { ok: false }>) {
   if (result.unreachable) return 'Java backend is unreachable; accounts were not changed.'
   return result.code === 'EMAIL_TAKEN' ? 'An account with this email already exists.' : result.error
@@ -1250,7 +1261,7 @@ export async function updateAccount(id: number, change: { role?: string; active?
   }
 }
 
-// Header branch switch: every admin page, the POS and the reports follow the chosen branch.
+// Nút chuyển chi nhánh trên header: mọi trang admin, POS và báo cáo đều theo chi nhánh đã chọn.
 export async function selectAdminBranch(branch: string): Promise<ActionResult> {
   try {
     await assertAdminAccess()

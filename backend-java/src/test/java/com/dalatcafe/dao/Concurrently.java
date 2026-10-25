@@ -8,7 +8,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
-/** Starts every task at the same moment so their reads and writes interleave. */
+/** Khởi động mọi tác vụ cùng một lúc để các thao tác đọc và ghi của chúng đan xen nhau. */
 final class Concurrently {
     private Concurrently() {
     }

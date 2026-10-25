@@ -5,8 +5,8 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * In-memory settings store. It lives as long as the process, so it only helps tests and the
- * IN_MEMORY mode, where nothing is kept across restarts by design.
+ * Kho cài đặt trong bộ nhớ. Nó chỉ tồn tại cùng tiến trình, nên chỉ phục vụ test và chế độ
+ * IN_MEMORY, nơi theo thiết kế không giữ gì qua lần khởi động lại.
  */
 public class InMemoryConfigDao implements IConfigDao {
     private final Map<String, String> values = new LinkedHashMap<>();

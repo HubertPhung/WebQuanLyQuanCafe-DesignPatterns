@@ -1,21 +1,23 @@
-// Typed proxy from Next.js Server Actions to the Java SE backend (docs/API_SPEC.md).
-// Every call resolves to a result object instead of throwing, so callers can fall back
-// to the local store whenever the backend is unreachable.
+// Proxy có kiểu từ Server Action của Next.js sang backend Java SE (docs/API_SPEC.md). Mọi lời gọi
+// trả về một object kết quả thay vì ném lỗi, để nơi gọi chuyển sang kho cục bộ mỗi khi backend
+// không kết nối được.
 
 const DEFAULT_BACKEND_URL = 'http://localhost:8080'
 const REQUEST_TIMEOUT_MS = 2500
-// The Java SimpleAuthFilter identifies the caller by the Bearer access token of the signed-in
-// user (API_SPEC 1.3) and re-reads the role from the account, so no role is sent from here.
+// SimpleAuthFilter bên Java nhận diện người gọi bằng Bearer access token của người dùng đã đăng
+// nhập (API_SPEC 1.3) và đọc lại vai trò từ tài khoản, nên không gửi vai trò từ đây.
 import type { BranchId } from '@/lib/branches'
 import { SESSION_COOKIE } from '@/lib/auth/token'
-// 5xx codes the backend uses to refuse on purpose rather than crash (API_SPEC 1.2).
+// Các mã 5xx mà backend dùng để chủ động từ chối chứ không phải do sập (API_SPEC 1.2).
 const FAIL_CLOSED_CODES = new Set(['DATABASE_UNAVAILABLE'])
 
 export type JavaResult<T> =
   | { ok: true; data: T; message?: string }
-  // unreachable: no usable answer (network error, timeout, non-JSON or unexpected 5xx); safe to fall back locally.
+  // unreachable: không có câu trả lời dùng được (lỗi mạng, hết thời gian, không phải JSON hoặc 5xx
+  // ngoài dự kiến); an toàn để chuyển sang cục bộ.
   | { ok: false; unreachable: true; error: string }
-  // rejected: the backend answered and refused the request (4xx or 503 DATABASE_UNAVAILABLE); do not fall back.
+  // rejected: backend đã trả lời và từ chối request (4xx hoặc 503 DATABASE_UNAVAILABLE); không được
+  // chuyển sang cục bộ.
   | { ok: false; unreachable: false; status: number; code: string; error: string }
 
 type Envelope<T> = { ok: boolean; data?: T; message?: string; error?: string; code?: string }
@@ -26,8 +28,8 @@ export function getJavaBackendUrl(): string | null {
   return raw.replace(/\/+$/, '')
 }
 
-// The access token of the current request, when there is one (Server Components, Server
-// Actions and Route Handlers); outside a request there is simply no token.
+// Access token của request hiện tại, nếu có (Server Component, Server Action và Route Handler);
+// ngoài request thì đơn giản là không có token.
 async function sessionToken(): Promise<string | undefined> {
   try {
     const { cookies } = await import('next/headers')
@@ -40,7 +42,8 @@ async function sessionToken(): Promise<string | undefined> {
 type CallOptions = {
   method: string
   body?: unknown
-  // false for the sign-in calls themselves; a token string to call on behalf of a user just signed in.
+  // false cho chính các lời gọi đăng nhập; một chuỗi token để gọi thay cho người dùng vừa đăng
+  // nhập.
   auth?: false | string
   headers?: Record<string, string>
 }
@@ -80,8 +83,8 @@ async function request<T>(path: string, init: CallOptions): Promise<JavaResult<T
   }
   const error = envelope.error ?? `Java backend answered ${response.status}.`
   const code = envelope.code ?? 'UNKNOWN'
-  // A fail-closed backend refusal (e.g. checkout while its database is down) must reach the
-  // cashier: recording it locally would book a payment the backend deliberately did not take.
+  // Lời từ chối chủ động của backend (ví dụ checkout khi database của nó mất) phải tới được thu
+  // ngân: ghi cục bộ sẽ ghi nhận một khoản thanh toán mà backend cố ý không thu.
   if (response.status >= 500 && !FAIL_CLOSED_CODES.has(code)) return { ok: false, unreachable: true, error }
   return { ok: false, unreachable: false, status: response.status, code, error }
 }
@@ -100,7 +103,7 @@ export type JavaTable = {
   id: number; name: string; seats: number; zone: string; branch: BranchId; imageUrl?: string | null
   status: 'available' | 'occupied' | 'reserved' | 'cleaning'; guestCount: number; occupiedSince: string | null
 }
-// ?branch= limits a list to one branch; without it Java answers for the whole shop.
+// ?branch= giới hạn danh sách trong một chi nhánh; không có thì Java trả lời cho cả quán.
 const branchQuery = (branch?: BranchId) => (branch ? `branch=${encodeURIComponent(branch)}` : '')
 export function fetchTables(branch?: BranchId) { return request<JavaTable[]>(`/api/tables${branch ? `?${branchQuery(branch)}` : ''}`, { method: 'GET' }) }
 export type ReservationTableOption = Pick<JavaTable, 'id' | 'name' | 'seats' | 'zone' | 'branch'> & { available?: boolean }
@@ -110,31 +113,33 @@ export function fetchReservationTables(dateTime?: string, branch?: BranchId) {
   if (branch) query.set('branch', branch)
   return request<ReservationTableOption[]>(`/api/tables/catalog${query.size ? `?${query}` : ''}`, { method: 'GET', auth: false })
 }
-// A new table joins `branch`; an edited one keeps the branch it has.
+// Bàn mới vào `branch`; bàn đang sửa giữ nguyên chi nhánh của nó.
 export function saveJavaTable(input: { name: string; seats: number; zone: string; imageUrl: string | null; branch?: BranchId }, id?: number) {
   return request<JavaTable>(id === undefined ? '/api/tables' : `/api/tables/${id}/details`, { method: id === undefined ? 'POST' : 'PUT', body: input })
 }
 export function deleteJavaTable(id: number) { return request<null>(`/api/tables/${id}`, { method: 'DELETE' }) }
 
 export type CheckoutPayload = {
-  // customizations use the Java enum names (SIZE_L, CHEESE_FOAM, WHITE_PEARL), priced by its Decorators.
+  // customizations dùng tên enum bên Java (SIZE_L, CHEESE_FOAM, WHITE_PEARL), được các Decorator
+  // của nó tính giá.
   lines: { menuItemId: number; qty: number; customizations?: string[] }[]
   customer: string
   tableId: number | null
   orderType: 'dine-in' | 'pickup' | 'delivery'
   paymentMethod: 'cash' | 'qr' | 'card'
-  // A registered member: earns points, gets the tier discount and may redeem points.
+  // Thành viên đã đăng ký: được cộng điểm, giảm giá theo hạng và có thể đổi điểm.
   customerPhone?: string
   useLoyaltyPoints?: number
-  // A paid storefront order signs a new phone up as a member (with this email), so it earns points.
+  // Đơn storefront đã thanh toán đăng ký số điện thoại mới làm thành viên (kèm email này), để đơn
+  // được cộng điểm.
   enrollMember?: boolean
   customerEmail?: string
-  // Cash handed over; Java refuses a cash sale it does not cover and returns the change.
+  // Tiền mặt khách đưa; Java từ chối đơn tiền mặt không đủ và trả về tiền thối.
   tenderedAmount?: number
-  // VoucherCatalog code (Strategy) and a free-text note stored on the Java order.
+  // Mã voucher trong VoucherCatalog (Strategy) và ghi chú tự do lưu trên đơn bên Java.
   voucherCode?: string
   note?: string
-  // Pickup and delivery orders name their branch; a table already decides it.
+  // Đơn đến lấy và giao hàng tự ghi chi nhánh; với đơn tại bàn thì bàn đã quyết định.
   branch?: BranchId
 }
 
@@ -153,9 +158,9 @@ export type CheckoutReceipt = {
   pointsDiscountVnd: number
 }
 
-// Guests' online orders are placed server to server: Java's SimpleAuthFilter takes the storefront
-// key as a STAFF caller on POST /api/checkout and /api/orders/sync only. The visitor's own token
-// is left out, since a customer's token would be refused there.
+// Đơn online của khách được đặt theo kiểu server gọi server: SimpleAuthFilter bên Java coi key của
+// storefront là một người gọi STAFF, chỉ ở POST /api/checkout và /api/orders/sync. Token của chính
+// khách không được gửi, vì token khách hàng sẽ bị từ chối ở đó.
 type ServiceOption = { asService?: boolean }
 
 function storefrontService(): Pick<CallOptions, 'auth' | 'headers'> | null {
@@ -186,7 +191,7 @@ export type ReservationPayload = {
   dateTime: string
   guests: number
   tableId: number
-  // Java takes the branch from the tables; when sent, the tables must belong to it.
+  // Java lấy chi nhánh từ các bàn; nếu có gửi thì các bàn phải thuộc chi nhánh đó.
   branch?: BranchId
 }
 
@@ -216,13 +221,16 @@ export function fetchReservations(branch?: BranchId): Promise<JavaResult<JavaRes
   return request<JavaReservation[]>(`/api/reservations${branch ? `?${branchQuery(branch)}` : ''}`, { method: 'GET' })
 }
 
-/** Customer history is scoped by the authenticated Java account, never by a client-supplied id. */
+/**
+ * Lịch sử khách hàng được giới hạn theo tài khoản Java đã xác thực, không bao giờ theo id do client
+ * gửi.
+ */
 export function fetchMyReservations(token: string): Promise<JavaResult<JavaReservation[]>> {
   return request<JavaReservation[]>('/api/reservations/mine', { method: 'GET', auth: token })
 }
 
-// PATCH /api/reservations/{code}/status: confirm or cancel (seating goes through transfer-pos).
-// PUT /api/reservations/{code} (STAFF+): edits a pending or confirmed booking; the chain runs again.
+// PATCH /api/reservations/{code}/status: xác nhận hoặc hủy (nhận bàn đi qua transfer-pos). PUT
+// /api/reservations/{code} (STAFF+): sửa phiếu đang chờ hoặc đã xác nhận; chuỗi kiểm tra chạy lại.
 export function updateJavaReservation(code: string, payload: ReservationPayload): Promise<JavaResult<JavaReservation>> {
   return request<JavaReservation>(`/api/reservations/${encodeURIComponent(code)}`, { method: 'PUT', body: payload })
 }
@@ -242,7 +250,7 @@ export type TransferredOrder = {
   total: number
 }
 
-// POST /api/reservations/{code}/transfer-pos: the Java ReservationToOrderAdapter opens a POS order.
+// POST /api/reservations/{code}/transfer-pos: ReservationToOrderAdapter bên Java mở đơn POS.
 export function transferReservation(code: string): Promise<JavaResult<TransferredOrder>> {
   return request<TransferredOrder>(`/api/reservations/${encodeURIComponent(code)}/transfer-pos`, { method: 'POST' })
 }
@@ -257,8 +265,8 @@ export type JavaCustomer = {
   totalSpent: number
 }
 
-// GET /api/customers?phone=...: the POS member lookup.
-// With asService, the storefront's key reads one phone (the account page), never the whole list.
+// GET /api/customers?phone=...: POS tra cứu thành viên. Với asService, key của storefront đọc một
+// số điện thoại (trang tài khoản), không bao giờ đọc cả danh sách.
 export function findCustomerByPhone(phone: string, options: ServiceOption = {}): Promise<JavaResult<JavaCustomer[]>> {
   const service = options.asService ? storefrontService() : undefined
   if (service === null) return Promise.resolve(serviceKeyMissing)
@@ -267,12 +275,12 @@ export function findCustomerByPhone(phone: string, options: ServiceOption = {}):
 
 export type JavaOrder = { orderCode: string; status: string; paymentStatus: string; total: number; warnings?: string[] }
 
-// PATCH /api/orders/{code}/status: KDS lifecycle; reaching "completed" frees the table for cleaning.
+// PATCH /api/orders/{code}/status: vòng đời KDS; khi tới "completed" thì bàn được nhả để dọn.
 export function updateJavaOrderStatus(code: string, status: string): Promise<JavaResult<JavaOrder>> {
   return request<JavaOrder>(`/api/orders/${encodeURIComponent(code)}/status`, { method: 'PATCH', body: { status } })
 }
 
-// POST /api/orders/{code}/pay: settles an unpaid order (e.g. one transferred from a reservation).
+// POST /api/orders/{code}/pay: thanh toán đơn chưa trả (ví dụ đơn chuyển từ phiếu đặt bàn).
 export function payJavaOrder(code: string, paymentMethod: string): Promise<JavaResult<JavaOrder>> {
   return request<JavaOrder>(`/api/orders/${encodeURIComponent(code)}/pay`, { method: 'POST', body: { paymentMethod } })
 }
@@ -283,7 +291,7 @@ export function payJavaTables(input: GroupPaymentInput): Promise<JavaResult<Grou
   return request<GroupPaymentReceipt>('/api/orders/pay-tables', { method: 'POST', body: input })
 }
 
-// Quantities are not tracked: the endpoint only switches an item on or off for sale.
+// Không theo dõi số lượng: endpoint chỉ bật hoặc tắt bán một món.
 export type StockPayload = { inStock: boolean }
 
 // PATCH /api/menu/{id}/stock
@@ -308,12 +316,12 @@ export function createJavaMenuItem(payload: NewJavaMenuItem): Promise<JavaResult
   return request<JavaMenuItem>('/api/menu', { method: 'POST', body: payload })
 }
 
-// PUT /api/menu/{id} (MANAGER+): replaces the editable fields; 409 when the name is taken.
+// PUT /api/menu/{id} (MANAGER+): thay các trường sửa được; 409 khi tên đã có.
 export function updateJavaMenuItem(id: number, payload: NewJavaMenuItem): Promise<JavaResult<JavaMenuItem>> {
   return request<JavaMenuItem>(`/api/menu/${id}`, { method: 'PUT', body: payload })
 }
 
-// DELETE /api/menu/{id} (MANAGER+). Past orders keep the name and price they were sold at.
+// DELETE /api/menu/{id} (MANAGER+). Đơn cũ giữ nguyên tên và giá lúc bán.
 export function deleteJavaMenuItem(id: number): Promise<JavaResult<null>> {
   return request<null>(`/api/menu/${id}`, { method: 'DELETE' })
 }
@@ -341,7 +349,8 @@ export type SyncResult = {
   results: { orderCode: string | null; result: 'created' | 'exists' | 'failed'; error?: string; warnings?: string[] }[]
 }
 
-// POST /api/orders/sync: imports orders recorded locally while Java was down (no payment is taken).
+// POST /api/orders/sync: nhập các đơn đã ghi cục bộ trong lúc Java ngừng hoạt động (không thu
+// tiền).
 export function syncJavaOrders(orders: SyncOrderPayload[], options: ServiceOption = {}): Promise<JavaResult<SyncResult>> {
   const service = options.asService ? storefrontService() : undefined
   if (service === null) return Promise.resolve(serviceKeyMissing)
@@ -375,7 +384,7 @@ export function fetchCustomers(): Promise<JavaResult<JavaCustomerSummary[]>> {
 
 export type VoucherVerdict = { code: string; valid: boolean; discountAmount: number; description: string }
 
-// POST /api/vouchers/validate (public): previews a voucher with the Strategy checkout uses.
+// POST /api/vouchers/validate (công khai): xem trước voucher bằng đúng Strategy mà checkout dùng.
 export function validateVoucher(code: string, subtotal: number): Promise<JavaResult<VoucherVerdict>> {
   return request<VoucherVerdict>('/api/vouchers/validate', { method: 'POST', body: { code, subtotal } })
 }
@@ -395,7 +404,7 @@ export type StoreConfig = {
 
 export type StoreConfigChange = Partial<Omit<StoreConfig, 'vatRate' | 'autoCancelMinutes'>>
 
-// GET /api/config: settings held by the SystemConfigManager Singleton.
+// GET /api/config: cài đặt do Singleton SystemConfigManager giữ.
 export function fetchConfig(): Promise<JavaResult<StoreConfig>> {
   return request<StoreConfig>('/api/config', { method: 'GET' })
 }
@@ -405,7 +414,7 @@ export function updateConfig(change: StoreConfigChange): Promise<JavaResult<Stor
   return request<StoreConfig>('/api/config', { method: 'PUT', body: change })
 }
 
-// ---- accounts (/api/auth, /api/users) ----
+// ---- tài khoản (/api/auth, /api/users) ----
 
 export type JavaRole = 'CUSTOMER' | 'STAFF' | 'MANAGER' | 'ADMIN'
 
@@ -430,8 +439,8 @@ export function registerAccount(input: { email: string; name: string; password: 
   return request<JavaSession>('/api/auth/register', { method: 'POST', body: input, auth: false })
 }
 
-// Customers only: the frontend verified the Google ID token, and the service key proves this
-// call comes from it. Staff accounts are refused (STAFF_PASSWORD_ONLY).
+// Chỉ dành cho khách hàng: frontend đã kiểm tra Google ID token, và service key chứng minh lời gọi
+// này đến từ frontend. Tài khoản nhân viên bị từ chối (STAFF_PASSWORD_ONLY).
 export function signInWithGoogle(
   identity: { googleSubject: string; email: string; name: string; emailVerified: boolean },
   serviceKey: string,
