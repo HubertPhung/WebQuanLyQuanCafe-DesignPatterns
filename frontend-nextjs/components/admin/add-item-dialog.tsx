@@ -42,7 +42,7 @@ const SAMPLE_PRESETS = [
   { name: 'Hạt Arabica', url: '/images/beans.png' },
 ]
 
-// Adds a menu item, or edits `item` when one is given (the form opens filled with its values).
+// Thêm món mới, hoặc sửa `item` khi có truyền vào (form mở ra đã điền sẵn giá trị của nó).
 export function AddItemDialog({ categories, onCreated, item }: { categories: string[]; onCreated?: () => void; item?: MenuItem }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -53,7 +53,7 @@ export function AddItemDialog({ categories, onCreated, item }: { categories: str
   const [options, setOptions] = useState<Option[]>([])
   const [pending, startTransition] = useTransition()
   const editing = item !== undefined
-  // Unique per dialog: every table row has its own edit dialog.
+  // Duy nhất cho mỗi hộp thoại: mỗi dòng trong bảng có hộp thoại sửa riêng.
   const idPrefix = editing ? `edit-item-${item.id}` : 'item'
 
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -66,7 +66,7 @@ export function AddItemDialog({ categories, onCreated, item }: { categories: str
   }
 
   function changeOpen(next: boolean) {
-    // Opening starts from the item as it is saved now (or an empty form for a new one).
+    // Khi mở thì bắt đầu từ món như đang được lưu (hoặc form trống cho món mới).
     if (next) reset()
     setOpen(next)
   }
@@ -198,7 +198,7 @@ export function AddItemDialog({ categories, onCreated, item }: { categories: str
             submit(event.currentTarget)
           }}
         >
-          {/* Scrollable form body */}
+          {/* Thân form cuộn được */}
           <div className="flex-1 min-h-0 overflow-y-auto p-5 sm:p-6 space-y-5">
             {/* UPLOAD HÌNH ẢNH: KÉO THẢ HOẶC CHỌN TỪ MÁY TÍNH */}
             <div className="space-y-2">
@@ -464,7 +464,7 @@ export function AddItemDialog({ categories, onCreated, item }: { categories: str
             </FieldSet>
           </div>
 
-          {/* Fixed footer: Always neatly pinned at bottom, never overlapping */}
+          {/* Chân form cố định: luôn nằm gọn ở dưới cùng, không bao giờ chồng lên nội dung */}
           <DialogFooter className="p-4 sm:px-6 border-t border-stone-200 bg-stone-50/90 shrink-0 m-0 flex sm:flex-row justify-end gap-3">
             <Button
               type="button"

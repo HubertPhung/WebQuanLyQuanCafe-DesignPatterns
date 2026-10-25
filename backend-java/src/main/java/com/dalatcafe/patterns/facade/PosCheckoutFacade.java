@@ -29,13 +29,12 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Facade Pattern (GoF Structural): single entry point {@link #checkout(CheckoutRequest)} that
- * orchestrates OrderBuilder, BeverageDecorator, DiscountStrategy, PaymentProcessorFactory,
- * OrderEventSubject and the DAO layer.
- *
- * Consistency: every line must be on sale (the in-stock switch; quantities are not tracked),
- * then payment is taken, then the order is saved. Any failure before the save persists nothing.
- * Observers run after the commit; their failures are reported as warnings and never undo it.
+ * Facade Pattern (GoF Structural): một điểm vào duy nhất {@link #checkout(CheckoutRequest)} điều
+ * phối OrderBuilder, BeverageDecorator, DiscountStrategy, PaymentProcessorFactory,
+ * OrderEventSubject và tầng DAO. Tính nhất quán: mọi dòng phải đang được bán (công tắc in-stock;
+ * không theo dõi số lượng), sau đó mới thu tiền, rồi mới lưu đơn. Lỗi xảy ra trước khi lưu thì
+ * không ghi gì. Observer chạy sau khi lưu; lỗi của chúng chỉ thành cảnh báo, không bao giờ hoàn tác
+ * đơn.
  */
 public class PosCheckoutFacade {
     private static final Logger LOGGER = Logger.getLogger(PosCheckoutFacade.class.getName());
@@ -60,7 +59,7 @@ public class PosCheckoutFacade {
     }
 
     /**
-     * Executes the whole checkout. Does not throw for business failures; inspect the result.
+     * Thực hiện toàn bộ checkout. Không ném ngoại lệ cho lỗi nghiệp vụ; hãy xem kết quả trả về.
      */
     public synchronized CheckoutResult checkout(CheckoutRequest request) {
         Objects.requireNonNull(request, "Request must not be null");
@@ -71,7 +70,7 @@ public class PosCheckoutFacade {
             return problem;
         }
 
-        // Steps 1-3: decorate drinks, build the order, apply the discount.
+        // Bước 1-3: bọc đồ uống bằng Decorator, dựng đơn, áp giảm giá.
         Order order = buildOrder(request, menu);
         Double tendered = request.getTenderedAmount();
         if (request.getPaymentMethod() == PaymentMethod.CASH && tendered != null && tendered < order.getTotal()) {
@@ -79,11 +78,11 @@ public class PosCheckoutFacade {
                     "Cash tendered " + tendered + " does not cover the total " + order.getTotal(), null);
         }
 
-        // Step 4: payment.
+        // Bước 4: thanh toán.
         PaymentResult payment;
         try {
             if (order.getTotal() <= 0) {
-                // Fully discounted order: processors reject zero amounts, so nothing is charged.
+                // Đơn được giảm hết tiền: bộ xử lý thanh toán từ chối số tiền 0, nên không thu gì.
                 payment = new PaymentResult(true, "NO-CHARGE-" + order.getOrderCode(), "Nothing to charge");
             } else {
                 IPaymentProcessor processor = PaymentProcessorFactory.createProcessor(request.getPaymentMethod());
@@ -97,7 +96,7 @@ public class PosCheckoutFacade {
                     payment == null ? "Payment declined" : "Payment declined: " + payment.getMessage(), payment);
         }
 
-        // Step 5: persist the paid order; it waits on the KDS until the kitchen completes it.
+        // Bước 5: lưu đơn đã thanh toán; đơn chờ trên KDS cho tới khi quầy pha chế hoàn tất.
         order.setPaymentStatus(PaymentStatus.PAID);
         order.setStatus(OrderStatus.PENDING);
         boolean saved;
@@ -112,7 +111,7 @@ public class PosCheckoutFacade {
                     + payment.getTransactionId() + " must be voided)", payment);
         }
 
-        // Step 6: broadcast; observer failures must not undo a committed checkout.
+        // Bước 6: phát sự kiện; lỗi của observer không được hoàn tác một lần checkout đã lưu.
         List<String> warnings = new ArrayList<>();
         try {
             eventSubject.notifyOrderPaid(order);
@@ -133,7 +132,7 @@ public class PosCheckoutFacade {
                 }
                 menu.put(line.getMenuItemId(), item);
             }
-            // Quantities are not tracked: an item is sold while its in-stock switch is on.
+            // Không theo dõi số lượng: một món được bán khi công tắc in-stock của nó đang bật.
             if (!item.isInStock()) {
                 return CheckoutResult.failure(CheckoutResult.FailureType.OUT_OF_STOCK, "Menu item out of stock: " + item.getName(), null);
             }
@@ -142,12 +141,15 @@ public class PosCheckoutFacade {
     }
 
     private Order buildOrder(CheckoutRequest request, Map<Integer, MenuItem> menu) {
+        DiscountContext discount = request.getDiscountStrategy() == null
+                ? new DiscountContext() : new DiscountContext(request.getDiscountStrategy());
         OrderBuilder builder = new OrderBuilder()
                 .forCustomer(request.getCustomer() == null ? null : request.getCustomer().getName())
                 .ofType(request.getOrderType())
                 .withNote(request.getNote())
                 .withPayment(request.getPaymentMethod(), false)
-                .avoidingCodes(code -> orderDao.findByOrderCode(code).isPresent());
+                .avoidingCodes(code -> orderDao.findByOrderCode(code).isPresent())
+                .discountedBy(subtotal -> discount.executeDiscount(subtotal, request.getCustomer()));
         if (request.getTableId() != null) {
             builder.atTable(request.getTableId());
         }
@@ -156,12 +158,6 @@ public class PosCheckoutFacade {
         }
         Order order = builder.build();
         order.setBranch(request.getBranch());
-        order.recalculateTotals();
-
-        DiscountContext discount = request.getDiscountStrategy() == null
-                ? new DiscountContext() : new DiscountContext(request.getDiscountStrategy());
-        order.setDiscountAmount(discount.executeDiscount(order.getSubtotal(), request.getCustomer()));
-        order.recalculateTotals();
         return order;
     }
 

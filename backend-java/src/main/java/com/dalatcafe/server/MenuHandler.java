@@ -14,9 +14,9 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * GET /api/menu (public catalog), POST /api/menu (new item, MANAGER+), PUT /api/menu/{id}
- * (edit, MANAGER+), DELETE /api/menu/{id} (remove, MANAGER+) and PATCH /api/menu/{id}/stock
- * (the in-stock switch, STAFF+).
+ * GET /api/menu (thực đơn công khai), POST /api/menu (món mới, MANAGER+), PUT /api/menu/{id} (sửa,
+ * MANAGER+), DELETE /api/menu/{id} (xóa, MANAGER+) và PATCH /api/menu/{id}/stock (công tắc bán/tạm
+ * ngưng, STAFF+).
  */
 public class MenuHandler extends ApiHandler {
     private final IMenuDao menuDao;
@@ -94,11 +94,14 @@ public class MenuHandler extends ApiHandler {
         sendOk(exchange, 201, toJson(item), "Menu item created");
     }
 
-    /** Replaces the editable fields; the name stays unique (case-insensitive) across the menu. */
+    /**
+     * Thay toàn bộ các trường sửa được; tên món vẫn phải duy nhất (không phân biệt hoa thường)
+     * trong thực đơn.
+     */
     private void update(HttpExchange exchange, int id) throws IOException {
         Map<String, Object> body = readJsonBody(exchange);
         MenuItem item;
-        // Checking the name and saving are one step, or two edits could take the same name.
+        // Kiểm tra tên và lưu là một bước, nếu không hai lượt sửa có thể cùng lấy một tên.
         synchronized (menuDao) {
             item = menuDao.findById(id).orElseThrow(() -> ApiException.notFound("Menu item not found: " + id));
             String name = requireStr(body, "name");
@@ -139,7 +142,7 @@ public class MenuHandler extends ApiHandler {
         sendOk(exchange, 200, toJson(item), "Menu item updated");
     }
 
-    /** Past orders and bookings keep the name and price they were sold at, so removing is safe. */
+    /** Đơn và phiếu đặt bàn cũ giữ tên và giá lúc bán, nên xóa món là an toàn. */
     private void delete(HttpExchange exchange, int id) throws IOException {
         menuDao.findById(id).orElseThrow(() -> ApiException.notFound("Menu item not found: " + id));
         if (!menuDao.deleteById(id)) {
@@ -149,8 +152,8 @@ public class MenuHandler extends ApiHandler {
     }
 
     /**
-     * Switches an item on or off for sale. Quantities are no longer tracked, so the body is just
-     * {@code {"inStock": true|false}}; the path keeps its name for existing clients.
+     * Bật hoặc tắt bán một món. Không còn theo dõi số lượng, nên body chỉ là {@code {"inStock":
+     * true|false}}; đường dẫn giữ tên cũ để client hiện có vẫn dùng được.
      */
     private void updateStock(HttpExchange exchange, int id) throws IOException {
         Map<String, Object> body = readJsonBody(exchange);

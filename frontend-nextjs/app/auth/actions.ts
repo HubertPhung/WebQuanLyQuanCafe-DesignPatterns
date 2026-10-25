@@ -8,7 +8,7 @@ import { jwtSecret } from '@/lib/auth/token'
 
 export type AuthFormState = { error?: string; message?: string }
 
-// Accounts live in the Java backend; this layer only keeps its token in an httpOnly cookie.
+// Tài khoản nằm ở backend Java; lớp này chỉ giữ token của nó trong cookie httpOnly.
 function failure(result: Extract<JavaResult<unknown>, { ok: false }>): AuthFormState {
   if (result.unreachable) return { error: 'Máy chủ đăng nhập (Java) không phản hồi. Vui lòng thử lại sau.' }
   switch (result.code) {
@@ -25,7 +25,10 @@ function failure(result: Extract<JavaResult<unknown>, { ok: false }>): AuthFormS
   }
 }
 
-/** Where to go after signing in: the requested page when the role allows it, else the role's home. */
+/**
+ * Đi đâu sau khi đăng nhập: trang được yêu cầu nếu vai trò cho phép, nếu không thì trang chủ của
+ * vai trò.
+ */
 function destination(session: JavaSession, next: string | null) {
   const role = isRole(session.user.role) ? session.user.role : 'CUSTOMER'
   const wanted = safeNext(next)

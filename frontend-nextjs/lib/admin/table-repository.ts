@@ -7,15 +7,15 @@ import { DEFAULT_BRANCH_ID, type BranchId } from '@/lib/branches'
 
 type Details = { name: string; seats: number; zone: string; imageUrl: string | null; branch?: BranchId }
 
-// The same local PostgreSQL tables used by getTables when Java is unavailable.
+// Chính các bảng PostgreSQL cục bộ mà getTables dùng khi Java không hoạt động.
 export async function saveDatabaseTable({ branch: requested, ...details }: Details, id?: number) {
   await ensureTableImages()
   return db.transaction(async tx => {
-    // Coordinates id allocation and case-insensitive name checks across Next.js workers.
+    // Điều phối việc cấp id và kiểm tra tên không phân biệt hoa thường giữa các worker Next.js.
     await tx.execute(sql`SELECT pg_advisory_xact_lock(174328102)`)
     const tables = await tx.select().from(adminTables).for('update')
     const current = id === undefined ? undefined : tables.find(table => table.id === id && !table.deletedAt)
-    // An edited table stays at its branch; names only have to be unique within one branch.
+    // Bàn đang sửa giữ nguyên chi nhánh; tên chỉ cần không trùng trong cùng một chi nhánh.
     const branch = current?.branch ?? requested ?? DEFAULT_BRANCH_ID
     if (tables.some(table => !table.deletedAt && table.id !== id && table.branch === branch && table.name.toLowerCase() === details.name.toLowerCase())) throw new Error('Tên bàn đã tồn tại.')
     if (id === undefined) {
@@ -46,15 +46,15 @@ export async function deleteDatabaseTable(id: number) {
     if (!table || table.deletedAt) throw new Error('Không tìm thấy bàn.')
     const [order] = await tx.select({ id: adminOrders.id }).from(adminOrders)
       .where(sql`(${adminOrders.tableId} = ${id} OR ${adminOrders.tableIds} @> ${JSON.stringify([id])}::jsonb) AND (${adminOrders.status} <> 'completed' OR ${adminOrders.paymentStatus} = 'unpaid')`).limit(1)
-    // Seeded sample bookings belong to the mock floor, not this database.
+    // Phiếu đặt mẫu thuộc sơ đồ bàn của mock, không thuộc database này.
     const booking = getMockReservations().some(booking => booking.code.startsWith('RES-L') && ['Chờ xác nhận', 'Đã đặt'].includes(booking.status) && (booking.tableIds ?? [booking.tableId]).includes(id))
     if (table.status === 'occupied' || table.status === 'reserved' || order || booking) throw new Error('Bàn còn khách, đơn chưa kết thúc/thanh toán hoặc lịch đặt chưa xử lý. Vui lòng xử lý trước khi xóa.')
     await tx.update(adminTables).set({ deletedAt: new Date(), updatedAt: new Date() }).where(eq(adminTables.id, id))
   })
 }
 
-// Java owns the floor while it runs; this keeps the database copy in step so the POS still sees
-// the same tables when it falls back to the database. Mirror failures never undo the Java write.
+// Java nắm sơ đồ bàn khi đang chạy; hàm này giữ bản sao trong database khớp theo, để POS vẫn thấy
+// đúng các bàn khi phải chuyển sang database. Lỗi khi chép không bao giờ hoàn tác bản ghi bên Java.
 export async function mirrorDatabaseTable(table: FloorTable) {
   try {
     await ensureTableImages()

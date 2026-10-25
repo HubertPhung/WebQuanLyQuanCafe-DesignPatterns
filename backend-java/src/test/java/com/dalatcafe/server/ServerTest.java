@@ -52,7 +52,7 @@ class ServerTest {
     @AfterEach
     void tearDown() {
         server.stop();
-        // The config endpoint changes the Singleton; later tests expect the defaults.
+        // Endpoint cài đặt làm thay đổi Singleton; các test sau cần giá trị mặc định.
         SystemConfigManager.getInstance().resetToDefaults();
     }
 
@@ -529,7 +529,7 @@ class ServerTest {
         return (String) data(response).get("orderCode");
     }
 
-    // Legacy/imported bills may share a table; new POS bills must choose an unused table.
+    // Hóa đơn cũ/được nhập có thể dùng chung bàn; hóa đơn POS mới phải chọn bàn chưa dùng.
     private String historicalPaidOrderAtTable(int tableId, String code) {
         Order order = new Order(null, code, "Existing guest", tableId, com.dalatcafe.model.OrderType.DINE_IN);
         order.addItem(new com.dalatcafe.model.OrderItem("Coffee", 1, 45000));
@@ -550,7 +550,7 @@ class ServerTest {
         assertEquals(TableStatus.OCCUPIED, daos.getTableDao().findById(3).orElseThrow().getStatus());
         assertEquals(TableStatus.OCCUPIED, daos.getTableDao().findById(6).orElseThrow().getStatus());
         assertEquals(PaymentStatus.UNPAID, daos.getOrderDao().findByOrderCode("UNPAID-GROUP").orElseThrow().getPaymentStatus());
-        // A stale/manual table flag must not hide the active order.
+        // Cờ trạng thái bàn cũ hoặc đặt tay không được che mất đơn đang mở.
         daos.getTableDao().updateStatus(3, TableStatus.AVAILABLE, 0);
         List<Map<String, Object>> tables = (List<Map<String, Object>>) json(call("GET", "/api/tables", "STAFF", null)).get("data");
         assertEquals("occupied", tables.stream().filter(table -> ((Number) table.get("id")).intValue() == 3).findFirst().orElseThrow().get("status"));
@@ -653,7 +653,7 @@ class ServerTest {
 
     @Test
     void anUnpaidOpenTabKeepsTheTableSeated() throws Exception {
-        // Seed: table 7 is occupied by guests whose tab AC-0052-C3D is still unpaid.
+        // Dữ liệu mẫu: bàn 7 có khách và hóa đơn AC-0052-C3D của họ vẫn chưa thanh toán.
         DaoFactory daos = DaoFactory.getInstance();
         String extra = historicalPaidOrderAtTable(7, "HISTORY-EXTRA");
         assertEquals(200, setOrderStatus(extra, "completed").statusCode());
@@ -847,7 +847,7 @@ class ServerTest {
         assertEquals(2, ((Number) data(again).get("existing")).intValue());
         assertEquals(0, ((Number) data(again).get("created")).intValue());
 
-        // An imported order follows the normal KDS lifecycle afterwards.
+        // Đơn được nhập sau đó đi theo vòng đời KDS bình thường.
         assertEquals(200, setOrderStatus("AC-0901-OFF", "completed").statusCode());
         assertEquals(TableStatus.CLEANING, daos.getTableDao().findById(12).orElseThrow().getStatus());
 
@@ -869,7 +869,7 @@ class ServerTest {
         assertEquals("22:00", data(updated).get("closingTime"));
         assertEquals("Da Lat Cafe 2", SystemConfigManager.getInstance().getStoreName());
 
-        // The Chain of Responsibility reads the Singleton: 5 guests now exceed the limit.
+        // Chain of Responsibility đọc Singleton: giờ 5 khách đã vượt giới hạn.
         String when = LocalDate.now().plusDays(2).atTime(LocalTime.of(15, 0)).toInstant(ZoneOffset.ofHours(7)).toString();
         HttpResponse<String> tooMany = call("POST", "/api/reservations", null, "{\"customer\":\"Lan\",\"contact\":\"0912000111\","
                 + "\"dateTime\":\"" + when + "\",\"tableId\":5,\"guests\":5}");
@@ -894,7 +894,7 @@ class ServerTest {
         HttpResponse<String> bad = call("POST", "/api/vouchers/validate", null, "{\"code\":\"NOPE\",\"subtotal\":100000}");
         assertEquals(Boolean.FALSE, data(bad).get("valid"));
         assertEquals(400, call("POST", "/api/vouchers/validate", null, "{\"code\":\"WELCOME10\"}").statusCode());
-        // Only POST is public; any other method falls back to the staff gate first.
+        // Chỉ POST là công khai; phương thức khác phải qua cổng kiểm tra nhân viên trước.
         assertEquals(401, call("GET", "/api/vouchers/validate", null, null).statusCode());
         assertEquals(405, call("GET", "/api/vouchers/validate", "STAFF", null).statusCode());
     }

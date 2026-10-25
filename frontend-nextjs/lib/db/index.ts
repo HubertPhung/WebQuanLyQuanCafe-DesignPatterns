@@ -22,7 +22,7 @@ if (db && process.env.NODE_ENV !== 'production') {
   globalForDb.drizzleDb = db
 }
 
-// Columns added after the first release; rows from before branches belong to the first branch.
+// Các cột thêm sau bản phát hành đầu; dòng có từ trước khi có chi nhánh thuộc chi nhánh đầu tiên.
 let groupColumnsReady: Promise<void> | undefined
 let tableImagesReady: Promise<void> | undefined
 let orderCancellationReady: Promise<void> | undefined

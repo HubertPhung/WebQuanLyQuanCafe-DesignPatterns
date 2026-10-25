@@ -25,7 +25,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/** Tables, orders, bookings and analytics are kept apart per branch; the menu is shared. */
+/** Bàn, đơn, phiếu đặt bàn và thống kê được tách theo chi nhánh; thực đơn dùng chung. */
 class BranchTest {
     private static final int DRINK_ID = 902;
     private static final String SECOND = Branches.BUI_THI_XUAN;
@@ -112,7 +112,7 @@ class BranchTest {
         assertEquals(SECOND, object(created).get("branch"));
         int id = ((Number) object(created).get("id")).intValue();
 
-        // Editing keeps the branch even when another one is sent.
+        // Sửa bàn giữ nguyên chi nhánh kể cả khi gửi lên một chi nhánh khác.
         String moved = "{\"name\":\"Bàn 01 Tầng 3\",\"seats\":4,\"zone\":\"Tầng 3\",\"branch\":\"" + Branches.PHAN_DINH_PHUNG + "\"}";
         HttpResponse<String> edited = call("PUT", "/api/tables/" + id + "/details", "MANAGER", moved);
         assertEquals(200, edited.statusCode(), edited.body());
@@ -178,7 +178,8 @@ class BranchTest {
         assertEquals(200, transferred.statusCode(), transferred.body());
         assertEquals(SECOND, object(transferred).get("branch"));
 
-        // Tables of both branches cannot be joined, and a booking cannot name another branch's table.
+        // Không ghép được bàn của hai chi nhánh, và phiếu đặt không thể chỉ định bàn của chi nhánh
+        // khác.
         int firstBranchTable = 9;
         String mixed = booking.replace("0911000777", "0911000778").replace(inTwoDays(10), inTwoDays(15))
                 .replace("[" + second.get(0).getId() + ",", "[" + firstBranchTable + ",");

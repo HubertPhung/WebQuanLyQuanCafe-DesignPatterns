@@ -11,9 +11,9 @@ import type { OnlineOrderView } from '@/lib/admin/queries'
 import type { OrderStatus } from '@/lib/db/schema'
 import { cn } from '@/lib/utils'
 
-// Storefront orders as the kitchen and Java see them. Each step goes through the same server
-// actions as the KDS board; Java only completes an order that is paid, so cash on delivery is
-// marked paid first.
+// Đơn storefront theo cách quầy pha chế và Java nhìn thấy. Mỗi bước đi qua cùng các server action
+// với bảng KDS; Java chỉ hoàn tất đơn đã thanh toán, nên đơn tiền mặt khi nhận hàng được đánh dấu
+// đã thanh toán trước.
 
 const nextStatus: Partial<Record<OrderStatus, OrderStatus>> = { pending: 'brewing', brewing: 'ready', ready: 'completed' }
 

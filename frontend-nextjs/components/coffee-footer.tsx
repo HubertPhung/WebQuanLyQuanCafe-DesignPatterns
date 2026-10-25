@@ -15,7 +15,7 @@ const exploreLinks = [
 function BranchCard({ branch, index }: { branch: (typeof branches)[number]; index: number }) {
   return (
     <article className="flex flex-col">
-      {/* Index & Working Hours */}
+      {/* Số thứ tự và giờ mở cửa */}
       <div className="flex items-center gap-2.5 text-xs font-medium text-[#89684F]">
         <span className="font-bold tabular-nums text-stone-900" aria-hidden="true">
           {String(index + 1).padStart(2, '0')}
@@ -27,12 +27,12 @@ function BranchCard({ branch, index }: { branch: (typeof branches)[number]; inde
         </span>
       </div>
 
-      {/* Street Name in Playfair Display font */}
+      {/* Tên đường bằng font Playfair Display */}
       <h4 className="font-display mt-2.5 text-xl font-bold tracking-tight text-stone-900">
         {branch.street.replace(/^\d+\s*/, '')}
       </h4>
 
-      {/* Address with MapPin */}
+      {/* Địa chỉ kèm biểu tượng ghim bản đồ */}
       <div className="mt-2 flex items-start gap-2 text-sm text-stone-600">
         <MapPin size={15} className="mt-0.5 shrink-0 text-[#B45309]" aria-hidden="true" />
         <address className="not-italic leading-relaxed">
@@ -42,13 +42,13 @@ function BranchCard({ branch, index }: { branch: (typeof branches)[number]; inde
         </address>
       </div>
 
-      {/* Ambiance Note */}
+      {/* Ghi chú không gian */}
       <p className="mt-2.5 flex items-center gap-1.5 text-xs font-medium text-[#7C5A3E]">
         <Sparkles size={13} className="shrink-0 text-[#B45309]" aria-hidden="true" />
         <span>{branch.note}</span>
       </p>
 
-      {/* Directions Link */}
+      {/* Link chỉ đường */}
       <a
         href={mapsUrl(branch)}
         target="_blank"
@@ -75,7 +75,7 @@ export function CoffeeFooter({ storeDomain }: { storeDomain?: string }) {
   return (
     <footer id="locations" className="border-t border-stone-300/60 bg-[#EDE6DB] text-stone-800 scroll-mt-24">
       <div className="section-shell grid gap-12 py-14 lg:grid-cols-12">
-        {/* Brand and contact */}
+        {/* Thương hiệu và liên hệ */}
         <div className="space-y-5 lg:col-span-4">
           <a href="#" aria-label="Đà Lạt Cafe – về đầu trang" className="inline-block">
             <Logo tagline="Cà phê & cộng đồng" />
@@ -139,7 +139,7 @@ export function CoffeeFooter({ storeDomain }: { storeDomain?: string }) {
           )}
         </div>
 
-        {/* Branches */}
+        {/* Các chi nhánh */}
         <div className="lg:col-span-8">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#89684F]">Hệ thống chi nhánh</p>

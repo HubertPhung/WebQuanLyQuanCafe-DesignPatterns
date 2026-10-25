@@ -1,4 +1,4 @@
-// Keep old seed URLs from persisted data and carts on the bundled copies as well.
+// Các URL mẫu cũ còn trong dữ liệu đã lưu và giỏ hàng cũng được trỏ về bản đã tải về.
 const catalogPhotos = new Set([
   'photo-1442512595331-e89e73853f31',
   'photo-1447933601403-0c6688de566e',
@@ -54,18 +54,18 @@ export function localImageSrc(value: string | null | undefined, fallback = '/pla
   if (!source) return fallback
   try {
     const url = new URL(source)
-    // Table photos uploaded on a dev machine were saved with an absolute localhost URL.
+    // Ảnh bàn tải lên từ máy dev được lưu với URL localhost tuyệt đối.
     if ((url.hostname === 'localhost' || url.hostname === '127.0.0.1') && url.pathname === '/api/table-images') {
       return `${url.pathname}${url.search}`
     }
     if (url.hostname === 'images.unsplash.com') {
       const photo = url.pathname.slice(1)
       if (catalogPhotos.has(photo)) return `/images/catalog/${photo}.jpg`
-      // This original photo was removed upstream; use the bundled counter photo.
+      // Ảnh gốc này đã bị gỡ ở nguồn; dùng ảnh quầy đã tải về.
       if (photo === 'photo-1445116572660-238429888876') return '/images/space/counter.jpg'
     }
   } catch {
-    // Invalid or external image sources use a bundled placeholder.
+    // Nguồn ảnh không hợp lệ hoặc từ bên ngoài thì dùng ảnh placeholder đã tải về.
   }
   return fallback
 }

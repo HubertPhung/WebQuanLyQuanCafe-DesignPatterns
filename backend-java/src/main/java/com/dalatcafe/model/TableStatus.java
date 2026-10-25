@@ -1,7 +1,7 @@
 package com.dalatcafe.model;
 
 /**
- * Operational status of a Table on the Floor Plan.
+ * Trạng thái vận hành của một Table trên sơ đồ bàn.
  */
 public enum TableStatus {
     AVAILABLE("Bàn trống"),

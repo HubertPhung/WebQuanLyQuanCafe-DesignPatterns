@@ -51,7 +51,7 @@ export function AdminHeader({
   user,
 }: HeaderProps) {
   const router = useRouter()
-  // Shown at once; the server re-renders every admin page for the new branch.
+  // Hiện ngay lập tức; server render lại mọi trang admin cho chi nhánh mới.
   const [shownBranch, setShownBranch] = useState(branch)
   const [switching, startSwitch] = useTransition()
   const chooseBranch = (next: BranchId) => {
@@ -76,7 +76,7 @@ export function AdminHeader({
       <SidebarTrigger className="h-10 w-10 rounded-lg bg-white border border-stone-200/50 hover:bg-stone-100 text-stone-700 hover:text-stone-900 shadow-2xs flex-shrink-0 flex items-center justify-center" />
       <Separator orientation="vertical" className="h-5 bg-stone-200 flex-shrink-0" />
 
-      {/* Branch selector */}
+      {/* Chọn chi nhánh */}
       <DropdownMenu>
         <DropdownMenuTrigger
           className="hidden sm:flex h-10 rounded-lg px-3.5 text-xs md:text-sm font-semibold border border-stone-200/80 bg-white hover:bg-stone-50 gap-2 items-center cursor-pointer transition-colors shadow-2xs whitespace-nowrap min-w-fit flex-shrink-0"
@@ -106,7 +106,7 @@ export function AdminHeader({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Actions: Live Order Button, Notification, Admin Profile */}
+      {/* Các thao tác: nút đơn đang phục vụ, thông báo, hồ sơ admin */}
       <div className="ml-auto flex items-center gap-2.5 flex-shrink-0">
         <Link
           href="/admin/pos?tab=kitchen"
@@ -119,7 +119,7 @@ export function AdminHeader({
           </Badge>
         </Link>
 
-        {/* Notifications Dropdown */}
+        {/* Danh sách thông báo */}
         <DropdownMenu>
           <DropdownMenuTrigger
             className="relative h-10 w-10 rounded-lg bg-white border border-stone-200/80 hover:bg-stone-100 flex items-center justify-center text-stone-700 hover:text-stone-900 transition-colors cursor-pointer shadow-2xs flex-shrink-0"
@@ -178,7 +178,7 @@ export function AdminHeader({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* Signed-in account */}
+        {/* Tài khoản đang đăng nhập */}
         <DropdownMenu>
           <DropdownMenuTrigger
             className="flex h-10 items-center gap-2 rounded-lg border border-stone-200/80 bg-white p-1 pr-3 hover:border-stone-300 hover:bg-stone-50 transition-colors cursor-pointer shadow-2xs flex-shrink-0 whitespace-nowrap"

@@ -1,8 +1,8 @@
 package com.dalatcafe.model;
 
 /**
- * Account roles, lowest to highest. A role includes every permission of the roles before it,
- * so {@code MANAGER.atLeast(STAFF)} is true.
+ * Vai trò tài khoản, từ thấp tới cao. Mỗi vai trò có mọi quyền của các vai trò đứng trước nó, nên
+ * {@code MANAGER.atLeast(STAFF)} là true.
  */
 public enum UserRole {
     CUSTOMER("Khách hàng"),

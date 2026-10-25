@@ -1,6 +1,6 @@
-// POS line customizations. Ids and surcharges mirror the Java Decorators
-// (LargeSizeDecorator, CheeseFoamDecorator, PearlToppingDecorator) so the price shown at the
-// counter matches the price the backend computes for POST /api/checkout.
+// Tùy chỉnh dòng món ở POS. Id và phụ thu khớp với các Decorator bên Java (LargeSizeDecorator,
+// CheeseFoamDecorator, PearlToppingDecorator) để giá hiện ở quầy khớp với giá backend tính cho POST
+// /api/checkout.
 
 export const posCustomizations = [
   { id: 'SIZE_L', label: 'Size L', price: 10000 },
@@ -16,7 +16,7 @@ export function isPosCustomization(value: unknown): value is PosCustomization {
   return typeof value === 'string' && byId.has(value)
 }
 
-// Canonical order so the same set always yields the same line key and description.
+// Thứ tự chuẩn để cùng một bộ tùy chỉnh luôn cho cùng khóa dòng và cùng mô tả.
 export function normalizeCustomizations(ids: readonly PosCustomization[]): PosCustomization[] {
   return posCustomizations.map((c) => c.id).filter((id) => ids.includes(id))
 }

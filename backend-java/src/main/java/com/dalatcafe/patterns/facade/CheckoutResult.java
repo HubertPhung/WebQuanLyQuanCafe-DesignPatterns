@@ -6,9 +6,9 @@ import com.dalatcafe.patterns.factory.PaymentResult;
 import java.util.List;
 
 /**
- * Outcome of a checkout. On failure {@code order} is null and nothing was persisted
- * (inventory is restored); {@code warnings} lists non-fatal post-commit problems such as
- * an observer that failed after the order was saved.
+ * Kết quả của một lần checkout. Khi thất bại, {@code order} là null và không có gì được lưu; {@code
+ * warnings} liệt kê các lỗi không nghiêm trọng xảy ra sau khi lưu, ví dụ một observer lỗi sau khi
+ * đơn đã được lưu.
  */
 public final class CheckoutResult {
     private final boolean success;
@@ -18,7 +18,7 @@ public final class CheckoutResult {
     private final FailureType failureType;
     private final List<String> warnings;
 
-    /** Why a checkout failed; null on success. */
+    /** Lý do checkout thất bại; null khi thành công. */
     public enum FailureType { NOT_FOUND, OUT_OF_STOCK, PAYMENT_FAILED, PERSISTENCE_FAILED }
 
     private CheckoutResult(boolean success, Order order, PaymentResult paymentResult,

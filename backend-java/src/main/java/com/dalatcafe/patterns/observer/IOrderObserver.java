@@ -6,27 +6,27 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
- * Observer for the two order lifecycle events: paid at the POS, then completed by the kitchen
- * (KDS). Both default to no-ops so each observer reacts only to the events it cares about.
+ * Observer cho hai sự kiện trong vòng đời đơn: thanh toán ở POS, rồi quầy pha chế (KDS) hoàn tất.
+ * Cả hai mặc định không làm gì, để mỗi observer chỉ phản ứng với sự kiện nó quan tâm.
  */
 public interface IOrderObserver {
-    /** An unpaid order was opened; its table is already in use. */
+    /** Một đơn chưa thanh toán vừa được mở; bàn của nó đã có khách. */
     default void onOrderOpened(Order order) {
     }
 
-    /** The order was paid and saved; it now waits for the barista. */
+    /** Đơn đã được thanh toán và lưu; giờ chờ barista pha chế. */
     default void onOrderPaid(Order order) {
     }
 
-    /** The kitchen finished the order and it left the KDS board. */
+    /** Quầy pha chế đã làm xong đơn và đơn rời bảng KDS. */
     default void onOrderCompleted(Order order) {
     }
 
-    /** The order was cancelled and must leave the kitchen queue. */
+    /** Đơn đã bị hủy và phải rời hàng chờ pha chế. */
     default void onOrderCancelled(Order order) {
     }
 
-    /** Observer that only reacts to {@link #onOrderPaid(Order)}. */
+    /** Observer chỉ phản ứng với {@link #onOrderPaid(Order)}. */
     static IOrderObserver whenPaid(Consumer<Order> action) {
         Objects.requireNonNull(action, "Action must not be null");
         return new IOrderObserver() {
@@ -37,7 +37,7 @@ public interface IOrderObserver {
         };
     }
 
-    /** Observer that only reacts to {@link #onOrderCompleted(Order)}. */
+    /** Observer chỉ phản ứng với {@link #onOrderCompleted(Order)}. */
     static IOrderObserver whenCompleted(Consumer<Order> action) {
         Objects.requireNonNull(action, "Action must not be null");
         return new IOrderObserver() {

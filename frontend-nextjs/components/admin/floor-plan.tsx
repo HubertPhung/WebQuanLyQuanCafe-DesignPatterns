@@ -46,7 +46,7 @@ interface AreaType {
   tableCount: number
 }
 
-// Zones are the ones the tables really belong to, with their table and seat counts.
+// Các khu vực là những khu mà bàn thực sự thuộc về, kèm số bàn và số chỗ.
 function areasOf(tables: FloorTable[]): AreaType[] {
   const zones = new Map<string, { tables: number; seats: number }>()
   for (const table of tables) {
@@ -66,7 +66,7 @@ export function FloorPlan({ tables: initialTables, openOrders, canManage = false
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [pending, startTransition] = useTransition()
 
-  // Modals
+  // Các hộp thoại
   const [isAddTableOpen, setIsAddTableOpen] = useState(false)
   const [isAddAreaOpen, setIsAddAreaOpen] = useState(false)
   const [newTableName, setNewTableName] = useState('Bàn 13')
@@ -293,7 +293,7 @@ export function FloorPlan({ tables: initialTables, openOrders, canManage = false
           </Button>
         </div>
 
-        {/* View Mode: Cards */}
+        {/* Kiểu xem: thẻ */}
         {viewMode === 'cards' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
             {tables.map((t) => (
@@ -326,7 +326,7 @@ export function FloorPlan({ tables: initialTables, openOrders, canManage = false
                   <span className="text-[11px] text-stone-500 block truncate">{t.zone}</span>
                 </div>
 
-                {/* Dropdown switch */}
+                {/* Menu thả xuống */}
                 <select
                   value={t.status}
                   onChange={(e) => handleStatusChange(t.id, e.target.value as TableStatus)}
@@ -342,7 +342,7 @@ export function FloorPlan({ tables: initialTables, openOrders, canManage = false
             ))}
           </div>
         ) : (
-          /* View Mode: Table */
+          /* Kiểu xem: bảng */
           <div className="overflow-x-auto rounded-lg border border-stone-200/90 bg-white">
             <table className="w-full text-left text-xs">
               <thead>

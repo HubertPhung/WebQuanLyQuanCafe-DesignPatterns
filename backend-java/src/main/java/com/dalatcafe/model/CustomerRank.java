@@ -1,7 +1,7 @@
 package com.dalatcafe.model;
 
 /**
- * Membership loyalty rank for cafe customers.
+ * Hạng thành viên tích lũy của khách hàng.
  */
 public enum CustomerRank {
     BRONZE("Thành viên Đồng", 0.0),

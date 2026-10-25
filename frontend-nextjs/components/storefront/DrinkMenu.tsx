@@ -21,7 +21,8 @@ interface DrinkMenuProps {
 
 const ALL = 'All favorites'
 
-// Drinks get sugar, ice and milk choices; the menu catalog tags them, Shopify products use types.
+// Đồ uống có lựa chọn đường, đá và sữa; thực đơn gắn thẻ cho chúng, sản phẩm Shopify thì dùng loại
+// sản phẩm.
 const isDrink = (product: Product) =>
   product.tags.includes(DRINK_TAG) || ['Espresso', 'Pour Over', 'Cold Brew'].includes(product.productType)
 
@@ -44,7 +45,7 @@ export function DrinkMenu({
   const [isFilterOpen, setIsFilterOpen] = useState<boolean>(false)
   const [showFavoritesOnly, setShowFavoritesOnly] = useState<boolean>(false)
 
-  // Customization modal states
+  // Trạng thái hộp thoại tùy chỉnh
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [selectedVariantId, setSelectedVariantId] = useState<string>('')
   const [selectedSize, setSelectedSize] = useState<string>('Tiêu chuẩn (12oz)')
@@ -53,7 +54,7 @@ export function DrinkMenu({
   const [milkChoice, setMilkChoice] = useState<string>('Sữa tươi nguyên kem (Whole)')
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false)
 
-  // Tabs are the categories the menu actually has, in the order they first appear.
+  // Các tab là những danh mục thực đơn thực sự có, theo thứ tự xuất hiện đầu tiên.
   const categories = [ALL, ...new Set(products.map((p) => p.productType))]
 
   const filteredProducts = products.filter((p) => {
@@ -95,7 +96,7 @@ export function DrinkMenu({
       if (onAddToCart) {
         await onAddToCart(selectedProduct, options, selectedVariantId)
       } else {
-        // Fallback direct cart call
+        // Dự phòng: gọi thẳng API giỏ hàng
         await fetch('/api/cart', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -144,7 +145,7 @@ export function DrinkMenu({
 
   return (
     <section className="menu-section section-shell py-10 md:py-14 scroll-mt-24" id="menu">
-      {/* Section Header */}
+      {/* Tiêu đề phần */}
       <div className="section-heading mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <p className="eyebrow inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-[#89684f]">
@@ -160,7 +161,7 @@ export function DrinkMenu({
         </p>
       </div>
 
-      {/* Categories Toolbar */}
+      {/* Thanh danh mục */}
       <div className="menu-toolbar mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-stone-200/80 pb-4">
         <div className="category-tabs flex flex-wrap items-center gap-2" role="group" aria-label="Coffee categories">
           {categories.map((cat, idx) => {
@@ -198,7 +199,7 @@ export function DrinkMenu({
         </button>
       </div>
 
-      {/* Search and Filters */}
+      {/* Tìm kiếm và bộ lọc */}
       <div className="search-row mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-3 rounded-2xl border border-stone-200/80 shadow-xs">
         <label className="search-field flex flex-1 items-center gap-2.5 text-stone-500 px-2">
           <Search className="size-4 text-[#3E2723]" />
@@ -234,7 +235,7 @@ export function DrinkMenu({
         </div>
       </div>
 
-      {/* Expanded Filters Drawer */}
+      {/* Ngăn bộ lọc mở rộng */}
       <AnimatePresence>
         {isFilterOpen && (
           <motion.div
@@ -277,14 +278,14 @@ export function DrinkMenu({
         )}
       </AnimatePresence>
 
-      {/* Catalog Error Banner */}
+      {/* Thông báo lỗi tải thực đơn */}
       {catalogError && (
         <div role="alert" className="mb-6 rounded-2xl bg-amber-50 border border-amber-200 p-4 text-xs text-amber-800">
           {catalogError}
         </div>
       )}
 
-      {/* Product Grid */}
+      {/* Lưới sản phẩm */}
       <div className="product-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {filteredProducts.map((p) => {
           const firstVariant = p.variants.nodes[0]
@@ -300,7 +301,7 @@ export function DrinkMenu({
               transition={{ duration: 0.3 }}
               className="product-card group relative flex flex-col justify-between rounded-2xl border border-stone-200/80 bg-white p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-amber-300 hover:shadow-[0_12px_32px_-8px_rgba(62,39,35,0.12)]"
             >
-              {/* Product Photo Box */}
+              {/* Khung ảnh sản phẩm */}
               <div className="product-image relative aspect-square w-full overflow-hidden rounded-xl bg-stone-100">
                 <button
                   type="button"
@@ -322,12 +323,12 @@ export function DrinkMenu({
                   )}
                 </button>
 
-                {/* Badge Tag */}
+                {/* Nhãn sản phẩm */}
                 <span className="product-tag absolute top-3 left-3 rounded-lg bg-white/95 px-2.5 py-1 text-[9px] font-bold tracking-wider text-[#3E2723] backdrop-blur-xs shadow-xs border border-stone-200/60">
                   {tagLabel}
                 </span>
 
-                {/* Favorite Heart Button */}
+                {/* Nút trái tim yêu thích */}
                 <button
                   type="button"
                   aria-label={`Lưu ${p.title} vào danh sách yêu thích`}
@@ -344,7 +345,7 @@ export function DrinkMenu({
                 </button>
               </div>
 
-              {/* Product Information */}
+              {/* Thông tin sản phẩm */}
               <div className="product-info mt-4 flex flex-1 flex-col justify-between">
                 <div>
                   <div className="flex items-center gap-2 text-[10px] font-bold tracking-wider text-stone-500 uppercase">
@@ -365,7 +366,7 @@ export function DrinkMenu({
                   </p>
                 </div>
 
-                {/* Bottom Bar: Price & Add Button */}
+                {/* Thanh dưới: giá và nút thêm */}
                 <div className="product-bottom mt-4 flex items-center justify-between border-t border-stone-100 pt-3.5">
                   <div>
                     <strong className="text-lg font-extrabold text-stone-900 tabular-nums">
@@ -392,7 +393,7 @@ export function DrinkMenu({
         })}
       </div>
 
-      {/* Empty State */}
+      {/* Trạng thái trống */}
       {!filteredProducts.length && !catalogError && (
         <div className="empty-menu my-12 flex flex-col items-center justify-center rounded-2xl border border-dashed border-[#e5ddd2] p-12 text-center bg-[#faf7f2]">
           <Coffee className="size-12 text-[#9c846c] mb-3 opacity-60" />
@@ -413,7 +414,7 @@ export function DrinkMenu({
         </div>
       )}
 
-      {/* Customization Dialog Modal */}
+      {/* Hộp thoại tùy chỉnh món */}
       <Dialog open={!!selectedProduct} onOpenChange={(open) => !open && setSelectedProduct(null)}>
         <DialogContent className="max-w-md rounded-2xl border-stone-200/80 bg-[#FAF8F5] p-6 text-stone-900 shadow-xl">
           <DialogHeader>
@@ -434,7 +435,7 @@ export function DrinkMenu({
                 {selectedProduct.description}
               </p>
 
-              {/* Size selection */}
+              {/* Chọn size */}
               <div>
                 <label className="mb-1.5 block font-semibold text-[#3E2723]">
                   Chọn kích cỡ ly
@@ -465,10 +466,10 @@ export function DrinkMenu({
                 </div>
               </div>
 
-              {/* Coffee Customizations (Sugar, Ice, Milk) */}
+              {/* Tùy chỉnh cà phê (đường, đá, sữa) */}
               {isDrink(selectedProduct) && (
                 <>
-                  {/* Sugar Level */}
+                  {/* Mức đường */}
                   <div>
                     <label className="mb-1.5 block font-semibold text-[#3E2723]">
                       Lượng ngọt
@@ -491,7 +492,7 @@ export function DrinkMenu({
                     </div>
                   </div>
 
-                  {/* Ice Level (if Cold Brew or iced) */}
+                  {/* Mức đá (nếu là Cold Brew hoặc đồ uống đá) */}
                   <div>
                     <label className="mb-1.5 block font-semibold text-[#3E2723]">
                       Lượng đá
@@ -514,7 +515,7 @@ export function DrinkMenu({
                     </div>
                   </div>
 
-                  {/* Milk Type */}
+                  {/* Loại sữa */}
                   <div>
                     <label className="mb-1.5 block font-semibold text-[#3E2723]">
                       Loại sữa kèm theo

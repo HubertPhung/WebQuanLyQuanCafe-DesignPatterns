@@ -1,7 +1,7 @@
 package com.dalatcafe.dao;
 
 /**
- * Storage execution mode for Dalat Cafe DAO Layer.
+ * Chế độ lưu trữ của tầng DAO Đà Lạt Cafe.
  */
 public enum DaoMode {
     IN_MEMORY,

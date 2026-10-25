@@ -9,8 +9,8 @@ async function main() {
   const actualPool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 1 })
   const client = await actualPool.connect()
   try {
-    // Pin the Supabase backend with BEGIN; application transactions then use SAVEPOINTs.
-    // All application reads/writes share this connection and the outer transaction rolls back.
+    // Ghim kết nối Supabase bằng BEGIN; transaction của ứng dụng sau đó dùng SAVEPOINT. Mọi thao
+    // tác đọc/ghi của ứng dụng dùng chung kết nối này và transaction bên ngoài được rollback.
     await drizzle(client).transaction(async transaction => {
       Object.assign(globalThis, {
         adminPool: { query: client.query.bind(client) },

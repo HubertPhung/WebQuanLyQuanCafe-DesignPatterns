@@ -7,6 +7,7 @@ import com.dalatcafe.dao.JdbcDatabase;
 import com.dalatcafe.patterns.facade.PosCheckoutFacade;
 import com.dalatcafe.patterns.observer.KitchenNotificationObserver;
 import com.dalatcafe.patterns.observer.OrderEventSubject;
+import com.dalatcafe.patterns.singleton.SystemConfigManager;
 import com.dalatcafe.patterns.observer.TableStatusSyncObserver;
 import com.dalatcafe.patterns.observer.ReservationOrderSyncObserver;
 import com.dalatcafe.security.AdminBootstrap;
@@ -28,7 +29,7 @@ import java.util.function.BooleanSupplier;
 import java.util.logging.Logger;
 
 /**
- * Boots the embedded Java SE HttpServer (default port 8080) and wires the REST handlers.
+ * Khởi động Java SE HttpServer nhúng (mặc định cổng 8080) và nối các REST handler.
  */
 public class MainServer {
     private static final Logger LOGGER = Logger.getLogger(MainServer.class.getName());
@@ -47,8 +48,8 @@ public class MainServer {
     private final ReservationHandler reservations;
 
     /**
-     * Development and test server: random token keys, the X-User-Role header accepted, and a
-     * cheap password hash so tests stay fast. {@link #main} uses the full constructor.
+     * Server cho phát triển và test: khóa token ngẫu nhiên, chấp nhận header X-User-Role và hash
+     * mật khẩu nhẹ để test chạy nhanh. {@link #main} dùng constructor đầy đủ.
      */
     public MainServer(int port, DaoFactory daos, BooleanSupplier databaseHealthy) throws IOException {
         this(port, daos, databaseHealthy, AuthSettings.withRoleHeader(), new PasswordHasher(10_000));
@@ -61,9 +62,11 @@ public class MainServer {
         this.allowRoleHeader = auth.allowRoleHeader();
         this.serviceKey = auth.serviceKey();
         OrderEventSubject subject = new OrderEventSubject();
-        subject.attach(new TableStatusSyncObserver(daos.getTableDao(), daos.getOrderDao()));
-        subject.attach(new ReservationOrderSyncObserver(daos.getReservationDao()));
-        subject.attach(new KitchenNotificationObserver());
+        // Dữ liệu trước (bàn, phiếu đặt), phiếu cho quầy pha chế sau cùng: số nhỏ hơn được báo
+        // trước.
+        subject.attach(new TableStatusSyncObserver(daos.getTableDao(), daos.getOrderDao()), 10);
+        subject.attach(new ReservationOrderSyncObserver(daos.getReservationDao()), 20);
+        subject.attach(new KitchenNotificationObserver(), 90);
         PosCheckoutFacade facade = new PosCheckoutFacade(daos.getOrderDao(), daos.getMenuDao(), subject);
 
         server = HttpServer.create(new InetSocketAddress(port), 0);
@@ -116,8 +119,8 @@ public class MainServer {
         if (args.length > 0) {
             port = Integer.parseInt(args[0]);
         }
-        // Settings from backend-java/.env fill in what the environment leaves out; the JDBC layer
-        // reads DATABASE_URL from a system property when the variable itself is not set.
+        // Cài đặt trong backend-java/.env bổ sung những gì biến môi trường còn thiếu; tầng JDBC đọc
+        // DATABASE_URL từ system property khi chính biến đó chưa được đặt.
         Map<String, String> env = EnvFile.withFile(System.getenv(), Path.of(".env"));
         env.forEach((key, value) -> {
             if (System.getenv(key) == null && System.getProperty(key) == null) {
@@ -125,7 +128,10 @@ public class MainServer {
             }
         });
         DaoFactory daos = DaoFactory.getInstance();
-        // Fail closed: with a configured JDBC store, a lost connection must not fall back to memory.
+        // Nạp cài đặt quán đã lưu (PostgreSQL ở chế độ JDBC) trước request đầu tiên.
+        SystemConfigManager.getInstance().attachStore(daos.getConfigDao());
+        // Fail closed: khi đã cấu hình kho JDBC, mất kết nối không được chuyển sang lưu trong bộ
+        // nhớ.
         BooleanSupplier healthy = () -> daos.getMode() != DaoMode.JDBC || JdbcDatabase.isAvailable();
         AuthSettings auth = AuthSettings.fromEnvironment(env);
         PasswordHasher hasher = new PasswordHasher();

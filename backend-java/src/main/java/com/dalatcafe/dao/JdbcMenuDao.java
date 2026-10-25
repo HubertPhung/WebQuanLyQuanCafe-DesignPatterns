@@ -11,7 +11,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * JDBC PostgreSQL implementation of IMenuDao.
+ * Bản cài đặt IMenuDao bằng JDBC PostgreSQL.
  */
 public class JdbcMenuDao implements IMenuDao {
     private static final Logger LOGGER = Logger.getLogger(JdbcMenuDao.class.getName());

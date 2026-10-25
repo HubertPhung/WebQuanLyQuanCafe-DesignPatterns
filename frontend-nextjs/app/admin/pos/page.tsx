@@ -18,7 +18,7 @@ export default async function PosPage({ searchParams }: { searchParams: Promise<
     getActiveOrders(),
     getPendingSyncCount(),
   ])
-  // Point value from the Java SystemConfigManager, so the POS preview matches the receipt.
+  // Giá trị điểm lấy từ SystemConfigManager bên Java, để bản xem trước ở POS khớp với hóa đơn.
   const config = await fetchConfig()
 
   return (
@@ -27,7 +27,7 @@ export default async function PosPage({ searchParams }: { searchParams: Promise<
       <PageHeading title="Đơn hàng & POS" description="Gọi món nhanh tại quầy và điều phối quy trình pha chế theo thời gian thực.">
         <OfflineSyncButton pending={pendingSync} />
       </PageHeading>
-      {/* Keyed by the tab so a link to ?tab=kitchen switches tabs even when the POS page is already open. */}
+      {/* Đặt key theo tab để link tới ?tab=kitchen vẫn chuyển tab kể cả khi trang POS đang mở sẵn. */}
       <Tabs key={tab === 'kitchen' ? 'kitchen' : 'pos'} defaultValue={tab === 'kitchen' ? 'kitchen' : 'pos'} className="gap-4">
         <TabsList>
           <TabsTrigger value="pos">

@@ -13,7 +13,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * JDBC PostgreSQL implementation of ICustomerDao.
+ * Bản cài đặt ICustomerDao bằng JDBC PostgreSQL.
  */
 public class JdbcCustomerDao implements ICustomerDao {
     private static final Logger LOGGER = Logger.getLogger(JdbcCustomerDao.class.getName());
@@ -176,9 +176,9 @@ public class JdbcCustomerDao implements ICustomerDao {
     }
 
     /**
-     * Applies a points or spend change while the row is locked, so a checkout redeeming points and a
-     * payment earning them cannot read the same balance and overwrite each other's result.
-     * Only the counters are written back; profile edits made meanwhile are kept.
+     * Áp thay đổi điểm hoặc chi tiêu khi dòng đang bị khóa, để một lượt checkout đổi điểm và một
+     * lượt thanh toán cộng điểm không đọc cùng số dư rồi ghi đè kết quả của nhau. Chỉ ghi lại các
+     * bộ đếm; sửa hồ sơ trong lúc đó vẫn được giữ.
      */
     private boolean changeLocked(int id, Predicate<Customer> change) {
         String select = "SELECT id, name, phone, email, total_orders, total_spent, loyalty_points, rank, last_visit FROM customers WHERE id = ? FOR UPDATE";
@@ -193,7 +193,7 @@ public class JdbcCustomerDao implements ICustomerDao {
                     c = mapResultSetToCustomer(rs);
                 }
             }
-            // Returning without commit rolls back and releases the lock when the connection goes back to the pool.
+            // Thoát mà không commit sẽ rollback và nhả khóa khi kết nối được trả về pool.
             if (!change.test(c)) return false;
             try (PreparedStatement ps = conn.prepareStatement(update)) {
                 ps.setInt(1, c.getTotalOrders());

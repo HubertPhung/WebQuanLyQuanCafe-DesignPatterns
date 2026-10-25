@@ -35,7 +35,7 @@ export function TopDrinksDonut({ data = defaultDrinks }: TopDrinksDonutProps) {
 
   return (
     <div className="rounded-xl border border-stone-200/80 bg-white p-6 md:p-8 min-h-[420px] md:min-h-[460px] shadow-sm transition-all duration-300 hover:shadow-md hover:border-stone-300 flex flex-col justify-between gap-6">
-      {/* Header */}
+      {/* Phần đầu */}
       <div>
         <h2 className="text-xl md:text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
           <span>Top món bán chạy</span>
@@ -47,7 +47,7 @@ export function TopDrinksDonut({ data = defaultDrinks }: TopDrinksDonutProps) {
         </p>
       </div>
 
-      {/* Chunky Donut Chart */}
+      {/* Biểu đồ vành khuyên */}
       <div className="flex flex-col gap-6">
         <ChartContainer config={config} className="mx-auto aspect-square h-48 md:h-56">
           <PieChart>
@@ -91,7 +91,7 @@ export function TopDrinksDonut({ data = defaultDrinks }: TopDrinksDonutProps) {
           </PieChart>
         </ChartContainer>
 
-        {/* Comfortable Items List */}
+        {/* Danh sách món */}
         <ul className="flex flex-col gap-3 pt-4 border-t border-stone-100">
           {data.map((drink, index) => {
             const percent = totalCups > 0 ? Math.round((drink.sold / totalCups) * 100) : 0

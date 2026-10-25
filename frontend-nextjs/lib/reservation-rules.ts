@@ -1,14 +1,15 @@
-// Reservation rules the frontend applies itself. Each value mirrors a Java constant; keep them in step.
-// While Java is reachable its Chain of Responsibility has the final word. The local fallback runs only
-// when Java is down, so it cannot read /api/config and uses the Java defaults instead.
+// Quy tắc đặt bàn mà frontend tự áp dụng. Mỗi giá trị khớp với một hằng số bên Java; hãy giữ chúng
+// đồng bộ. Khi Java kết nối được thì Chain of Responsibility của nó có tiếng nói cuối cùng. Bản dự
+// phòng cục bộ chỉ chạy khi Java ngừng hoạt động, nên nó không đọc được /api/config và dùng giá trị
+// mặc định của Java.
 
-/** OperatingHoursValidator.PAST_GRACE: a booking keyed in for "now" has already begun. */
+/** OperatingHoursValidator.PAST_GRACE: phiếu nhập cho "bây giờ" đã bắt đầu rồi. */
 export const RESERVATION_PAST_GRACE_MS = 15 * 60 * 1000
 
-/** TableAvailabilityValidator.DEFAULT_DURATION: every booking holds its table for two hours. */
+/** TableAvailabilityValidator.DEFAULT_DURATION: mỗi phiếu giữ bàn trong hai giờ. */
 export const RESERVATION_SLOT_MS = 2 * 60 * 60 * 1000
 
-/** SystemConfigManager.DEFAULT_OPENING_TIME / DEFAULT_CLOSING_TIME, both bounds included. */
+/** SystemConfigManager.DEFAULT_OPENING_TIME / DEFAULT_CLOSING_TIME, tính cả hai mốc. */
 export const DEFAULT_OPENING_TIME = '07:00'
 export const DEFAULT_CLOSING_TIME = '22:00'
 
@@ -19,7 +20,8 @@ export const RESERVATION_TIME_SLOTS = Array.from({ length: 31 }, (_, index) => {
   return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
 })
 
-// Vietnam keeps UTC+7 all year (no daylight saving), so a fixed offset matches Asia/Ho_Chi_Minh.
+// Việt Nam giữ UTC+7 quanh năm (không có giờ mùa hè), nên một độ lệch cố định khớp với
+// Asia/Ho_Chi_Minh.
 const CAFE_UTC_OFFSET_MS = 7 * 60 * 60 * 1000
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -37,7 +39,7 @@ export function hasReservationTimePassed(dateTime: Date, now = Date.now()): bool
   return dateTime.getTime() < now - RESERVATION_PAST_GRACE_MS
 }
 
-/** Opening a POS order starts the kitchen timer, so never open it before the booking. */
+/** Mở đơn POS là bắt đầu đồng hồ của quầy pha chế, nên không bao giờ mở trước giờ đặt. */
 export function hasReservationStarted(dateTime: Date, now = Date.now()): boolean {
   return Number.isFinite(dateTime.getTime()) && dateTime.getTime() <= now
 }
@@ -47,7 +49,10 @@ export function isWithinDefaultOperatingHours(dateTime: Date): boolean {
   return seconds >= secondsOf(DEFAULT_OPENING_TIME) && seconds <= secondsOf(DEFAULT_CLOSING_TIME)
 }
 
-/** Same overlap test as TableAvailabilityValidator: [start, start + slot) ranges intersect. */
+/**
+ * Cùng phép kiểm tra trùng như TableAvailabilityValidator: hai khoảng [start, start + slot) giao
+ * nhau.
+ */
 export function reservationSlotsOverlap(a: Date, b: Date): boolean {
   return a.getTime() < b.getTime() + RESERVATION_SLOT_MS && b.getTime() < a.getTime() + RESERVATION_SLOT_MS
 }

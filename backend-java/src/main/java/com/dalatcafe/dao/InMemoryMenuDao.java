@@ -9,7 +9,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
- * In-memory implementation of IMenuDao using thread-safe collection.
+ * Bản cài đặt IMenuDao trong bộ nhớ, dùng collection an toàn đa luồng.
  */
 public class InMemoryMenuDao implements IMenuDao {
     private final InMemoryDatabase db;

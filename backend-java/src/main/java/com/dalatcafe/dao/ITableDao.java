@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Data Access Object interface for Table entity.
+ * Interface Data Access Object cho thực thể Table.
  */
 public interface ITableDao {
     List<Table> findAll();

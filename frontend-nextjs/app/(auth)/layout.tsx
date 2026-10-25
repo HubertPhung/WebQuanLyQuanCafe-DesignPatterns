@@ -1,8 +1,8 @@
 import { Suspense } from 'react'
 import { AuthFrame } from '@/components/auth/auth-frame'
 
-// Shared by /login and /register: the brand panel and the mode switch stay mounted while the
-// user moves between the two pages, so only the form card animates.
+// Dùng chung cho /login và /register: khung thương hiệu và nút chuyển chế độ giữ nguyên khi người
+// dùng chuyển giữa hai trang, chỉ thẻ form có hiệu ứng.
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <Suspense>

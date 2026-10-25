@@ -7,9 +7,9 @@ import { posCustomizations } from '@/lib/admin/customizations'
 import type { Product } from '@/lib/shopify'
 import { DRINK_TAG } from './product-tags'
 
-// The storefront sells the café's own menu (the admin_menu_items the POS sells), so an online
-// order is priced, stocked and brewed exactly like a counter order. A drink comes in size M or L;
-// L is the POS "SIZE_L" customization, priced by Java's LargeSizeDecorator.
+// Storefront bán chính thực đơn của quán (các admin_menu_items mà POS bán), nên đơn online được
+// tính giá, kiểm tra còn bán và pha chế y như đơn tại quầy. Đồ uống có size M hoặc L; L là
+// customization "SIZE_L" của POS, được LargeSizeDecorator bên Java tính giá.
 
 const VARIANT_ID = /^gid:\/\/dalatcafe\/ProductVariant\/(\d+)(-L)?$/
 const SIZE_L = posCustomizations.find((option) => option.id === 'SIZE_L')!.price
@@ -25,7 +25,7 @@ export function parseMenuVariant(id: string): MenuVariant | null {
   return match ? { menuItemId: Number(match[1]), large: Boolean(match[2]) } : null
 }
 
-// Pastries, snacks, ice cream and retail beans have no size, sugar or ice choices.
+// Bánh ngọt, đồ ăn vặt, kem và cà phê hạt bán lẻ không có lựa chọn size, đường hay đá.
 function isDrink(item: MenuItem) {
   return !/^bánh\b/i.test(item.name.trim()) && !/^(bánh|món ăn|kem|hạt)/i.test(item.category.trim())
 }
@@ -65,7 +65,7 @@ function toProduct(item: MenuItem): Product {
   }
 }
 
-// Read without a session: the storefront is public. Same store and fallback as the POS.
+// Đọc không cần phiên đăng nhập: storefront là công khai. Cùng kho và cách dự phòng với POS.
 async function sellableItems(): Promise<MenuItem[]> {
   if (isDbConfigured && db) {
     try {

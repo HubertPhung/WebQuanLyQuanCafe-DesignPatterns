@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.function.DoubleUnaryOperator;
 import java.util.function.Predicate;
 
 public class OrderBuilder {
@@ -26,6 +27,7 @@ public class OrderBuilder {
     private PaymentStatus paymentStatus = PaymentStatus.UNPAID;
     private double discountAmount;
     private Predicate<String> codeTaken = code -> false;
+    private DoubleUnaryOperator discountRule;
 
     public OrderBuilder forCustomer(String customerName) {
         this.customerName = customerName == null || customerName.isBlank() ? "Walk-in" : customerName.trim();
@@ -49,7 +51,7 @@ public class OrderBuilder {
         return addItem(null, beverage, quantity);
     }
 
-    /** Keeps the menu item behind the drink, so stock and sales can be traced back to it. */
+    /** Giữ lại món trong thực đơn ứng với đồ uống, để truy được doanh số về đúng món đó. */
     public OrderBuilder addItem(Integer menuItemId, IBeverage beverage, int quantity) {
         Objects.requireNonNull(beverage, "Beverage must not be null");
         if (quantity <= 0) {
@@ -82,7 +84,16 @@ public class OrderBuilder {
         return this;
     }
 
-    /** The short random code can repeat, so build() draws again while the store already holds it. */
+    /**
+     * Để builder tự tính giảm giá: build() đưa tạm tính đã xong cho quy tắc và lưu kết quả, nên nơi
+     * gọi không bao giờ phải sửa đơn sau build().
+     */
+    public OrderBuilder discountedBy(DoubleUnaryOperator discountForSubtotal) {
+        this.discountRule = Objects.requireNonNull(discountForSubtotal, "Discount rule must not be null");
+        return this;
+    }
+
+    /** Mã ngẫu nhiên ngắn có thể trùng, nên build() rút lại khi kho đã có mã đó. */
     public OrderBuilder avoidingCodes(Predicate<String> codeTaken) {
         this.codeTaken = Objects.requireNonNull(codeTaken, "Code check must not be null");
         return this;
@@ -99,6 +110,15 @@ public class OrderBuilder {
         order.setPaymentMethod(paymentMethod);
         order.setPaymentStatus(paymentStatus);
         order.setDiscountAmount(discountAmount);
+        order.recalculateTotals();
+        if (discountRule != null) {
+            double discount = discountRule.applyAsDouble(order.getSubtotal());
+            if (!Double.isFinite(discount) || discount < 0) {
+                throw new IllegalStateException("Discount rule returned an invalid amount: " + discount);
+            }
+            order.setDiscountAmount(discount);
+            order.recalculateTotals();
+        }
         return order;
     }
 

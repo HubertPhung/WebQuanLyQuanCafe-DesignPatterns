@@ -22,7 +22,7 @@ export interface CustomerReservationInput {
   guests: number
   tableId: number
   tableIds?: number[]
-  // The tables must all belong to this branch.
+  // Mọi bàn phải thuộc chi nhánh này.
   branch?: BranchId
   preOrders?: { menuItemId: number; qty: number }[]
 }
@@ -82,7 +82,7 @@ export async function bookCustomerTable(input: CustomerReservationInput): Promis
       preOrders: input.preOrders && input.preOrders.length > 0 ? input.preOrders : undefined,
     }
 
-    // Call Java backend Chain of Responsibility validation & DAO persistence
+    // Gọi backend Java: kiểm tra bằng Chain of Responsibility và lưu qua DAO
     const remote = await createJavaReservation(booking)
     if (remote.ok) {
       revalidatePath('/account/orders')
@@ -97,7 +97,7 @@ export async function bookCustomerTable(input: CustomerReservationInput): Promis
       return { ok: false, error: remote.error || 'Yêu cầu đặt bàn không thành công.' }
     }
 
-    // Only an explicitly disabled backend uses demo data; a network failure must not split schedules.
+    // Chỉ khi backend bị tắt hẳn mới dùng dữ liệu demo; lỗi mạng không được làm lịch bị tách đôi.
     if (isDbConfigured || getJavaBackendUrl()) return { ok: false, error: 'Chưa kiểm tra được lịch bàn do mất kết nối. Chưa ghi nhận đặt bàn, vui lòng thử lại.' }
     const menu = getMockMenuItems()
     const preOrders = (booking.preOrders ?? []).map(line => {

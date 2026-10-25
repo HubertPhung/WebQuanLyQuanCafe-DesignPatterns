@@ -12,9 +12,9 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * POST /api/vouchers/validate: previews a voucher against a subtotal using the same Strategy
- * that checkout applies (see {@link VoucherCatalog}). Answers 200 with {@code valid:false}
- * for an unknown code, so the storefront can show the reason inline.
+ * POST /api/vouchers/validate: xem trước một voucher trên một tạm tính bằng đúng Strategy mà
+ * checkout áp dụng (xem {@link VoucherCatalog}). Mã không tồn tại vẫn trả 200 với {@code
+ * valid:false}, để storefront hiện lý do ngay tại chỗ.
  */
 public class VoucherHandler extends ApiHandler {
     @Override

@@ -31,7 +31,7 @@ class SecurityTest {
         assertFalse(hasher.verify("Coffee2026", "plain-text"));
         assertFalse(hasher.verify("Coffee2026", null));
         assertFalse(hasher.verify("Coffee2026", "pbkdf2_sha256$abc$***$***"));
-        // A hash made with another iteration count still verifies.
+        // Hash tạo với số vòng lặp khác vẫn kiểm tra được.
         assertTrue(new PasswordHasher(20_000).verify("Coffee2026", first));
         assertThrows(IllegalArgumentException.class, () -> new PasswordHasher(10));
         assertThrows(IllegalArgumentException.class, () -> hasher.hash(""));
@@ -122,7 +122,7 @@ class SecurityTest {
         assertFalse(users.save(sameGoogle));
 
         UserAccount loaded = users.findById(first.getId()).orElseThrow();
-        loaded.setRole(UserRole.ADMIN); // a copy: the store changes only through save()
+        loaded.setRole(UserRole.ADMIN); // một bản sao: kho chỉ thay đổi qua save()
         assertEquals(UserRole.STAFF, users.findById(first.getId()).orElseThrow().getRole());
         assertTrue(UserRole.ADMIN.atLeast(UserRole.MANAGER));
         assertFalse(UserRole.CUSTOMER.atLeast(UserRole.STAFF));

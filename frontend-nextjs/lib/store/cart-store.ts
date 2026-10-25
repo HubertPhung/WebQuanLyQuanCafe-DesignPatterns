@@ -16,7 +16,7 @@ export const formatMoneyVND = (m?: Money | { amount: string; currencyCode?: stri
   return `${val.toLocaleString('vi-VN')} đ`
 }
 
-// Ordering needs an account; the guest comes back to the menu after signing in.
+// Đặt món cần tài khoản; khách quay lại thực đơn sau khi đăng nhập.
 export function redirectToSignIn() {
   toast.info('Vui lòng đăng nhập để đặt món.')
   const back = `${window.location.pathname}${window.location.search}#menu`
@@ -28,7 +28,7 @@ export interface CartStoreState {
   isOpen: boolean
   isBusy: boolean
 
-  // Actions
+  // Các hành động
   setIsOpen: (isOpen: boolean) => void
   openCart: () => void
   closeCart: () => void

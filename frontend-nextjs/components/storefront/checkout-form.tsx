@@ -96,12 +96,12 @@ export function CheckoutForm({ account }: { account: { name: string; email: stri
   const [placed, setPlaced] = useState<Placed | null>(null)
   const [pending, startTransition] = useTransition()
 
-  // Payment Demo Modals
+  // Hộp thoại thanh toán demo
   const [isQrModalOpen, setIsQrModalOpen] = useState(false)
   const [isCardModalOpen, setIsCardModalOpen] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
 
-  // Card demo states
+  // Trạng thái thẻ demo
   const [cardNumber, setCardNumber] = useState('5412 7512 3412 8899')
   const [cardHolder, setCardHolder] = useState(account?.name?.toUpperCase() || 'NGUYEN VAN AN')
   const [cardExpiry, setCardExpiry] = useState('12/28')
@@ -431,7 +431,7 @@ export function CheckoutForm({ account }: { account: { name: string; email: stri
         </div>
       </form>
 
-      {/* 1. VIETQR PAYMENT DEMO MODAL */}
+      {/* 1. HỘP THOẠI THANH TOÁN DEMO VIETQR */}
       <Dialog open={isQrModalOpen} onOpenChange={setIsQrModalOpen}>
         <DialogContent className="max-w-md rounded-3xl border-stone-200 bg-white p-6 text-stone-900 shadow-2xl font-sans">
           <DialogHeader className="text-center sm:text-left">
@@ -453,7 +453,7 @@ export function CheckoutForm({ account }: { account: { name: string; email: stri
 
           <div className="flex flex-col items-center justify-center py-2">
             <div className="relative rounded-2xl border-2 border-[#005ba6]/30 bg-slate-50 p-4 shadow-sm flex flex-col items-center w-full">
-              {/* Simulated QR Box */}
+              {/* Khung mã QR mô phỏng */}
               <div className="size-48 bg-white border border-slate-200 rounded-xl p-2 flex items-center justify-center shadow-inner relative">
                 <svg className="size-full text-slate-800" viewBox="0 0 100 100" fill="currentColor">
                   <path d="M10 10 h25 v25 h-25 z M15 15 v15 h15 v-15 z M19 19 h7 v7 h-7 z" />
@@ -529,7 +529,7 @@ export function CheckoutForm({ account }: { account: { name: string; email: stri
         </DialogContent>
       </Dialog>
 
-      {/* 2. MASTERCARD / VISA PAYMENT DEMO MODAL */}
+      {/* 2. HỘP THOẠI THANH TOÁN DEMO MASTERCARD / VISA */}
       <Dialog open={isCardModalOpen} onOpenChange={setIsCardModalOpen}>
         <DialogContent className="max-w-md rounded-3xl border-stone-200 bg-white p-6 text-stone-900 shadow-2xl font-sans">
           <DialogHeader className="text-center sm:text-left">
@@ -546,20 +546,20 @@ export function CheckoutForm({ account }: { account: { name: string; email: stri
             </DialogDescription>
           </DialogHeader>
 
-          {/* 3D Realistic Virtual Mastercard Graphic */}
+          {/* Hình thẻ Mastercard ảo dạng 3D */}
           <div className="relative h-44 w-full rounded-2xl bg-gradient-to-tr from-stone-950 via-[#2c1b18] to-[#4E342E] p-5 text-white shadow-xl ring-1 ring-white/10 overflow-hidden font-mono flex flex-col justify-between my-2">
             <div className="absolute -right-8 -top-8 size-32 rounded-full bg-amber-500/10 blur-xl pointer-events-none" />
             <div className="absolute -left-8 -bottom-8 size-32 rounded-full bg-red-500/10 blur-xl pointer-events-none" />
 
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                {/* Metallic Chip */}
+                {/* Chip kim loại */}
                 <div className="size-7 rounded-sm bg-gradient-to-br from-amber-200 via-amber-400 to-amber-600 p-0.5 shadow-inner">
                   <div className="size-full border border-amber-900/40 rounded-xs grid grid-cols-2 gap-0.5" />
                 </div>
                 <span className="text-stone-400 text-[10px] tracking-widest font-sans">CONTACTLESS</span>
               </div>
-              {/* Mastercard interlocking circles */}
+              {/* Hai vòng tròn lồng nhau của Mastercard */}
               <div className="flex items-center -space-x-2">
                 <div className="size-6 rounded-full bg-[#EB001B] opacity-95 shadow-sm" />
                 <div className="size-6 rounded-full bg-[#F79E1B] opacity-95 shadow-sm" />
@@ -589,7 +589,7 @@ export function CheckoutForm({ account }: { account: { name: string; email: stri
             </div>
           </div>
 
-          {/* Form fields to edit or use mock */}
+          {/* Các ô để sửa hoặc dùng dữ liệu giả */}
           <div className="space-y-3 text-xs">
             <div>
               <label className="text-[11px] font-medium text-stone-500 block mb-1">Số thẻ Mastercard</label>

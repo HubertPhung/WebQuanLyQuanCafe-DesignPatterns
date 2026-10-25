@@ -65,7 +65,7 @@ try {
     return JSON.parse(resultLine.substring(resultLine.indexOf(':') + 1))
   }
 
-  // Every downloaded asset must be served by this production server with its original bytes.
+  // Mọi tài nguyên đã tải về phải được chính server production này phục vụ với đúng các byte gốc.
   const assets = JSON.parse(await readFile('../docs/assets/sources.json', 'utf8')).assets
   await Promise.all(assets.filter(asset => asset.kind !== 'license').map(async asset => {
     const response = await fetch(base + '/' + asset.file.split('/public/')[1])

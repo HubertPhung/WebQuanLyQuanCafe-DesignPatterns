@@ -15,28 +15,30 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Role-based access control (docs/API_SPEC.md 1.3).
+ * Phân quyền theo vai trò (docs/API_SPEC.md mục 1.3).
  *
- * The caller is identified by an {@code Authorization: Bearer <token>} access token issued by
- * {@code /api/auth}. The token only says who the caller is: the role is re-read from the account
- * on every request, so a role change or a disabled account takes effect at once. When the server
- * runs with {@code allowRoleHeader} (development and the REST tests) a bare {@code X-User-Role}
- * header is accepted as well; a Bearer token, when present, always wins.
+ * Người gọi được nhận diện bằng access token {@code Authorization: Bearer <token>} do
+ * {@code /api/auth} cấp. Token chỉ cho biết người gọi là ai: vai trò được đọc lại từ tài khoản ở
+ * mỗi request, nên đổi vai trò hay khóa tài khoản có hiệu lực ngay. Khi server chạy với
+ * {@code allowRoleHeader} (lúc phát triển và trong test REST), header {@code X-User-Role} trần
+ * cũng được chấp nhận; nếu có Bearer token thì token luôn được ưu tiên.
  *
- * Rules: a few endpoints are public; account endpoints need any signed-in user; changing store
- * settings and managing accounts need ADMIN; creating menu items and analytics need MANAGER+;
- * every other endpoint needs STAFF+, so a new endpoint is never public by accident.
+ * Quy tắc: một số endpoint công khai; endpoint tài khoản cần người dùng đã đăng nhập bất kỳ; đổi
+ * cài đặt quán và quản lý tài khoản cần ADMIN; thêm, sửa, xóa món và thống kê cần MANAGER+; mọi
+ * endpoint còn lại cần STAFF+, nên endpoint mới không bao giờ vô tình bị công khai.
  *
- * The storefront places guests' online orders server to server: without a Bearer token, the
- * frontend's {@code X-Service-Key} (AUTH_SERVICE_KEY) counts as a STAFF caller on exactly
- * {@code POST /api/checkout} and {@code POST /api/orders/sync}, and nowhere else.
+ * Storefront đặt đơn online của khách theo kiểu server gọi server: không có Bearer token thì
+ * {@code X-Service-Key} (AUTH_SERVICE_KEY) của frontend được coi là người gọi STAFF, chỉ đúng ở
+ * {@code POST /api/checkout} và {@code POST /api/orders/sync}, không ở đâu khác.
  */
 public class SimpleAuthFilter extends Filter {
-    /** Request attribute holding the authenticated {@link UserAccount} (absent on public calls). */
+    /**
+     * Thuộc tính request giữ {@link UserAccount} đã xác thực (không có ở các lời gọi công khai).
+     */
     public static final String USER_ATTRIBUTE = "auth.user";
     public static final String STOREFRONT_SERVICE_ATTRIBUTE = "auth.storefrontService";
 
-    /** What a request needs. */
+    /** Quyền mà một request cần. */
     enum Access {
         PUBLIC(null), SIGNED_IN(UserRole.CUSTOMER), STAFF(UserRole.STAFF), MANAGER(UserRole.MANAGER), ADMIN(UserRole.ADMIN);
 
@@ -68,8 +70,8 @@ public class SimpleAuthFilter extends Filter {
         exchange = new RequestScopedExchange(exchange);
         String method = exchange.getRequestMethod().toUpperCase(Locale.ROOT);
         String path = exchange.getRequestURI().getPath();
-        // HttpServer picks a context by plain prefix, so "/api/usersX" reaches the "/api/users"
-        // handler while the rules below would only ask STAFF for it.
+        // HttpServer chọn context theo tiền tố đơn thuần, nên "/api/usersX" tới được handler
+        // "/api/users" trong khi các quy tắc bên dưới chỉ đòi STAFF cho nó.
         if (!withinContext(path, exchange.getHttpContext().getPath())) {
             reject(exchange, 404, "NOT_FOUND", "Unknown resource: " + path);
             return;
@@ -82,7 +84,8 @@ public class SimpleAuthFilter extends Filter {
         exchange.setAttribute(STOREFRONT_SERVICE_ATTRIBUTE, identity.user() != null
                 && identity.user().getId() == null && "storefront@service.local".equals(identity.user().getEmail()));
         if (access == Access.PUBLIC) {
-            // A stale token must not break the public menu or a booking: the caller is just anonymous.
+            // Token hết hạn không được làm hỏng thực đơn công khai hay việc đặt bàn: người gọi chỉ
+            // được coi là ẩn danh.
             chain.doFilter(exchange);
             return;
         }
@@ -140,19 +143,22 @@ public class SimpleAuthFilter extends Filter {
                 && MessageDigest.isEqual(serviceKey.getBytes(StandardCharsets.UTF_8), presented.getBytes(StandardCharsets.UTF_8));
     }
 
-    /** True when the path is the context path itself or a sub-path of it. */
+    /** True khi đường dẫn chính là đường dẫn context hoặc một đường dẫn con của nó. */
     static boolean withinContext(String path, String context) {
         String base = context.endsWith("/") ? context : context + "/";
         return path.equals(context) || path.startsWith(base);
     }
 
-    /** The only calls the storefront service key may make: placing and syncing online orders. */
+    /** Những lời gọi duy nhất service key của storefront được phép: đặt và đồng bộ đơn online. */
     static boolean isServiceRoute(String method, String path) {
         String p = path.replaceAll("/+$", "");
         return method.equals("POST") && (p.equals("/api/checkout") || p.equals("/api/orders/sync"));
     }
 
-    /** The storefront may look up one member by phone (the account page), never list them all. */
+    /**
+     * Storefront được tra cứu một thành viên theo số điện thoại (trang tài khoản), không bao giờ
+     * được liệt kê tất cả.
+     */
     static boolean isServiceLookup(String method, String path, String rawQuery) {
         if (!method.equals("GET") || !path.replaceAll("/+$", "").equals("/api/customers") || rawQuery == null) {
             return false;
@@ -183,7 +189,7 @@ public class SimpleAuthFilter extends Filter {
             return Access.PUBLIC;
         }
         if (p.equals("/api/auth/register") || p.equals("/api/auth/login") || p.equals("/api/auth/google")) {
-            return Access.PUBLIC; // the Google endpoint checks its own service key
+            return Access.PUBLIC; // endpoint Google tự kiểm tra service key của nó
         }
         if (p.startsWith("/api/auth/")) {
             return Access.SIGNED_IN;
@@ -194,7 +200,7 @@ public class SimpleAuthFilter extends Filter {
         if (p.equals("/api/config") && !method.equals("GET")) {
             return Access.ADMIN;
         }
-        // Creating, editing and removing menu items; switching one on or off stays with STAFF.
+        // Tạo, sửa và xóa món; bật/tắt bán một món vẫn thuộc quyền STAFF.
         if (p.equals("/api/menu") && method.equals("POST")
                 || p.matches("/api/menu/[0-9]+") && (method.equals("PUT") || method.equals("PATCH") || method.equals("DELETE"))
                 || p.startsWith("/api/analytics")) {

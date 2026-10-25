@@ -1,9 +1,9 @@
 import 'server-only'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 
-// Google sign-in with the OAuth 2.0 authorization code flow and PKCE. The ID token is verified
-// here (signature against Google's keys, issuer, audience, expiry, nonce); the Java backend then
-// receives only the verified identity, with AUTH_SERVICE_KEY.
+// Đăng nhập Google bằng luồng OAuth 2.0 authorization code kèm PKCE. ID token được kiểm tra ở đây
+// (chữ ký theo khóa của Google, issuer, audience, hạn dùng, nonce); backend Java sau đó chỉ nhận
+// danh tính đã xác minh, kèm AUTH_SERVICE_KEY.
 
 const AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 const TOKEN_URL = 'https://oauth2.googleapis.com/token'
@@ -12,7 +12,7 @@ export const OAUTH_COOKIE = 'dalatcafe_oauth'
 
 export type GoogleConfig = { clientId: string; clientSecret: string; serviceKey: string }
 
-/** Null when Google sign-in is not configured; the login page then explains what to set. */
+/** Null khi chưa cấu hình đăng nhập Google; khi đó trang đăng nhập giải thích cần đặt gì. */
 export function googleConfig(): GoogleConfig | null {
   const clientId = process.env.GOOGLE_CLIENT_ID
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET

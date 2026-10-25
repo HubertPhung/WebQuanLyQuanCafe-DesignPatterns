@@ -111,7 +111,7 @@ export function KpiMetrics({ data = {} }: KpiMetricsProps) {
           transition={{ duration: 0.35, delay: idx * 0.07 }}
         >
           <Card className="rounded-xl border border-stone-200/80 bg-white p-6 md:p-8 shadow-sm transition-all duration-300 hover:shadow-md hover:border-stone-300 flex flex-col justify-between gap-6 min-h-[200px]">
-            {/* Header row: Label & Icon */}
+            {/* Hàng đầu: nhãn và biểu tượng */}
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-base font-semibold text-stone-800 leading-snug">
@@ -124,14 +124,14 @@ export function KpiMetrics({ data = {} }: KpiMetricsProps) {
               </div>
             </div>
 
-            {/* Metric Value */}
+            {/* Giá trị chỉ số */}
             <div>
               <div className="text-3xl md:text-5xl font-bold tracking-tight text-stone-900 tabular-nums leading-none">
                 {card.value}
               </div>
             </div>
 
-            {/* Footer row: Pastel Pill Badge & Footnote */}
+            {/* Hàng cuối: nhãn màu pastel và chú thích */}
             <div className="flex items-center justify-between gap-2 border-t border-stone-100 pt-4">
               <span
                 className={cn(

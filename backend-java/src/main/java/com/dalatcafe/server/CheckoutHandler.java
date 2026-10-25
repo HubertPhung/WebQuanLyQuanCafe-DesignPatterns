@@ -34,9 +34,9 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * POST /api/checkout: maps the JSON request to a {@link CheckoutRequest} and delegates to
- * {@link PosCheckoutFacade}. Answers 503 DATABASE_UNAVAILABLE instead of silently falling back
- * when the primary database is down (no money movement on a degraded store).
+ * POST /api/checkout: chuyển JSON request thành {@link CheckoutRequest} và giao cho {@link
+ * PosCheckoutFacade}. Trả 503 DATABASE_UNAVAILABLE thay vì âm thầm chuyển sang dự phòng khi
+ * database chính bị mất (không có giao dịch tiền nào trên kho đang suy giảm).
  */
 public class CheckoutHandler extends ApiHandler {
     private static final Logger LOGGER = Logger.getLogger(CheckoutHandler.class.getName());
@@ -87,9 +87,9 @@ public class CheckoutHandler extends ApiHandler {
         CheckoutResult result;
         int pointsRedeemed = 0;
         List<String> warnings = new ArrayList<>();
-        // The member is read and charged under one lock, so two checkouts cannot both spend one
-        // points balance. Each points change is applied atomically by the DAO, so a concurrent
-        // /pay cannot overwrite it.
+        // Thành viên được đọc và tính tiền trong cùng một khóa, nên hai lượt checkout không thể
+        // cùng tiêu một số dư điểm. Mỗi thay đổi điểm được DAO áp dụng nguyên tử, nên /pay chạy
+        // đồng thời không ghi đè được.
         synchronized (facade) {
             known = findCustomer(str(body, "customerPhone"));
             int requestedPoints = requestedPoints(body, known);
@@ -99,11 +99,11 @@ public class CheckoutHandler extends ApiHandler {
             if (tendered != null && tendered < 0) {
                 throw ApiException.badRequest("tenderedAmount must not be negative");
             }
-            // The discount is priced on this snapshot: the live member is debited below.
+            // Giảm giá được tính trên bản chụp này: thành viên thật bị trừ điểm ở bên dưới.
             request = toRequest(body, known == null ? null : snapshot(known), redemption, tendered);
 
-            // Points are held before any money is taken, so a discount is never given for points
-            // that could not be deducted. What the strategy did not use is given back afterwards.
+            // Điểm được giữ trước khi thu tiền, nên không bao giờ giảm giá cho số điểm không trừ
+            // được. Phần strategy không dùng tới được hoàn lại sau đó.
             if (redemption != null && !customerDao.redeemPoints(known.getId(), requestedPoints)) {
                 throw new ApiException(503, "DATABASE_UNAVAILABLE",
                         "Loyalty points could not be deducted; payment was not taken. Please retry.");
@@ -114,8 +114,9 @@ public class CheckoutHandler extends ApiHandler {
                     known = enrollMember(body, warnings);
                 }
                 if (result.isSuccess() && known != null && known.getId() != null) {
-                    // Called directly on this order, not attached to the shared subject: /pay and /sync
-                    // broadcast there under another lock and their orders must not credit this member.
+                    // Gọi trực tiếp trên đơn này, không gắn vào subject dùng chung: /pay và /sync
+                    // phát sự kiện ở đó trong một khóa khác, và đơn của chúng không được cộng điểm
+                    // cho thành viên này.
                     try {
                         new LoyaltyPointObserver(customerDao, known.getId()).onOrderPaid(result.getOrder());
                     } catch (RuntimeException e) {
@@ -146,7 +147,7 @@ public class CheckoutHandler extends ApiHandler {
         sendOk(exchange, 200, data, "Checkout completed");
     }
 
-    /** Points the cashier wants to redeem; only a known member with enough balance may. */
+    /** Số điểm thu ngân muốn đổi; chỉ thành viên đã biết và đủ số dư mới được đổi. */
     private static int requestedPoints(Map<String, Object> body, Customer known) {
         Double raw = num(body, "useLoyaltyPoints");
         if (raw == null || raw == 0) {
@@ -184,8 +185,9 @@ public class CheckoutHandler extends ApiHandler {
     }
 
     /**
-     * A paid storefront order signs its buyer up on the first order, so it earns points like a
-     * member's. The new member starts at BRONZE (no discount), so the price already taken is right.
+     * Đơn storefront đã thanh toán sẽ đăng ký người mua làm thành viên ở đơn đầu tiên, để đơn đó
+     * được cộng điểm như của thành viên. Thành viên mới bắt đầu ở hạng BRONZE (không giảm giá), nên
+     * số tiền đã thu là đúng.
      */
     private Customer enrollMember(Map<String, Object> body, List<String> warnings) {
         String phone = str(body, "customerPhone");
@@ -212,7 +214,10 @@ public class CheckoutHandler extends ApiHandler {
         return customerDao.findByPhone(phone).orElse(null);
     }
 
-    /** The in-memory DAO hands out its live row; pricing must not see the points held from it. */
+    /**
+     * DAO trong bộ nhớ trả về dòng đang dùng; phần tính giá không được thấy số điểm đã giữ từ dòng
+     * đó.
+     */
     private static Customer snapshot(Customer live) {
         Customer copy = new Customer(live.getId(), live.getName(), live.getPhone(), live.getEmail());
         copy.setTotalOrders(live.getTotalOrders());
@@ -248,10 +253,12 @@ public class CheckoutHandler extends ApiHandler {
         if (tableId != null && tableId <= 0) {
             throw ApiException.badRequest("tableId must be greater than zero");
         }
-        // Checked before the facade charges: an unknown table would only fail after payment.
+        // Kiểm tra trước khi facade thu tiền: bàn không tồn tại sẽ chỉ báo lỗi sau khi đã thanh
+        // toán.
         com.dalatcafe.model.Table table = tableId == null ? null
                 : tableDao.findById(tableId).orElseThrow(() -> ApiException.notFound("Table not found: " + tableId));
-        // A dine-in order belongs to its table's branch; a pickup or delivery order names its own.
+        // Đơn ăn tại chỗ thuộc chi nhánh của bàn; đơn mang đi hoặc giao hàng tự ghi chi nhánh của
+        // nó.
         String branch = branchField(body);
         if (table != null) {
             if (branch != null && !branch.equals(table.getBranch())) {

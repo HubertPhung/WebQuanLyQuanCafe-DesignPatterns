@@ -25,8 +25,8 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Sign-up, sign-in, Google sign-in and RBAC with real access tokens: the server runs without
- * the X-User-Role shortcut, exactly like production.
+ * Đăng ký, đăng nhập, đăng nhập Google và phân quyền với access token thật: server chạy không có
+ * lối tắt X-User-Role, đúng như production.
  */
 class AuthTest {
     private static final String SECRET = "test-secret-that-is-long-enough-0123456789";
@@ -181,7 +181,7 @@ class AuthTest {
         assertEquals(401, call("GET", "/api/tables", none, null).statusCode());
         assertEquals(401, call("GET", "/api/tables", null, null, "Authorization", "Basic YWRtaW46YWRtaW4=").statusCode());
         assertEquals(200, call("GET", "/api/tables", token, null).statusCode());
-        // A stale token does not break public endpoints.
+        // Token hết hạn không làm hỏng các endpoint công khai.
         assertEquals(200, call("GET", "/api/menu", forged, null).statusCode());
     }
 
@@ -248,7 +248,7 @@ class AuthTest {
         createUser(admin, "barista@dalatcafe.vn", "staff");
         String staff = login("barista@dalatcafe.vn", "Staff1234");
 
-        // HttpServer hands "/api/usersX" to the "/api/users" handler; the filter must not let it through.
+        // HttpServer giao "/api/usersX" cho handler "/api/users"; bộ lọc không được cho nó đi qua.
         assertEquals(404, call("GET", "/api/usersX", staff, null).statusCode());
         assertEquals(404, call("POST", "/api/usersX", staff,
                 "{\"email\":\"evil@dalatcafe.vn\",\"name\":\"Evil\",\"password\":\"Staff1234\",\"role\":\"admin\"}").statusCode());
@@ -258,7 +258,7 @@ class AuthTest {
         assertEquals(404, call("POST", "/api/menuX", staff,
                 "{\"name\":\"Lookalike\",\"category\":\"coffee\",\"price\":10000}").statusCode());
         assertEquals(404, call("POST", "/api/reservationsX", null, "{}").statusCode());
-        // The real paths, with or without a trailing slash, keep their rules.
+        // Các đường dẫn thật, có hay không có dấu / ở cuối, vẫn giữ quy tắc của chúng.
         assertEquals(403, call("PUT", "/api/config/", staff, "{\"maxReservationGuests\":5}").statusCode());
         assertEquals(200, call("GET", "/api/users/", admin, null).statusCode());
         assertEquals(200, call("GET", "/api/menu", null, null).statusCode());
@@ -273,7 +273,8 @@ class AuthTest {
 
         int second = createUser(admin, "owner2@dalatcafe.vn", "admin");
         String other = login("owner2@dalatcafe.vn", "Staff1234");
-        // Still blocked for oneself, allowed for another admin while one admin remains.
+        // Vẫn bị chặn khi tự làm với chính mình, được phép với quản trị viên khác miễn còn một quản
+        // trị viên.
         assertEquals(409, call("PATCH", "/api/users/" + adminId, admin, "{\"role\":\"manager\"}").statusCode());
         assertEquals(200, call("PATCH", "/api/users/" + adminId, other, "{\"role\":\"manager\"}").statusCode());
         assertEquals(409, call("PATCH", "/api/users/" + second, other, "{\"active\":false}").statusCode());
@@ -300,7 +301,8 @@ class AuthTest {
         assertEquals(200, synced.statusCode(), synced.body());
         assertEquals(1, ((Number) data(synced).get("created")).intValue(), synced.body());
 
-        // The key is not a staff login: every other staff endpoint still needs a signed-in account.
+        // Key này không phải đăng nhập nhân viên: mọi endpoint nhân viên khác vẫn cần tài khoản đã
+        // đăng nhập.
         assertEquals(401, call("GET", "/api/orders", null, null, "X-Service-Key", SERVICE_KEY).statusCode());
         assertEquals(401, call("PATCH", "/api/orders/AC-SVC0-001/status", null, "{\"status\":\"brewing\"}", "X-Service-Key", SERVICE_KEY).statusCode());
         assertEquals(401, call("GET", "/api/customers", null, null, "X-Service-Key", SERVICE_KEY).statusCode(),
@@ -309,7 +311,8 @@ class AuthTest {
         HttpResponse<String> member = call("GET", "/api/customers?phone=0901234567", null, null, "X-Service-Key", SERVICE_KEY);
         assertEquals(200, member.statusCode(), "the account page reads the buyer's own points");
         assertEquals(401, call("GET", "/api/customers/1?phone=0901234567", null, null, "X-Service-Key", SERVICE_KEY).statusCode());
-        // A signed-in customer's own token cannot place a staff checkout, with or without the key.
+        // Token của chính khách hàng đã đăng nhập không thể tạo checkout của nhân viên, dù có hay
+        // không có key.
         String customer = (String) data(call("POST", "/api/auth/register", null,
                 "{\"email\":\"khach.online@example.com\",\"name\":\"Khach\",\"password\":\"Khach1234\"}")).get("token");
         assertEquals(403, call("POST", "/api/checkout", customer, checkout).statusCode());
@@ -331,7 +334,7 @@ class AuthTest {
                 ((Map<?, ?>) data(again).get("user")).get("lastLoginAt").toString(),
                 ((Map<?, ?>) data(first).get("user")).get("lastLoginAt").toString()));
 
-        // A customer who signed up with a password is linked to Google by the verified email.
+        // Khách đã đăng ký bằng mật khẩu được liên kết với Google qua email đã xác minh.
         assertEquals(201, call("POST", "/api/auth/register", null,
                 "{\"email\":\"mai@gmail.com\",\"name\":\"Mai\",\"password\":\"Coffee2026\"}").statusCode());
         HttpResponse<String> linked = call("POST", "/api/auth/google", null,
@@ -340,7 +343,8 @@ class AuthTest {
         assertEquals(200, linked.statusCode(), linked.body());
         assertEquals(UserRole.CUSTOMER.name(), role(linked));
 
-        // Staff accounts are password-only: Google may not sign them in, nor create a second account.
+        // Tài khoản nhân viên chỉ dùng mật khẩu: Google không được đăng nhập vào chúng, cũng không
+        // được tạo tài khoản thứ hai.
         String admin = login(ADMIN_EMAIL, ADMIN_PASSWORD);
         createUser(admin, "thu.ngan@gmail.com", "staff");
         HttpResponse<String> staff = call("POST", "/api/auth/google", null,

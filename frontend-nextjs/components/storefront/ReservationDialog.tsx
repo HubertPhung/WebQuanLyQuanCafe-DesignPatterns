@@ -45,7 +45,7 @@ export function ReservationDialog() {
   const { isOpen, preOrders, closeReservation } = useReservationStore()
   const [isPending, startTransition] = useTransition()
 
-  // Form states
+  // Trạng thái form
   const [customer, setCustomer] = useState('')
   const [contact, setContact] = useState('')
   const [email, setEmail] = useState('')
@@ -62,7 +62,7 @@ export function ReservationDialog() {
   const [customDate, setCustomDate] = useState('')
   const [note, setNote] = useState('')
 
-  // Success state
+  // Trạng thái thành công
   const [successCode, setSuccessCode] = useState<string | null>(null)
   const [confirmedData, setConfirmedData] = useState<{
     customer: string
@@ -72,7 +72,7 @@ export function ReservationDialog() {
     guests: number
   } | null>(null)
 
-  // Each branch has its own floor; a booking uses the tables of one branch.
+  // Mỗi chi nhánh có sơ đồ bàn riêng; một phiếu đặt chỉ dùng bàn của một chi nhánh.
   const branchTables = tables.filter(table => (table.branch ?? DEFAULT_BRANCH_ID) === branchId)
   const zones = ['all', ...new Set(branchTables.map(table => table.zone))]
   const chooseBranch = (next: BranchId) => {
@@ -86,7 +86,7 @@ export function ReservationDialog() {
     return true
   })
 
-  // Ensure selected table is valid
+  // Đảm bảo bàn đã chọn còn hợp lệ
   const selectedTables = tables.filter(table => selectedTableIds.includes(table.id))
   const totalSeats = selectedTables.reduce((sum, table) => sum + table.seats, 0)
 
@@ -184,7 +184,7 @@ export function ReservationDialog() {
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && handleResetAndClose()}>
       <SheetContent side="right" showCloseButton={false} style={{ width: 'min(100vw, 36rem)' }} className="h-dvh gap-0 overflow-y-auto border-l border-stone-200 bg-white p-0 font-sans text-stone-900 shadow-2xl sm:max-w-xl">
-        {/* Header Banner */}
+        {/* Băng tiêu đề */}
         <div className="relative bg-gradient-to-r from-[#3E2723] via-[#4E342E] to-[#3E2723] p-6 pr-12 text-white">
           <SheetClose className="absolute right-4 top-5 flex size-8 cursor-pointer items-center justify-center rounded-full text-white hover:bg-white/15" aria-label="Đóng bảng đặt bàn"><X className="size-4" /></SheetClose>
           <div className="flex items-center gap-2 mb-1.5">
@@ -203,7 +203,7 @@ export function ReservationDialog() {
           </SheetDescription>
         </div>
 
-        {/* Success View */}
+        {/* Màn hình thành công */}
         {successCode && confirmedData ? (
           <div className="p-6 sm:p-8 space-y-6 text-center">
             <div className="mx-auto flex size-18 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 ring-8 ring-emerald-50">
@@ -268,7 +268,7 @@ export function ReservationDialog() {
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="p-6 space-y-5">
-            {/* 1. Customer Details */}
+            {/* 1. Thông tin khách hàng */}
             <div className="space-y-3">
               <label className="text-xs font-bold text-stone-800 uppercase tracking-wider flex items-center gap-1.5">
                 <User className="size-3.5 text-[#3E2723]" />
@@ -300,14 +300,14 @@ export function ReservationDialog() {
               </div>
             </div>
 
-            {/* 2. Date & Time */}
+            {/* 2. Ngày và giờ */}
             <div className="space-y-3 pt-1 border-t border-stone-100">
               <label className="text-xs font-bold text-stone-800 uppercase tracking-wider flex items-center gap-1.5">
                 <CalendarDays className="size-3.5 text-[#3E2723]" />
                 <span>2. Thời gian đến quán</span>
               </label>
 
-              {/* Day selection */}
+              {/* Chọn ngày */}
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -356,7 +356,7 @@ export function ReservationDialog() {
                 </div>
               )}
 
-              {/* Time slot pills */}
+              {/* Các khung giờ */}
               <div>
                 <span className="text-[11px] font-medium text-stone-500 block mb-1.5">Khung giờ đón khách:</span>
                 <select aria-label="Khung giờ đón khách" value={selectedTimeSlot} onChange={event => setSelectedTimeSlot(event.target.value)} className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm font-semibold">
@@ -367,7 +367,7 @@ export function ReservationDialog() {
               </div>
             </div>
 
-            {/* 3. Number of Guests & Zone Selection */}
+            {/* 3. Số khách và chọn khu vực */}
             <div className="space-y-3 pt-1 border-t border-stone-100">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-stone-800 uppercase tracking-wider flex items-center gap-1.5">
@@ -392,7 +392,7 @@ export function ReservationDialog() {
                 </div>
               </div>
 
-              {/* Branch pills: the floor below belongs to the chosen branch */}
+              {/* Chọn chi nhánh: sơ đồ bàn bên dưới thuộc chi nhánh đã chọn */}
               <div className="space-y-1.5">
                 <span className="text-[11px] font-medium text-stone-500 block">Chi nhánh:</span>
                 <div className="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Chi nhánh đặt bàn">
@@ -416,7 +416,7 @@ export function ReservationDialog() {
                 </div>
               </div>
 
-              {/* Zone Filter pills */}
+              {/* Lọc khu vực */}
               <div className="space-y-1.5">
                 <span className="text-[11px] font-medium text-stone-500 block">Khu vực bàn mong muốn:</span>
                 <div className="flex flex-wrap gap-1.5">
@@ -437,7 +437,7 @@ export function ReservationDialog() {
                 </div>
               </div>
 
-              {/* Table Selector Dropdown */}
+              {/* Chọn bàn */}
               <div>
                 <p className="mb-2 text-xs text-stone-500">Bàn đã có lịch chồng giờ sẽ không chọn được.</p>
                 <p className="mb-2 text-xs text-stone-500">Đã chọn {selectedTableIds.length} bàn, tổng {totalSeats} chỗ.</p>
@@ -454,7 +454,7 @@ export function ReservationDialog() {
               </div>
             </div>
 
-            {/* 4. Pre-orders from Cart (if applicable) */}
+            {/* 4. Món đặt trước từ giỏ hàng (nếu có) */}
             {preOrders.length > 0 && (
               <div className="rounded-2xl border border-amber-200/80 bg-amber-50/50 p-4 space-y-2">
                 <div className="flex items-center justify-between">
@@ -477,7 +477,7 @@ export function ReservationDialog() {
               </div>
             )}
 
-            {/* 5. Special Notes */}
+            {/* 5. Ghi chú đặc biệt */}
             <div>
               <span className="text-[11px] font-medium text-stone-500 block mb-1">Yêu cầu đặc biệt (không bắt buộc):</span>
               <textarea
@@ -489,7 +489,7 @@ export function ReservationDialog() {
               />
             </div>
 
-            {/* Action buttons */}
+            {/* Các nút thao tác */}
             <div className="pt-2">
               <Button
                 type="submit"

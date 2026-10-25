@@ -90,7 +90,7 @@ export function OrderHistory({ orders }: { orders: OrderHistoryItem[] }) {
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'amount_desc'>('newest')
   const [selectedOrder, setSelectedOrder] = useState<OrderHistoryItem | null>(null)
 
-  // Calculations for KPI Summary
+  // Tính toán cho phần tóm tắt KPI
   const stats = useMemo(() => {
     const totalOrders = orders.length
     const paidOrders = orders.filter((o) => o.paymentStatus === 'paid')
@@ -112,7 +112,7 @@ export function OrderHistory({ orders }: { orders: OrderHistoryItem[] }) {
     }
   }, [orders])
 
-  // Filter & Sort
+  // Lọc và sắp xếp
   const filteredOrders = useMemo(() => {
     const query = search.trim().toLowerCase()
     const cleanPhoneQuery = query.replace(/\D/g, '')
@@ -164,7 +164,7 @@ export function OrderHistory({ orders }: { orders: OrderHistoryItem[] }) {
 
   return (
     <div className="space-y-6 font-sans text-stone-900">
-      {/* 4 Quick Stat Summary Cards */}
+      {/* 4 thẻ thống kê nhanh */}
       <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-4 lg:gap-4">
         {/* Card 1: Tổng đơn hàng */}
         <div className="rounded-xl border border-stone-200/90 bg-white p-4 shadow-[0_2px_8px_rgba(0,0,0,0.03)] transition hover:shadow-md">
@@ -223,9 +223,9 @@ export function OrderHistory({ orders }: { orders: OrderHistoryItem[] }) {
         </div>
       </div>
 
-      {/* Main Filter & Action Container */}
+      {/* Khung lọc và thao tác chính */}
       <div className="space-y-4 rounded-xl border border-stone-200/90 bg-white p-4 sm:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.03)]">
-        {/* Top search & Quick Channel Filter */}
+        {/* Ô tìm kiếm phía trên và bộ lọc nhanh theo kênh */}
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="relative min-w-0 flex-1 max-w-lg">
             <Search className="pointer-events-none absolute left-3.5 top-3 size-4 text-stone-400" aria-hidden="true" />
@@ -246,7 +246,7 @@ export function OrderHistory({ orders }: { orders: OrderHistoryItem[] }) {
             )}
           </div>
 
-          {/* Quick channel tabs */}
+          {/* Các tab kênh bán nhanh */}
           <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-stone-200/80 bg-stone-100/80 p-1">
             {[
               { id: 'all', label: 'Tất cả kênh' },
@@ -270,7 +270,7 @@ export function OrderHistory({ orders }: { orders: OrderHistoryItem[] }) {
           </div>
         </div>
 
-        {/* Detailed Secondary Filters */}
+        {/* Bộ lọc phụ chi tiết */}
         <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-stone-100 text-xs">
           {/* Thanh toán */}
           <div className="flex items-center gap-1.5">
@@ -345,7 +345,7 @@ export function OrderHistory({ orders }: { orders: OrderHistoryItem[] }) {
         </div>
       </div>
 
-      {/* Orders List / Table */}
+      {/* Danh sách / bảng đơn hàng */}
       <div className="rounded-xl border border-stone-200/90 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.03)] overflow-hidden">
         {filteredOrders.length === 0 ? (
           <div className="py-16 text-center">
@@ -516,7 +516,7 @@ export function OrderHistory({ orders }: { orders: OrderHistoryItem[] }) {
           </div>
         )}
 
-        {/* Footer Summary Bar */}
+        {/* Thanh tóm tắt ở chân */}
         <div className="flex flex-col sm:flex-row items-center justify-between border-t border-stone-200 bg-stone-50/50 px-4 py-3 text-xs text-stone-500 gap-2">
           <div>
             Hiển thị <span className="font-bold text-stone-800">{filteredOrders.length}</span> trên tổng số{' '}
@@ -531,12 +531,12 @@ export function OrderHistory({ orders }: { orders: OrderHistoryItem[] }) {
         </div>
       </div>
 
-      {/* Detailed Order / Receipt Modal */}
+      {/* Hộp thoại chi tiết đơn / hóa đơn */}
       <Dialog open={!!selectedOrder} onOpenChange={(open) => !open && setSelectedOrder(null)}>
         <DialogContent className="max-w-lg p-0 font-sans overflow-hidden bg-white rounded-2xl border border-stone-200/90 shadow-2xl">
           {selectedOrder && (
             <div>
-              {/* Receipt Visual Header */}
+              {/* Phần đầu hóa đơn */}
               <div className="border-b border-dashed border-stone-300 bg-stone-50/80 p-5 text-center">
                 <div className="mx-auto flex size-10 items-center justify-center rounded-full bg-[#5A3E2B] text-amber-300 shadow-xs mb-2">
                   <Coffee className="size-5" />
@@ -557,7 +557,7 @@ export function OrderHistory({ orders }: { orders: OrderHistoryItem[] }) {
                 </p>
               </div>
 
-              {/* Order Context Details */}
+              {/* Thông tin ngữ cảnh của đơn */}
               <div className="p-5 space-y-4">
                 <div className="grid grid-cols-2 gap-3 text-xs border-b border-stone-100 pb-3">
                   <div>
@@ -588,7 +588,7 @@ export function OrderHistory({ orders }: { orders: OrderHistoryItem[] }) {
                   </div>
                 </div>
 
-                {/* Delivery details if applicable */}
+                {/* Thông tin giao hàng nếu có */}
                 {selectedOrder.orderType === 'delivery' && selectedOrder.contact?.address && (
                   <div className="rounded-lg bg-blue-50/70 border border-blue-100 p-2.5 text-xs text-blue-900">
                     <span className="font-bold block text-[10px] uppercase tracking-wider text-blue-700">
@@ -603,7 +603,7 @@ export function OrderHistory({ orders }: { orders: OrderHistoryItem[] }) {
                   </div>
                 )}
 
-                {/* Items Table */}
+                {/* Bảng các món */}
                 <div>
                   <span className="text-stone-400 block text-[10px] uppercase font-bold tracking-wider mb-2">
                     Danh sách sản phẩm
@@ -631,7 +631,7 @@ export function OrderHistory({ orders }: { orders: OrderHistoryItem[] }) {
                   </div>
                 </div>
 
-                {/* Financial Summary */}
+                {/* Tóm tắt tài chính */}
                 <div className="border-t border-dashed border-stone-300 pt-3 space-y-1.5 text-xs">
                   <div className="flex justify-between text-stone-500">
                     <span>Tạm tính</span>
@@ -649,7 +649,7 @@ export function OrderHistory({ orders }: { orders: OrderHistoryItem[] }) {
                   </div>
                 </div>
 
-                {/* Payment metadata */}
+                {/* Thông tin thanh toán */}
                 <div className="rounded-lg bg-stone-50 p-2.5 text-xs space-y-1 border border-stone-100">
                   <div className="flex justify-between">
                     <span className="text-stone-500">Phương thức:</span>
@@ -683,7 +683,7 @@ export function OrderHistory({ orders }: { orders: OrderHistoryItem[] }) {
                 </div>
               </div>
 
-              {/* Modal Footer Actions */}
+              {/* Các thao tác ở chân hộp thoại */}
               <div className="flex items-center justify-between border-t border-stone-200 bg-stone-50/80 px-5 py-3">
                 <Button
                   variant="outline"

@@ -9,8 +9,8 @@ import java.util.Optional;
 import java.util.function.Supplier;
 
 /**
- * Voucher codes accepted by checkout and by POST /api/vouchers/validate, each mapped to the
- * discount Strategy it applies. One place, so validation and checkout can never disagree.
+ * Các mã voucher mà checkout và POST /api/vouchers/validate chấp nhận, mỗi mã ứng với Strategy giảm
+ * giá nó áp dụng. Gom về một chỗ, để kiểm tra và checkout không bao giờ lệch nhau.
  */
 final class VoucherCatalog {
     static final String WELCOME10 = "WELCOME10";

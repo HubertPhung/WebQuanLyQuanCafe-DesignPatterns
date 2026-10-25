@@ -8,7 +8,7 @@ import { normalizeMenuName } from './menu-link'
 
 export type MenuCatalogInput = NewMockItemInput & { inStock?: boolean }
 
-/** Persist the menu and its Java ID together; a database failure must never create a demo item. */
+/** Lưu món cùng id Java của nó trong một lần; lỗi database không bao giờ được tạo ra món demo. */
 export async function persistMenuItem(input: MenuCatalogInput, javaMenuId?: number): Promise<number> {
   if (!isDbConfigured || !db) {
     const result = createMockMenuItem(input)
@@ -18,7 +18,7 @@ export async function persistMenuItem(input: MenuCatalogInput, javaMenuId?: numb
     return result.id
   }
   await ensureMenuImageStorage()
-  await getMenuLinks([]) // Initialize the link table before entering the short write transaction.
+  await getMenuLinks([]) // Khởi tạo bảng liên kết trước khi vào transaction ghi ngắn.
   try {
     return await db.transaction(async tx => {
       const name = normalizeMenuName(input.name)
@@ -46,7 +46,7 @@ export async function persistMenuItem(input: MenuCatalogInput, javaMenuId?: numb
   }
 }
 
-/** Saves an edit of a menu item; a name another item already uses is refused. */
+/** Lưu bản sửa của một món; tên mà món khác đang dùng sẽ bị từ chối. */
 export async function updateMenuItemRecord(itemId: number, input: NewMockItemInput): Promise<void> {
   if (!isDbConfigured || !db) {
     const result = updateMockMenuItem(itemId, input)
@@ -71,7 +71,7 @@ export async function updateMenuItemRecord(itemId: number, input: NewMockItemInp
   if (outcome === 'missing') throw new Error('Không tìm thấy món trong thực đơn.')
 }
 
-/** Removes a menu item and its Java link. Orders keep the name and price they were sold at. */
+/** Xóa một món cùng liên kết Java của nó. Đơn đã bán giữ nguyên tên và giá lúc bán. */
 export async function deleteMenuItemRecord(itemId: number): Promise<void> {
   if (!isDbConfigured || !db) {
     const result = deleteMockMenuItem(itemId)
@@ -79,7 +79,7 @@ export async function deleteMenuItemRecord(itemId: number): Promise<void> {
     await deleteMenuLink(itemId)
     return
   }
-  await getMenuLinks([]) // Make sure the link table exists before the transaction uses it.
+  await getMenuLinks([]) // Đảm bảo bảng liên kết tồn tại trước khi transaction dùng nó.
   const removed = await db.transaction(async tx => {
     await tx.execute(sql`delete from admin_menu_links where menu_item_id = ${itemId}`)
     return tx.delete(adminMenuItems).where(eq(adminMenuItems.id, itemId)).returning({ id: adminMenuItems.id })

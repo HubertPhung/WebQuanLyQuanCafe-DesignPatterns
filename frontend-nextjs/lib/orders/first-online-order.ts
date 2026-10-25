@@ -11,7 +11,7 @@ const state = globalThis as typeof globalThis & {
 }
 const placed = state.firstOnlineOrders ??= new Set<number>()
 const busy = state.onlineOrderLocks ??= new Set<number>()
-// A lock holder must not exhaust the data pool its checkout needs for transactions.
+// Bên giữ khóa không được dùng cạn pool kết nối mà lượt checkout của nó cần cho transaction.
 const lockPool = pool ? (state.onlineOrderLockPool ??= new Pool({ connectionString: process.env.DATABASE_URL, max: 2 })) : null
 let schemaReady: Promise<unknown> | undefined
 
@@ -27,7 +27,7 @@ async function ensureSchema() {
   await schemaReady
 }
 
-/** No permissive fallback when a configured database cannot verify order history. */
+/** Không có lối dự phòng dễ dãi khi database đã cấu hình mà không kiểm tra được lịch sử đơn. */
 export async function isFirstOnlineOrderAvailable(userId: number): Promise<boolean> {
   if (busy.has(userId) || placed.has(userId)) return false
   await ensureSchema()
@@ -38,7 +38,10 @@ export async function isFirstOnlineOrderAvailable(userId: number): Promise<boole
   return !(await hasOnlineOrderForUser(userId))
 }
 
-/** Serialize this account across server processes; reserve eligibility before any charge. */
+/**
+ * Tuần tự hóa tài khoản này giữa các tiến trình server; giữ quyền ưu đãi trước khi thu bất kỳ khoản
+ * tiền nào.
+ */
 export async function withFirstOnlineOrder<T>(userId: number, work: (context: { isFirstOrder: boolean; markPlaced: () => void }) => Promise<T>): Promise<T> {
   if (busy.has(userId)) throw new Error('Tài khoản đang có đơn được xử lý. Vui lòng đợi rồi thử lại.')
   busy.add(userId)
@@ -64,7 +67,7 @@ export async function withFirstOnlineOrder<T>(userId: number, work: (context: { 
     return await work({ isFirstOrder, markPlaced: () => { orderPlaced = true; placed.add(userId) } })
   } finally {
     try {
-      // A refused/unavailable checkout did not create an order, so the first-order offer remains.
+      // Lượt checkout bị từ chối/không khả dụng không tạo đơn, nên ưu đãi đơn đầu tiên vẫn còn.
       if (client && reserved && !orderPlaced) await client.query('DELETE FROM admin_first_online_orders WHERE user_id = $1', [userId])
     } finally {
       try {

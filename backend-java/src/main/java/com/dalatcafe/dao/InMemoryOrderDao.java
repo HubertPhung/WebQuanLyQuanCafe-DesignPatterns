@@ -11,7 +11,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
- * In-memory implementation of IOrderDao using thread-safe collection.
+ * Bản cài đặt IOrderDao trong bộ nhớ, dùng collection an toàn đa luồng.
  */
 public class InMemoryOrderDao implements IOrderDao {
     private final InMemoryDatabase db;

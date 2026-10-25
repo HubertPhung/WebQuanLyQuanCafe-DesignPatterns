@@ -33,11 +33,11 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * GET /api/orders, PATCH /api/orders/{code}/status (KDS lifecycle) and
- * POST /api/orders/{code}/pay (settles an unpaid order, e.g. one transferred from a reservation).
- * Paying fires {@code onOrderPaid}; reaching COMPLETED fires {@code onOrderCompleted}, so the
- * Observer pattern keeps the floor plan and the KDS in step with the kitchen.
- * POST /api/orders/sync imports orders the frontend recorded while this backend was offline.
+ * GET /api/orders, PATCH /api/orders/{code}/status (vòng đời KDS) và POST /api/orders/{code}/pay
+ * (thanh toán đơn chưa trả, ví dụ đơn chuyển từ phiếu đặt bàn). Thanh toán phát {@code
+ * onOrderPaid}; chuyển sang COMPLETED phát {@code onOrderCompleted}, để Observer pattern giữ sơ đồ
+ * bàn và KDS khớp với quầy pha chế. POST /api/orders/sync nhập các đơn frontend đã ghi khi backend
+ * này offline.
  */
 public class OrderHandler extends ApiHandler {
     private static final Logger LOGGER = Logger.getLogger(OrderHandler.class.getName());
@@ -171,7 +171,8 @@ public class OrderHandler extends ApiHandler {
         OrderStatus target = parseStatus(requireStr(body, "status"));
         Order order;
         boolean changed;
-        // Same lock as pay(): a cancel read before a payment must not write the order back unpaid.
+        // Cùng khóa với pay(): lệnh hủy đọc trước khi thanh toán không được ghi đè đơn về trạng
+        // thái chưa trả.
         synchronized (this) {
             order = find(code);
             changed = order.getStatus() != target;
@@ -230,8 +231,9 @@ public class OrderHandler extends ApiHandler {
         Order order;
         PaymentResult payment;
         List<String> warnings = new ArrayList<>();
-        // One payment per order even when two cashiers press "pay" at once. The paid event is sent
-        // under the same lock, so a cancel or completion cannot slip in before its side effects.
+        // Mỗi đơn chỉ thanh toán một lần kể cả khi hai thu ngân cùng bấm "thanh toán". Sự kiện đã
+        // thanh toán được gửi trong cùng khóa, nên lệnh hủy hay hoàn tất không thể chen vào trước
+        // các tác động đi kèm.
         synchronized (this) {
             order = find(code);
             if (order.getPaymentStatus() == PaymentStatus.PAID) {
@@ -258,7 +260,8 @@ public class OrderHandler extends ApiHandler {
             try {
                 eventSubject.notifyOrderPaid(order);
                 if (customer != null) {
-                    // Per-request observer called directly: the shared subject stays untouched.
+                    // Observer theo từng request được gọi trực tiếp: subject dùng chung không bị
+                    // đụng tới.
                     new LoyaltyPointObserver(customerDao, customer.getId()).onOrderPaid(order);
                 }
             } catch (RuntimeException e) {
@@ -273,9 +276,9 @@ public class OrderHandler extends ApiHandler {
     }
 
     /**
-     * Imports a batch of orders recorded elsewhere (the frontend while this backend was down).
-     * No payment is taken: the money already changed hands. Idempotent by order code, so a
-     * retried batch never duplicates an order.
+     * Nhập một lô đơn đã ghi ở nơi khác (frontend trong lúc backend này ngừng hoạt động). Không thu
+     * tiền: tiền đã trao tay rồi. Idempotent theo mã đơn, nên gửi lại một lô không bao giờ tạo đơn
+     * trùng.
      */
     private void sync(HttpExchange exchange) throws IOException {
         Map<String, Object> body = readJsonBody(exchange);
@@ -298,7 +301,7 @@ public class OrderHandler extends ApiHandler {
                 code = requireStr(input, "orderCode");
                 row.put("orderCode", code);
                 List<String> warnings = new ArrayList<>();
-                // Synchronized with pay(): an import and a payment of the same code cannot interleave.
+                // Đồng bộ với pay(): việc nhập và thanh toán cùng một mã không thể xen kẽ nhau.
                 synchronized (this) {
                     if (orderDao.findByOrderCode(code).isPresent()) {
                         row.put("result", "exists");
@@ -350,7 +353,7 @@ public class OrderHandler extends ApiHandler {
         }
         order.setPaymentMethod(paymentMethod(Objects.requireNonNullElse(str(input, "paymentMethod"), "cash")));
         order.setNote(str(input, "note"));
-        // A table decides the branch; a pickup or delivery order brings its own.
+        // Bàn quyết định chi nhánh; đơn mang đi hoặc giao hàng tự mang theo chi nhánh của nó.
         order.setBranch(order.getTableId() != null
                 ? tableDao.findById(order.getTableId()).map(com.dalatcafe.model.Table::getBranch).orElse(null)
                 : branchField(input));
@@ -390,10 +393,11 @@ public class OrderHandler extends ApiHandler {
         String status = str(input, "status");
         OrderStatus target = status == null ? OrderStatus.PENDING : parseStatus(status);
         if (target == OrderStatus.COMPLETED) {
-            // Kept as recorded offline; without it setStatus stamps the sync time.
+            // Giữ đúng thời điểm đã ghi lúc offline; nếu không, setStatus sẽ ghi thời điểm đồng bộ.
             Instant completedAt = instant(input, "completedAt");
             if (completedAt != null && completedAt.isBefore(order.getCreatedAt())) {
-                // A skewed clock must not leave a sold order stuck in the queue: import it, and say so.
+                // Đồng hồ lệch không được khiến một đơn đã bán bị kẹt trong hàng đợi: vẫn nhập nó,
+                // và báo lại điều đó.
                 warnings.add("Order " + code + " was completed before it was created; completion time set to the creation time");
                 completedAt = order.getCreatedAt();
             }
@@ -421,7 +425,7 @@ public class OrderHandler extends ApiHandler {
         }
     }
 
-    /** An imported order that is paid and still open seats its table and reaches the KDS. */
+    /** Đơn được nhập đã thanh toán và còn mở thì xếp khách vào bàn và đưa lên KDS. */
     private void notifyImported(Order order, List<String> warnings) {
         boolean open = order.getStatus() != OrderStatus.COMPLETED && order.getStatus() != OrderStatus.CANCELLED;
         if (!open) {

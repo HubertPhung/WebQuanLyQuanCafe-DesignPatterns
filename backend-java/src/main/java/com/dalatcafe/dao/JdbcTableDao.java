@@ -12,7 +12,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * JDBC PostgreSQL implementation of ITableDao.
+ * Bản cài đặt ITableDao bằng JDBC PostgreSQL.
  */
 public class JdbcTableDao implements ITableDao {
     private static final Logger LOGGER = Logger.getLogger(JdbcTableDao.class.getName());
@@ -124,7 +124,8 @@ public class JdbcTableDao implements ITableDao {
 
     @Override
     public boolean updateStatus(int id, TableStatus status, int guestCount) {
-        // A table that is already occupied keeps its seating time, like Table#setStatus does in memory.
+        // Bàn đang có khách thì giữ nguyên thời điểm khách ngồi, giống Table#setStatus trong bộ
+        // nhớ.
         String sql = """
             UPDATE tables SET status = ?, guest_count = ?,
                 occupied_since = CASE WHEN ? THEN COALESCE(occupied_since, ?) END,

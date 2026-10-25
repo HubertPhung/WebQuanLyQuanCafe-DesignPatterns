@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Data Access Object interface for Reservation entity.
+ * Interface Data Access Object cho thực thể Reservation.
  */
 public interface IReservationDao {
     List<Reservation> findAll();

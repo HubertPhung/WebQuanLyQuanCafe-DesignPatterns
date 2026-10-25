@@ -1,5 +1,5 @@
-// Older Supabase bootstraps used varchar(255), which cannot hold uploaded data URLs.
-// Match the Drizzle schema without changing existing images.
+// Các bản khởi tạo Supabase cũ dùng varchar(255), không chứa được data URL của ảnh tải lên. Đưa về
+// khớp schema Drizzle mà không đổi các ảnh hiện có.
 export const MENU_IMAGE_SCHEMA_SQL = `
 DO $$
 BEGIN

@@ -1,5 +1,6 @@
-// Membership ranks as Java's Customer.updateRank assigns them: by lifetime spend on paid orders,
-// not by points. The discount is CustomerRank's rate, applied when a member pays (LoyaltyTierDiscountStrategy).
+// Hạng thành viên theo cách Customer.updateRank bên Java gán: theo tổng chi tiêu trên các đơn đã
+// thanh toán, không theo điểm. Mức giảm là tỷ lệ của CustomerRank, áp dụng khi thành viên thanh
+// toán (LoyaltyTierDiscountStrategy).
 
 export type Rank = 'bronze' | 'silver' | 'gold' | 'vip'
 
@@ -14,7 +15,7 @@ export function rankInfo(rank: Rank) {
   return RANKS.find((entry) => entry.rank === rank) ?? RANKS[0]
 }
 
-/** The next rank and how much more spending reaches it; null at the top. */
+/** Hạng tiếp theo và cần chi thêm bao nhiêu để đạt; null khi đã ở hạng cao nhất. */
 export function nextRank(totalSpent: number) {
   const next = RANKS.find((entry) => entry.minSpent > totalSpent)
   return next ? { ...next, remaining: next.minSpent - totalSpent } : null

@@ -11,7 +11,7 @@ import java.util.Objects;
 
 public final class OperatingHoursValidator extends ReservationValidatorHandler {
     private static final ZoneId CAFE_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
-    /** A booking keyed in for "now" (minute precision) has already begun by the time it is sent. */
+    /** Phiếu nhập cho thời điểm "bây giờ" (chính xác tới phút) đã bắt đầu ngay khi được gửi đi. */
     public static final Duration PAST_GRACE = Duration.ofMinutes(15);
     private final Clock clock;
 
@@ -38,7 +38,8 @@ public final class OperatingHoursValidator extends ReservationValidatorHandler {
         } catch (DateTimeException ex) {
             return ValidationResult.invalid("Thời gian đặt bàn không hợp lệ.");
         }
-        // The check and the quoted hours come from one settings update, not from either side of one.
+        // Phép kiểm tra và giờ mở cửa ghi trong thông báo lấy từ cùng một lần cập nhật cài đặt,
+        // không lấy lẫn trước và sau cập nhật.
         synchronized (config) {
             if (!config.isWithinOperatingHours(bookingTime)) {
                 return ValidationResult.invalid("Quán chỉ nhận đặt bàn trong giờ mở cửa ("

@@ -18,8 +18,8 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * JDBC PostgreSQL implementation of IUserDao (table {@code users}). Uniqueness of the email and
- * the Google subject is enforced by the database, so a duplicate makes {@link #save} return false.
+ * Bản cài đặt IUserDao bằng JDBC PostgreSQL (bảng {@code users}). Database đảm bảo email và Google
+ * subject là duy nhất, nên bản ghi trùng làm {@link #save} trả về false.
  */
 public class JdbcUserDao implements IUserDao {
     private static final Logger LOGGER = Logger.getLogger(JdbcUserDao.class.getName());
@@ -89,7 +89,7 @@ public class JdbcUserDao implements IUserDao {
             }
             return true;
         } catch (SQLException e) {
-            // 23505 = unique_violation: the email or Google account is already registered.
+            // 23505 = unique_violation: email hoặc tài khoản Google đã được đăng ký.
             if (!"23505".equals(e.getSQLState())) {
                 LOGGER.log(Level.SEVERE, "Error save user via JDBC: " + e.getMessage(), e);
             }
@@ -125,7 +125,7 @@ public class JdbcUserDao implements IUserDao {
         try {
             user.setRole(UserRole.valueOf(rs.getString("role").toUpperCase(Locale.ROOT)));
         } catch (IllegalArgumentException | NullPointerException e) {
-            user.setRole(UserRole.CUSTOMER); // an unknown stored role never grants more access
+            user.setRole(UserRole.CUSTOMER); // vai trò lạ trong dữ liệu không bao giờ được cấp thêm quyền
         }
         user.setActive(rs.getBoolean("active"));
         Timestamp created = rs.getTimestamp("created_at");

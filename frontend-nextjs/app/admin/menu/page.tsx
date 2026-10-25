@@ -15,7 +15,7 @@ export default async function AdminMenuPage() {
         title="Quản lý Thực đơn & Danh mục món"
         description="Danh sách món POS đang bán, đồng bộ với backend Java: thêm, sửa, xoá món và bật, tắt món đang bán."
       />
-      {/* Adding, editing and removing items needs MANAGER; staff can only switch items on or off. */}
+      {/* Thêm, sửa và xóa món cần MANAGER; nhân viên chỉ bật/tắt bán được. */}
       <MenuManagement items={items} canManage={session ? atLeast(session.role, 'MANAGER') : false} />
     </div>
   )

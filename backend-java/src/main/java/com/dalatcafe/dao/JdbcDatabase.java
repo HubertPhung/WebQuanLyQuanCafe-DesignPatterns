@@ -16,12 +16,10 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * PostgreSQL (Supabase) JDBC connection provider.
- *
- * Connections come from a small pool: {@link Connection#close()} on a pooled connection
- * returns it to the pool instead of closing the socket, so DAOs keep their
- * try-with-resources style. {@link #isAvailable()} caches its answer for a few seconds,
- * so health checks on the request path do not open a new connection every time.
+ * Nơi cấp kết nối JDBC tới PostgreSQL (Supabase). Kết nối lấy từ một pool nhỏ: {@link
+ * Connection#close()} trên kết nối của pool sẽ trả nó về pool thay vì đóng socket, nên các DAO vẫn
+ * dùng kiểu try-with-resources. {@link #isAvailable()} lưu kết quả trong vài giây, để kiểm tra sức
+ * khỏe trên đường xử lý request không phải mở kết nối mới mỗi lần.
  */
 public class JdbcDatabase {
     private static final Logger LOGGER = Logger.getLogger(JdbcDatabase.class.getName());
@@ -53,7 +51,7 @@ public class JdbcDatabase {
         closePool();
     }
 
-    /** A pooled connection; closing it hands it back to the pool. */
+    /** Một kết nối của pool; đóng nó là trả nó về pool. */
     public static Connection getConnection() throws SQLException {
         Connection physical;
         while ((physical = IDLE.poll()) != null) {
@@ -87,13 +85,14 @@ public class JdbcDatabase {
             return DriverManager.getConnection(rawUrl);
         }
 
-        // Parse uri format: postgresql://user:password@host:port/database
+        // Phân tích chuỗi dạng: postgresql://user:password@host:port/database
         String cleanUrl = rawUrl.replace("postgresql://", "http://").replace("postgres://", "http://");
         URI uri;
         try {
             uri = new URI(cleanUrl);
         } catch (URISyntaxException e) {
-            // The URL carries the password, so neither it nor the parser's message (which quotes it) is reported.
+            // URL chứa mật khẩu, nên không báo ra URL lẫn thông báo lỗi của bộ phân tích (vì thông
+            // báo đó trích lại URL).
             throw new SQLException("DATABASE_URL is not a valid postgresql:// URL (character " + e.getIndex()
                     + "); characters such as spaces, @ or # in the password must be percent-encoded");
         }
@@ -114,7 +113,8 @@ public class JdbcDatabase {
             user = userInfo;
         }
 
-        // The password goes to the driver as its own argument, so driver errors cannot echo it.
+        // Mật khẩu được truyền cho driver thành một tham số riêng, để lỗi của driver không thể in
+        // lại nó.
         String jdbcUrl = String.format("jdbc:postgresql://%s:%d/%s?sslmode=require", host, port, database);
         return DriverManager.getConnection(jdbcUrl, user, password);
     }
@@ -167,7 +167,7 @@ public class JdbcDatabase {
                 new Class<?>[]{Connection.class}, handler);
     }
 
-    /** Resets a borrowed connection and parks it, or closes it when the pool is full. */
+    /** Đặt lại kết nối vừa mượn rồi cất vào pool, hoặc đóng nó khi pool đã đầy. */
     private static void release(Connection physical) {
         try {
             if (physical.isClosed()) {
@@ -185,7 +185,7 @@ public class JdbcDatabase {
         }
     }
 
-    /** Closes every idle connection and forgets the cached health result. */
+    /** Đóng mọi kết nối đang rảnh và xóa kết quả kiểm tra sức khỏe đã lưu. */
     public static void closePool() {
         Connection physical;
         while ((physical = IDLE.poll()) != null) {
@@ -198,13 +198,14 @@ public class JdbcDatabase {
         try {
             connection.close();
         } catch (SQLException ignored) {
-            // Already broken; nothing left to release.
+            // Kết nối đã hỏng; không còn gì để giải phóng.
         }
     }
 
     /**
-     * Whether PostgreSQL answers, cached for {@link #HEALTH_TTL_MILLIS} so request-path checks
-     * stay cheap. A failure is re-checked after the same delay.
+     * PostgreSQL có phản hồi không, lưu kết quả trong {@link #HEALTH_TTL_MILLIS} để kiểm tra trên
+     * đường xử lý request vẫn nhẹ. Lần thất bại cũng được kiểm tra lại sau cùng khoảng thời gian
+     * đó.
      */
     public static boolean isAvailable() {
         long now = System.currentTimeMillis();
@@ -224,9 +225,9 @@ public class JdbcDatabase {
     }
 
     /**
-     * Creates the JDBC schema on a fresh database and upgrades an older one in place. Every
-     * statement is idempotent (IF NOT EXISTS / guarded DO blocks), and foreign keys are added
-     * NOT VALID so rows written before this version are kept as they are.
+     * Tạo schema JDBC trên database mới và nâng cấp database cũ tại chỗ. Mọi câu lệnh đều chạy lại
+     * được (IF NOT EXISTS / khối DO có kiểm tra), và khóa ngoại được thêm với NOT VALID để các dòng
+     * ghi trước phiên bản này được giữ nguyên.
      */
     public static void initializeSchema(Connection conn) throws SQLException {
         String ddl = """
@@ -312,6 +313,13 @@ public class JdbcDatabase {
                 last_login_at TIMESTAMP WITH TIME ZONE
             );
 
+            -- Store settings of the SystemConfigManager Singleton, one row per setting.
+            CREATE TABLE IF NOT EXISTS store_config (
+                config_key VARCHAR(60) PRIMARY KEY,
+                config_value TEXT NOT NULL,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+
             -- List-valued fields (added after the first release, so ALTER keeps old databases working).
             ALTER TABLE tables ADD COLUMN IF NOT EXISTS image_url TEXT;
             ALTER TABLE tables ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
@@ -355,8 +363,8 @@ public class JdbcDatabase {
     }
 
     /**
-     * Moves each SERIAL sequence past the largest id, needed after rows were inserted with
-     * explicit ids (seed data, upserts) so the next generated id cannot collide.
+     * Đẩy mỗi sequence SERIAL vượt qua id lớn nhất. Cần làm sau khi chèn dòng với id cố định (dữ
+     * liệu mẫu, upsert) để id tự sinh tiếp theo không bị trùng.
      */
     public static void syncSequences(Connection conn) throws SQLException {
         String sql = """

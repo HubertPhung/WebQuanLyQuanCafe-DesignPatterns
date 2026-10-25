@@ -9,7 +9,7 @@ import type { BranchId } from '@/lib/branches'
 const unavailable = 'Bàn đang được sử dụng, đã có lịch đặt hoặc đang dọn. Vui lòng chọn bàn trống.'
 const busy = new Set<number>()
 
-/** Serialize a new table's order through payment, local persistence and synchronization. */
+/** Xếp hàng đơn mới của một bàn qua các bước thanh toán, lưu cục bộ và đồng bộ. */
 export async function withPosTableLock<T>(tableId: number | null, work: () => Promise<T>): Promise<T> {
   if (tableId == null) return work()
   if (!pool) {

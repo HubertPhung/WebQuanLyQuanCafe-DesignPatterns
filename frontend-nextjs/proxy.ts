@@ -2,9 +2,9 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { atLeast, homeFor, requiredRoleForPath } from '@/lib/auth/roles'
 import { SESSION_COOKIE, verifySessionToken } from '@/lib/auth/token'
 
-// Optimistic checks only (Next.js authentication guide): visitors without a valid session are
-// sent to /login, signed-in users without the role to their home. Every admin data function
-// and Server Action checks the session again, and the Java backend checks the token itself.
+// Chỉ kiểm tra sơ bộ (theo hướng dẫn xác thực của Next.js): khách không có phiên hợp lệ được đưa
+// tới /login, người đã đăng nhập nhưng không đủ vai trò về trang chủ của họ. Mọi hàm dữ liệu admin
+// và Server Action đều kiểm tra lại phiên, và backend Java tự kiểm tra token.
 export default async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl
   const session = await verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value)

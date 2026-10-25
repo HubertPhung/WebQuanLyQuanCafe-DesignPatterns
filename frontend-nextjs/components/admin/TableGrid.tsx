@@ -109,7 +109,7 @@ export function TableGrid({
 
   return (
     <div className="space-y-6">
-      {/* Header and Controls */}
+      {/* Phần đầu và các nút điều khiển */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-stone-200/80 pb-5">
         <div>
           <h2 className="text-xl md:text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
@@ -121,7 +121,7 @@ export function TableGrid({
           </p>
         </div>
 
-        {/* Status Legend Pills */}
+        {/* Chú thích màu trạng thái */}
         <div className="flex flex-wrap items-center gap-2">
           {(['available', 'occupied', 'reserved', 'cleaning'] as TableStatus[]).map((st) => (
             <span
@@ -147,7 +147,7 @@ export function TableGrid({
         </div>
       </div>
 
-      {/* Zone Filters */}
+      {/* Bộ lọc khu vực */}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-bold text-stone-500 uppercase tracking-wider mr-2">
           Khu vực:
@@ -175,7 +175,7 @@ export function TableGrid({
         ))}
       </div>
 
-      {/* Grid of Tables */}
+      {/* Lưới các bàn */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 lg:gap-6">
         {filteredTables.map((table) => {
           const isSelected = selectedId === table.id
@@ -192,7 +192,7 @@ export function TableGrid({
                 isSelected && 'ring-2 ring-[#3E2723] ring-offset-2'
               )}
             >
-              {/* Header: Table Name & Zone */}
+              {/* Phần đầu: tên bàn và khu vực */}
               <div className="flex items-start justify-between">
                 <div>
                   <strong className="text-lg font-black tracking-tight block text-stone-900">
@@ -212,7 +212,7 @@ export function TableGrid({
                 </Badge>
               </div>
 
-              {/* Status Indicator & Guests */}
+              {/* Chỉ báo trạng thái và số khách */}
               <div className="mt-4 flex items-center justify-between border-t border-current/15 pt-3 text-xs">
                 <span className="font-bold flex items-center gap-1.5">
                   <span className="size-2 rounded-full bg-current" />
@@ -231,7 +231,7 @@ export function TableGrid({
         })}
       </div>
 
-      {/* Interactive Sheet for Table Details */}
+      {/* Ngăn kéo chi tiết bàn */}
       <Sheet open={!!selected} onOpenChange={(open) => !open && setSelectedId(null)}>
         <SheetContent className="sm:max-w-md bg-white text-stone-900 border-l border-stone-200 p-6 flex flex-col justify-between">
           <div>
@@ -259,7 +259,7 @@ export function TableGrid({
 
             {selected && (
               <div className="py-6 space-y-6 text-sm">
-                {/* Table Metadata */}
+                {/* Thông tin bàn */}
                 <div className="grid grid-cols-2 gap-3 p-4 rounded-lg bg-stone-50 border border-stone-200">
                   <div>
                     <span className="text-xs text-stone-500 block">Sức chứa tối đa:</span>
@@ -273,7 +273,7 @@ export function TableGrid({
                   </div>
                 </div>
 
-                {/* Status Toggle Buttons */}
+                {/* Các nút đổi trạng thái */}
                 <div>
                   <label className="text-xs font-bold text-stone-500 uppercase tracking-wider block mb-2">
                     Chuyển đổi trạng thái bàn:
@@ -307,7 +307,7 @@ export function TableGrid({
                   </div>
                 </div>
 
-                {/* Active Orders / Bill summary */}
+                {/* Đơn đang mở / tóm tắt hóa đơn */}
                 <div className="border-t border-stone-200 pt-4">
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">

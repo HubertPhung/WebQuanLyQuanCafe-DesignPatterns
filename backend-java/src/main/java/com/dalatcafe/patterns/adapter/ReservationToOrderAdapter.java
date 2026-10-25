@@ -10,9 +10,9 @@ import com.dalatcafe.model.Reservation;
 import java.util.Objects;
 
 /**
- * Object Adapter (GoF Structural): adapts an approved {@link Reservation} (Adaptee)
- * to the POS {@link IPosOrderTarget} so a guest's pre-ordered drinks become an active order.
- * Neither Reservation nor Order is modified; the adaptee is only read.
+ * Object Adapter (GoF Structural): chuyển một {@link Reservation} đã duyệt (Adaptee) thành {@link
+ * IPosOrderTarget} của POS, để đồ uống khách đặt trước trở thành một đơn đang phục vụ. Không sửa
+ * Reservation lẫn Order; adaptee chỉ được đọc.
  */
 public class ReservationToOrderAdapter implements IPosOrderTarget {
     private final Reservation reservation;

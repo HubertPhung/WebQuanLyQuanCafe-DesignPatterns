@@ -38,7 +38,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/** Checkout against a customer DAO that hands out copies, as the JDBC DAO does. */
+/** Checkout trên một customer DAO trả về bản sao, giống DAO JDBC. */
 class CheckoutHandlerTest {
     private static final int DRINK_ID = 901;
     private static final String PHONE = "0988000333";
@@ -85,7 +85,7 @@ class CheckoutHandlerTest {
 
     @Test
     void twoCheckoutsCannotBothSpendTheSamePointsBalance() throws Exception {
-        // The first checkout has read the balance but not redeemed it when the second arrives.
+        // Lượt checkout đầu đã đọc số dư nhưng chưa đổi điểm khi lượt thứ hai tới.
         customers.pauseNextLookup();
         CompletableFuture<HttpResponse<String>> first = redeemAll();
         assertTrue(customers.lookupPaused.await(5, TimeUnit.SECONDS));
@@ -100,7 +100,7 @@ class CheckoutHandlerTest {
 
     @Test
     void anotherOrderPaidDuringCheckoutDoesNotCreditTheMember() throws Exception {
-        // /pay and /sync broadcast on the same subject under a different lock than checkout.
+        // /pay và /sync phát sự kiện trên cùng subject nhưng dưới một khóa khác với checkout.
         Order unrelated = new OrderBuilder().forCustomer("Walk-in").addItem(new BaseCoffee(drink), 20)
                 .withPayment(PaymentMethod.CASH, true).build();
         orders.pauseNextSave();
@@ -166,7 +166,7 @@ class CheckoutHandlerTest {
 
     @Test
     void failedCheckoutGivesTheHeldPointsBack() throws Exception {
-        // The drink is off sale: the facade refuses after the points were checked.
+        // Đồ uống đang tạm ngưng bán: facade từ chối sau khi đã kiểm tra điểm.
         menu.toggleInStock(DRINK_ID, false);
         HttpResponse<String> response = redeemAll().get(10, TimeUnit.SECONDS);
 
@@ -193,7 +193,7 @@ class CheckoutHandlerTest {
         return (Map<String, Object>) ((Map<String, Object>) Json.parse(response.body())).get("data");
     }
 
-    /** Can hold the next save until the test releases it (or 5 s pass). */
+    /** Có thể giữ lần lưu tiếp theo cho tới khi test cho phép (hoặc qua 5 giây). */
     private static final class PausingOrderDao extends InMemoryOrderDao {
         final CountDownLatch savePaused = new CountDownLatch(1);
         final CountDownLatch releaseSave = new CountDownLatch(1);
@@ -217,7 +217,10 @@ class CheckoutHandlerTest {
         }
     }
 
-    /** Reads return copies; one lookup can be held until points are redeemed (or 500 ms pass); redeeming can be made to fail. */
+    /**
+     * Đọc ra bản sao; có thể giữ một lần tra cứu tới khi điểm được đổi (hoặc qua 500 ms); có thể
+     * cho việc đổi điểm thất bại.
+     */
     private static final class SnapshotCustomerDao extends InMemoryCustomerDao {
         final CountDownLatch lookupPaused = new CountDownLatch(1);
         private final CountDownLatch redeemed = new CountDownLatch(1);
@@ -244,7 +247,7 @@ class CheckoutHandlerTest {
 
         @Override
         public boolean redeemPoints(int id, int points) {
-            // A failed write, as the JDBC DAO reports one.
+            // Một lần ghi thất bại, theo cách DAO JDBC báo lỗi.
             boolean ok = !failRedeem.get() && super.redeemPoints(id, points);
             redeemed.countDown();
             return ok;

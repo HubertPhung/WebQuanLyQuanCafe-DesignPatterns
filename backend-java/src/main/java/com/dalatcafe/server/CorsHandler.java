@@ -6,7 +6,8 @@ import com.sun.net.httpserver.HttpExchange;
 import java.io.IOException;
 
 /**
- * Adds standard CORS headers to every response and answers preflight OPTIONS requests.
+ * Thêm các header CORS chuẩn vào mọi phản hồi và trả lời request OPTIONS kiểm tra trước
+ * (preflight).
  */
 public class CorsHandler extends Filter {
     @Override

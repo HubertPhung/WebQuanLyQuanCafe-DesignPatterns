@@ -7,10 +7,9 @@ export function normalizeMenuName(name: string) {
 }
 
 /**
- * Java menu ids for frontend menu items. A stored link wins as long as Java still has that id,
- * so renaming an item on either side keeps working; an item seen for the first time is matched
- * by name once and the match is stored. Items Java does not sell are left out of the map.
- * Returns null when the Java menu cannot be read.
+ * Id món bên Java cho các món frontend. Liên kết đã lưu được ưu tiên miễn Java vẫn còn id đó, nên
+ * đổi tên món ở bên nào cũng không sao; món gặp lần đầu được ghép theo tên một lần rồi lưu lại. Món
+ * Java không bán thì không có trong bảng ánh xạ. Trả về null khi không đọc được thực đơn Java.
  */
 export async function resolveJavaMenuIds(items: { id: number; name: string }[]): Promise<Map<number, number> | null> {
   const javaMenu = await fetchMenu()
@@ -30,7 +29,7 @@ export async function resolveJavaMenuIds(items: { id: number; name: string }[]):
       resolved.set(item.id, linked)
       continue
     }
-    if (linked !== undefined) await deleteMenuLink(item.id) // Java removed that item
+    if (linked !== undefined) await deleteMenuLink(item.id) // Java đã xóa món đó
     const byName = javaIdByName.get(normalizeMenuName(item.name))
     if (byName !== undefined) {
       resolved.set(item.id, byName)

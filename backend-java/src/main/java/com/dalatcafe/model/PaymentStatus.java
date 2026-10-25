@@ -1,7 +1,7 @@
 package com.dalatcafe.model;
 
 /**
- * Payment transaction status of an Order.
+ * Trạng thái thanh toán của một Order.
  */
 public enum PaymentStatus {
     UNPAID("Chưa thanh toán"),

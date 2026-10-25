@@ -13,10 +13,10 @@ import { Spinner } from '@/components/ui/spinner'
 import type { MenuItem } from '@/lib/db/schema'
 import { cn } from '@/lib/utils'
 
-// The menu as the POS sells it. Items are created, edited and removed through createMenuItem,
-// updateMenuItem and deleteMenuItem (Java first, then the admin store), and switched on or off
-// through setItemInStock. Editing and removing need MANAGER. Categories are the names items use;
-// a new one appears by typing it when adding or editing an item.
+// Thực đơn như POS đang bán. Món được tạo, sửa và xóa qua createMenuItem, updateMenuItem và
+// deleteMenuItem (Java trước, rồi kho admin), và bật/tắt bán qua setItemInStock. Sửa và xóa cần
+// MANAGER. Danh mục là tên mà các món dùng; danh mục mới xuất hiện khi gõ tên mới lúc thêm hoặc sửa
+// món.
 export function MenuManagement({ items, canManage = false }: { items: MenuItem[]; canManage?: boolean }) {
   const [activeTab, setActiveTab] = useState<'items' | 'categories'>('items')
   const [search, setSearch] = useState('')

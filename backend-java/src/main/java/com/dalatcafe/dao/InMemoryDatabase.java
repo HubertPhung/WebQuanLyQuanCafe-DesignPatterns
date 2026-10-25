@@ -8,8 +8,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Thread-safe In-Memory Data Store providing zero-crash offline execution
- * and fast, idempotent unit test environments.
+ * Kho dữ liệu trong bộ nhớ an toàn đa luồng, giúp chạy offline không sập và tạo môi trường unit
+ * test nhanh, lặp lại được.
  */
 public class InMemoryDatabase {
     private static volatile InMemoryDatabase instance;
@@ -43,7 +43,7 @@ public class InMemoryDatabase {
     }
 
     /**
-     * Resets the store and re-seeds with clean baseline data (for test isolation).
+     * Xóa kho và nạp lại dữ liệu mẫu sạch (để các test độc lập với nhau).
      */
     public synchronized void reset() {
         tables.clear();
@@ -69,7 +69,7 @@ public class InMemoryDatabase {
     }
 
     private void seedTables() {
-        // 15 Physical Tables matching docs/DATABASE.md and mock-store.ts
+        // 15 bàn thật, khớp docs/DATABASE.md và mock-store.ts
         Table t1 = new Table(1, "Bàn 01", 2, "Main Floor", TableStatus.AVAILABLE, 0);
         t1.setImageUrl("/images/catalog/photo-1554118811-1e0d58224f24.jpg");
         addTable(t1);
@@ -134,8 +134,8 @@ public class InMemoryDatabase {
     }
 
     /**
-     * The floor of 456 Bùi Thị Xuân, numbered from {@code firstId}. Also used to seed an existing
-     * PostgreSQL floor that predates branches, where ids 16+ may already be taken.
+     * Sơ đồ bàn của 456 Bùi Thị Xuân, đánh số từ {@code firstId}. Cũng dùng để nạp bàn cho một sơ
+     * đồ PostgreSQL có từ trước khi có chi nhánh, nơi các id từ 16 trở đi có thể đã bị dùng.
      */
     public static java.util.List<Table> branchTwoTables(int firstId) {
         Object[][] rows = {
@@ -163,7 +163,7 @@ public class InMemoryDatabase {
     }
 
     private void seedMenuItems() {
-        // Menu item 1: Ca phe Muoi
+        // Món 1: Cà phê Muối
         MenuItem item1 = new MenuItem(1, "Cà phê Muối Đặc Biệt", "Cà phê", 45000.0, 15000.0);
         item1.setRecipe("Cà phê pha phin truyền thống kết hợp lớp kem mặn béo ngậy.");
         item1.setImageUrl("/images/catalog/photo-1514432324607-a09d9b4aefdd.jpg");
@@ -171,7 +171,7 @@ public class InMemoryDatabase {
         item1.addVariation(new Variation("Đá", 0.0));
         menuItems.put(1, item1);
 
-        // Menu item 2: Latte Vani
+        // Món 2: Latte Vani
         MenuItem item2 = new MenuItem(2, "Cà phê Latte Vani Mịn", "Cà phê", 55000.0, 18000.0);
         item2.setRecipe("Double shot espresso, siro vani và sữa tươi thanh trùng.");
         item2.setImageUrl("/images/catalog/photo-1534778101976-62847782c213.jpg");
@@ -179,7 +179,7 @@ public class InMemoryDatabase {
         item2.addVariation(new Variation("Sữa yến mạch", 10000.0));
         menuItems.put(2, item2);
 
-        // Menu item 3: Bac Xiu
+        // Món 3: Bạc Xỉu
         MenuItem item3 = new MenuItem(3, "Bạc Xỉu Sữa Tươi", "Cà phê", 45000.0, 16000.0);
         item3.setRecipe("Nhiều sữa ít cà phê, béo ngậy chuẩn vị Sài Gòn.");
         item3.setImageUrl("/images/catalog/photo-1517256064527-09c73fc73e38.jpg");
@@ -187,19 +187,19 @@ public class InMemoryDatabase {
         item3.addVariation(new Variation("Đá", 0.0));
         menuItems.put(3, item3);
 
-        // Menu item 4: Cold Brew Cam Vang
+        // Món 4: Cold Brew Cam Vàng
         MenuItem item4 = new MenuItem(4, "Cold Brew Cam Vàng", "Cà phê ủ lạnh", 55000.0, 20000.0);
         item4.setRecipe("Cà phê ủ lạnh 16h kết hợp lát cam vàng mọng nước.");
         item4.setImageUrl("/images/catalog/photo-1517701550927-30cf4ba1dba5.jpg");
         menuItems.put(4, item4);
 
-        // Menu item 5: Tra Dao Cam Sa
+        // Món 5: Trà Đào Cam Sả
         MenuItem item5 = new MenuItem(5, "Trà Đào Cam Sả", "Trà & Bánh", 50000.0, 18000.0);
         item5.setRecipe("Trà đen thơm mát kết hợp miếng đào tươi giòn và sả đập dập.");
         item5.setImageUrl("/images/catalog/photo-1556679343-c7306c1976bc.jpg");
         menuItems.put(5, item5);
 
-        // Menu item 6: Banh Croissant
+        // Món 6: Bánh Croissant
         MenuItem item6 = new MenuItem(6, "Bánh Croissant Bơ Tỏi", "Trà & Bánh", 35000.0, 12000.0);
         item6.setImageUrl("/images/catalog/photo-1555507036-ab1f4038808a.jpg");
         item6.setUnit("cái");
@@ -208,15 +208,15 @@ public class InMemoryDatabase {
 
     private void seedCustomers() {
         Customer c1 = new Customer(1, "Nguyễn Văn Hùng", "0901234567", "hung.nguyen@example.com");
-        c1.addOrderRecord(600000.0, 60); // Silver
+        c1.addOrderRecord(600000.0, 60); // Bạc
         customers.put(1, c1);
 
         Customer c2 = new Customer(2, "Lê Thị Mai", "0912345678", "mai.le@example.com");
-        c2.addOrderRecord(2500000.0, 250); // Gold
+        c2.addOrderRecord(2500000.0, 250); // Vàng
         customers.put(2, c2);
 
         Customer c3 = new Customer(3, "Phạm Quốc Tuấn", "0987654321", "tuan.pham@example.com");
-        c3.addOrderRecord(5500000.0, 550); // VIP
+        c3.addOrderRecord(5500000.0, 550); // Kim cương (VIP)
         customers.put(3, c3);
     }
 
@@ -290,7 +290,10 @@ public class InMemoryDatabase {
         return nextMenuItemId.getAndIncrement();
     }
 
-    /** Accounts are never seeded: the server creates the first admin at start-up (AdminBootstrap). */
+    /**
+     * Không nạp sẵn tài khoản nào: server tự tạo quản trị viên đầu tiên khi khởi động
+     * (AdminBootstrap).
+     */
     public Map<Integer, UserAccount> getUsers() {
         return users;
     }

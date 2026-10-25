@@ -42,7 +42,8 @@ function createInitialTables(): FloorTable[] {
     { id: 14, name: 'Table 14', seats: 1, zone: 'Coffee Bar', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: now, imageUrl: '/images/catalog/photo-1498804103079-a6351b050096.jpg' },
     { id: 15, name: 'Table 15', seats: 1, zone: 'Coffee Bar', status: 'available', guestCount: 0, occupiedSince: null, updatedAt: now, imageUrl: '/images/catalog/photo-1495474472287-4d71bcdd2085.jpg' },
   ]
-  // 456 Bùi Thị Xuân: the same floor the Java seed gives that branch (InMemoryDatabase.branchTwoTables).
+  // 456 Bùi Thị Xuân: cùng sơ đồ bàn mà dữ liệu mẫu bên Java tạo cho chi nhánh đó
+  // (InMemoryDatabase.branchTwoTables).
   const secondBranchImages = [
     '/images/catalog/photo-1517248135467-4c7edcad34c4.jpg',
     '/images/catalog/photo-1525610553991-2bede1a236e2.jpg',
@@ -67,7 +68,7 @@ function createInitialTables(): FloorTable[] {
   ]
 }
 
-// A table decides the branch of its orders and bookings.
+// Bàn quyết định chi nhánh của đơn và phiếu đặt trên bàn đó.
 function branchOfTable(tables: FloorTable[], tableId: number | null | undefined): BranchId | undefined {
   return tableId == null ? undefined : tables.find((table) => table.id === tableId)?.branch
 }
@@ -368,7 +369,7 @@ function createInitialOrders(): Order[] {
 
   const now = Date.now()
 
-  // Active tickets for today (Kitchen Display & Floor Plan)
+  // Phiếu đang chạy hôm nay (màn hình pha chế và sơ đồ bàn)
   orders.push(
     makeOrder(
       101,
@@ -444,7 +445,7 @@ function createInitialOrders(): Order[] {
     ),
   )
 
-  // Completed orders earlier today
+  // Các đơn đã hoàn tất sớm hơn trong ngày
   const todayMorning = startOfDay().getTime() + 8 * 3600000
   orders.push(
     makeOrder(
@@ -518,7 +519,7 @@ function createInitialOrders(): Order[] {
     ),
   )
 
-  // Orders for yesterday
+  // Các đơn hôm qua
   const yesterdayBase = startOfDay(1).getTime() + 8 * 3600000
   const yesterdayCustomers = ['Hoàng Thùy Linh', 'Lê Minh Tuấn', 'Phạm Ngọc Mai', 'Trần Đức Anh', 'Nguyễn Văn Nam', 'Đặng Hải Yến', 'Khách vãng lai']
   for (let i = 0; i < 9; i++) {
@@ -542,7 +543,7 @@ function createInitialOrders(): Order[] {
     )
   }
 
-  // Orders for previous 5 days (days 2..6)
+  // Các đơn của 5 ngày trước đó (ngày 2..6)
   for (let day = 2; day <= 6; day++) {
     const dayBase = startOfDay(day).getTime() + 9 * 3600000
     for (let j = 0; j < 7; j++) {
@@ -591,7 +592,7 @@ export type MockReservation = {
 }
 
 function at(daysFromToday: number, hour: number, minute = 0) {
-  // startOfDay counts days back into the past, so negate to move forward.
+  // startOfDay đếm số ngày lùi về quá khứ, nên đổi dấu để tiến về tương lai.
   const date = startOfDay(-daysFromToday)
   date.setHours(hour, minute, 0, 0)
   return date
@@ -664,7 +665,7 @@ function getStore(): StoreState {
       reservations: createInitialReservations(),
     }
   }
-  // Stores created by an older build in the same dev process lack the reservation list.
+  // Store tạo bởi bản build cũ hơn trong cùng tiến trình dev chưa có danh sách phiếu đặt.
   globalForMock.__daLatCafeStore.reservations ??= createInitialReservations()
   return globalForMock.__daLatCafeStore
 }
@@ -690,7 +691,7 @@ export function saveMockTable(
   const store = getStore()
   let table = id === undefined ? undefined : store.tables.find(t => t.id === id && !t.deletedAt)
   if (id !== undefined && !table) throw new Error('Không tìm thấy bàn.')
-  // An edited table stays at its branch; names only have to be unique within one branch.
+  // Bàn đang sửa giữ nguyên chi nhánh; tên chỉ cần không trùng trong cùng một chi nhánh.
   const branch = table?.branch ?? requested ?? DEFAULT_BRANCH_ID
   if (store.tables.some(t => !t.deletedAt && t.id !== id && t.branch === branch && t.name.toLowerCase() === input.name.toLowerCase())) throw new Error('Tên bàn đã tồn tại.')
   if (table && input.seats < table.guestCount) throw new Error('Số chỗ nhỏ hơn số khách đang ngồi.')
@@ -759,7 +760,8 @@ export function updateMockOrderStatus(orderId: number, status: OrderStatus): { o
     if (booking?.status === 'Hoàn thành') booking.status = 'Đã hủy'
   }
   order.completedAt = status === 'completed' ? new Date() : null
-  // Same rule as the Java TableStatusSyncObserver: a finished dine-in order frees its table for cleaning.
+  // Cùng quy tắc với TableStatusSyncObserver bên Java: đơn ăn tại chỗ hoàn tất thì bàn được nhả để
+  // dọn.
   if ((status === 'completed' || status === 'cancelled') && order.tableId) {
     for (const id of order.tableIds?.length ? order.tableIds : [order.tableId]) {
       const other = store.orders.some(other => other.id !== order.id && (other.tableIds?.length ? other.tableIds : [other.tableId]).includes(id) && other.status !== 'completed' && other.status !== 'cancelled')
@@ -823,17 +825,18 @@ export type NewMockOrderInput = {
   orderType: OrderType
   paymentMethod: PaymentMethod
   paid: boolean
-  // Set when the Java backend already issued the order code.
+  // Có giá trị khi backend Java đã cấp mã đơn.
   orderCode?: string
-  // Set when the Java backend priced the order (member discount, redeemed points).
+  // Có giá trị khi backend Java đã tính giá đơn (giảm giá thành viên, đổi điểm).
   totals?: { subtotal: number; total: number }
-  // Cash the customer handed over; optional, but when given a paid cash order must be covered.
+  // Tiền mặt khách đưa; tùy chọn, nhưng nếu có thì đơn tiền mặt đã thanh toán phải đủ tổng tiền.
   tenderedAmount?: number
-  // Branch of a pickup or delivery order; a table decides it otherwise.
+  // Chi nhánh của đơn đến lấy hoặc giao hàng; với đơn khác thì bàn quyết định.
   branch?: BranchId
 }
 
-// The local stand-in for the Java Facade rule: cash tendered below the total is refused.
+// Bản thay thế cục bộ cho quy tắc của Facade bên Java: tiền mặt khách đưa ít hơn tổng tiền thì bị
+// từ chối.
 export function cashTenderError(input: Pick<NewMockOrderInput, 'paid' | 'paymentMethod' | 'tenderedAmount'>, total: number): string | null {
   if (!input.paid || input.paymentMethod !== 'cash' || input.tenderedAmount === undefined) return null
   if (input.tenderedAmount >= total) return null
@@ -901,7 +904,7 @@ export function createMockOrder(input: NewMockOrderInput): { ok: boolean; messag
 export type NewMockReservationInput = Omit<MockReservation, 'code' | 'status' | 'tableName' | 'preOrders' | 'tableId' | 'branch'> & {
   tableId: number
   preOrders?: MockReservation['preOrders']
-  // When given, every chosen table must belong to this branch.
+  // Nếu có truyền, mọi bàn được chọn phải thuộc chi nhánh này.
   branch?: BranchId
 }
 
@@ -927,14 +930,15 @@ export function expireMockNoShows(now = Date.now()): number {
   return expired
 }
 
-// Local stand-in for POST /api/reservations while the Java backend is offline. It repeats the Java
-// Chain of Responsibility (time, opening hours, guests, table availability) with the Java defaults,
-// so a booking stored here would also pass Java.
+// Bản thay thế cục bộ cho POST /api/reservations khi backend Java offline. Nó lặp lại Chain of
+// Responsibility bên Java (thời điểm, giờ mở cửa, số khách, bàn trống) với các giá trị mặc định của
+// Java, nên phiếu lưu ở đây cũng sẽ qua được Java.
 type BookingCheck =
   | { ok: true; ids: number[]; tables: FloorTable[]; branch: BranchId }
   | { ok: false; error: string }
 
-// The Java chain with its defaults; `ignoreCode` is the booking being edited, which cannot clash with itself.
+// Chuỗi kiểm tra của Java với giá trị mặc định; `ignoreCode` là phiếu đang sửa, không bị tính là
+// trùng với chính nó.
 function checkMockBooking(input: NewMockReservationInput, ignoreCode?: string): BookingCheck {
   const store = getStore()
   if (hasReservationTimePassed(input.dateTime)) return { ok: false, error: 'Không thể đặt bàn cho thời điểm đã qua.' }
@@ -968,13 +972,13 @@ export function createMockReservation(input: NewMockReservationInput): { ok: boo
   const { ids, tables, branch } = check
 
   const localCount = store.reservations.filter((r) => r.code.startsWith('RES-L')).length
-  // The L marks a local booking so it is never mistaken for a backend-issued RES-0001.
+  // Chữ L đánh dấu phiếu cục bộ để không bao giờ bị nhầm với RES-0001 do backend cấp.
   const code = `RES-L${String(localCount + 1).padStart(4, '0')}`
   store.reservations.push({ ...input, branch, tableId: ids[0], tableIds: ids, code, tableName: tables.map(table => table!.name).join(', '), status: 'Chờ xác nhận', preOrders: input.preOrders ?? [] })
   return { ok: true, code }
 }
 
-// Edits a pending or confirmed local booking; its code, status and pre-orders stay.
+// Sửa phiếu cục bộ đang chờ hoặc đã xác nhận; mã phiếu, trạng thái và món đặt trước giữ nguyên.
 export function updateMockReservation(code: string, input: NewMockReservationInput): { ok: boolean; error?: string } {
   expireMockNoShows()
   const reservation = getStore().reservations.find((r) => r.code === code)
@@ -1027,8 +1031,9 @@ export type ExternalOrderInput = {
   branch?: BranchId
 }
 
-// Records an order whose lines were priced elsewhere (Java Adapter, or the local Adapter below),
-// so the KDS and floor plan show it. Unpaid, dine-in, pending: what a seated reservation becomes.
+// Ghi một đơn có các dòng đã được tính giá ở nơi khác (Adapter bên Java, hoặc Adapter cục bộ bên
+// dưới), để KDS và sơ đồ bàn hiển thị nó. Chưa thanh toán, ăn tại chỗ, đang chờ: đúng thứ mà một
+// phiếu đã nhận bàn trở thành.
 export function createMockOrderFromItems(input: ExternalOrderInput): { ok: boolean; message?: string; error?: string } {
   const store = getStore()
   const subtotal = Math.round(input.items.reduce((s, it) => s + it.price * it.qty, 0) * 100) / 100
@@ -1057,9 +1062,8 @@ export function createMockOrderFromItems(input: ExternalOrderInput): { ok: boole
   return { ok: true, message: `Order ${input.orderCode} opened for ${input.customer}.` }
 }
 
-// Frontend mirror of ReservationToOrderAdapter.toPosOrder(): the reservation code becomes the
-// order code and the pre-ordered dishes are copied, so the booking itself is never modified
-// except for its status.
+// Bản sao phía frontend của ReservationToOrderAdapter.toPosOrder(): mã phiếu trở thành mã đơn và
+// các món đặt trước được chép sang, nên bản thân phiếu không bị sửa gì ngoài trạng thái.
 export function transferMockReservation(code: string): { ok: boolean; orderCode?: string; error?: string } {
   expireMockNoShows()
   const store = getStore()
@@ -1096,7 +1100,7 @@ export type NewMockItemInput = {
   variations: Variation[]
 }
 
-// Names stay unique (case-insensitive), as in Java and the database.
+// Tên món luôn duy nhất (không phân biệt hoa thường), như bên Java và trong database.
 export function updateMockMenuItem(itemId: number, input: NewMockItemInput): { ok: boolean; error?: string } {
   const store = getStore()
   const item = store.menuItems.find((m) => m.id === itemId)

@@ -14,7 +14,8 @@ import { roleLabels, roles } from '@/lib/auth/roles'
 
 const emptyForm = { name: '', email: '', password: '', role: 'STAFF' }
 
-// ADMIN screen: staff accounts with a role, role changes and disabling (PATCH /api/users/{id}).
+// Màn hình ADMIN: tài khoản nhân viên kèm vai trò, đổi vai trò và khóa tài khoản (PATCH
+// /api/users/{id}).
 export function UsersManagement({ users, currentUserId }: { users: JavaUser[]; currentUserId: number }) {
   const router = useRouter()
   const [form, setForm] = useState(emptyForm)

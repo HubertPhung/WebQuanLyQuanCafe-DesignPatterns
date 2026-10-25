@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { Logo } from '@/components/brand/logo'
 
-// Frame of the account security page (sign-in and sign-up use the animated AuthFrame).
+// Khung của trang bảo mật tài khoản (đăng nhập và đăng ký dùng AuthFrame có hiệu ứng).
 export function AuthShell({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
   return (
     <main className="flex min-h-svh items-center justify-center bg-[#F7F5F0] px-4 py-10 text-stone-900">

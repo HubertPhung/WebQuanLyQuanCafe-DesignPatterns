@@ -4,7 +4,7 @@ import java.io.Serializable;
 import java.util.Objects;
 
 /**
- * Line item in an Order or Reservation pre-order list.
+ * Một dòng món trong Order hoặc trong danh sách món đặt trước của Reservation.
  */
 public class OrderItem implements Serializable {
     private static final long serialVersionUID = 1L;

@@ -7,9 +7,9 @@ import type { Session } from '@/lib/auth/session'
 import type { Rank } from './loyalty'
 import { getAccountReservations, type AccountReservation } from './reservations'
 
-// What /account shows a signed-in customer: their own online orders (admin_order_contacts keeps
-// the account that placed each one), their reservations, delivery addresses, and the membership of the
-// phone on their latest order, read from Java (members live there).
+// Những gì /account hiển thị cho khách đã đăng nhập: đơn online của chính họ (admin_order_contacts
+// giữ tài khoản đã đặt mỗi đơn), phiếu đặt bàn, địa chỉ giao hàng, và hạng thành viên của số điện
+// thoại trong đơn gần nhất, đọc từ Java (thành viên nằm ở đó).
 
 export type AccountOrder = {
   orderCode: string
@@ -33,7 +33,7 @@ export type AccountOverview = {
   addresses: AccountAddress[]
   phone: string | null
   member: AccountMember | null
-  // Java could not be asked, so whether the phone is a member is unknown.
+  // Không hỏi được Java, nên không biết số điện thoại có phải thành viên hay không.
   memberUnknown: boolean
   welcomeVoucherEligible: boolean
 }
@@ -62,7 +62,8 @@ export async function getAccountOverview(session: Session): Promise<AccountOverv
     addresses.set(address.toLowerCase(), { address, phone: contact.phone, lastUsed: contact.createdAt.toISOString() })
   }
 
-  // Only paid orders enrol a phone, so the newest phone may not be a member: the newest one that is wins.
+  // Chỉ đơn đã thanh toán mới đăng ký số điện thoại, nên số mới nhất có thể chưa là thành viên: lấy
+  // số mới nhất đang là thành viên.
   const phones = [...new Set(contacts.map((contact) => contact.phone))].slice(0, 5)
   let member: AccountMember | null = null
   let memberUnknown = false

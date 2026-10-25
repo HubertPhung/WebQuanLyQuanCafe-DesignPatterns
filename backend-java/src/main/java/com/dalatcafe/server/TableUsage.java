@@ -13,7 +13,10 @@ import com.dalatcafe.patterns.singleton.SystemConfigManager;
 import java.time.Instant;
 import java.util.List;
 
-/** Current floor usage includes unpaid tabs, even if an earlier observer missed the table update. */
+/**
+ * Tình trạng sử dụng bàn hiện tại tính cả các hóa đơn chưa thanh toán, kể cả khi một observer trước
+ * đó bỏ sót việc cập nhật bàn.
+ */
 final class TableUsage {
     private TableUsage() {}
 

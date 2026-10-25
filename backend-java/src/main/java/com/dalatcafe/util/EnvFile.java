@@ -11,9 +11,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Reads a {@code .env} file (KEY=VALUE per line, like the frontend's .env.local) so the server
- * can be started without exporting DATABASE_URL, AUTH_SERVICE_KEY or ADMIN_* by hand. Real
- * environment variables always win over the file. The file holds secrets and is git-ignored.
+ * Đọc file {@code .env} (mỗi dòng KEY=VALUE, giống .env.local của frontend) để server khởi động
+ * được mà không cần export DATABASE_URL, AUTH_SERVICE_KEY hay ADMIN_* bằng tay. Biến môi trường
+ * thật luôn được ưu tiên hơn file. File chứa thông tin bí mật và bị git bỏ qua.
  */
 public final class EnvFile {
     private static final Pattern LINE = Pattern.compile("^\\s*(?:export\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*=\\s*(.*)$");
@@ -21,7 +21,7 @@ public final class EnvFile {
     private EnvFile() {
     }
 
-    /** The settings in {@code file}; empty when it does not exist or cannot be read. */
+    /** Các cài đặt trong {@code file}; rỗng khi file không tồn tại hoặc không đọc được. */
     public static Map<String, String> read(Path file) {
         Map<String, String> values = new LinkedHashMap<>();
         if (!Files.isRegularFile(file)) {
@@ -43,7 +43,7 @@ public final class EnvFile {
         return values;
     }
 
-    /** {@code environment} plus the settings in {@code file} it does not already define. */
+    /** {@code environment} cộng thêm các cài đặt trong {@code file} mà nó chưa định nghĩa. */
     public static Map<String, String> withFile(Map<String, String> environment, Path file) {
         Map<String, String> merged = new HashMap<>(read(file));
         merged.putAll(environment);

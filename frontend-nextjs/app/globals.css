@@ -14,14 +14,18 @@
 .bean-feature{display:grid;grid-template-columns:1.3fr 1fr;align-items:center;gap:50px;background:#eee6da;margin-top:30px;padding-top:35px;padding-bottom:35px}.bean-feature>div{display:flex;flex-direction:column;align-items:flex-start;gap:20px}.bean-feature h2{font-size:35px}.bean-feature p:not(.eyebrow){font-size:12px;color:#857467;line-height:1.8;max-width:350px}.bean-feature .primary-link{font-size:11px;border:0}.bean-feature>img{width:100%;max-height:300px;object-fit:cover;border-radius:4px}.newsletter-form{display:flex;border-bottom:1px solid #af947a;margin-bottom:14px;padding:9px 0;gap:8px}.newsletter-form input{min-width:0;width:100%;background:none;border:0;font-size:11px;outline:none}.newsletter-form button{border:0;background:none}.footer-top small{display:block;line-height:1.7}.newsletter-form:focus-within{outline:2px solid #9d7050;outline-offset:4px}@media(max-width:760px){.bean-feature{grid-template-columns:1fr;gap:25px;margin-top:20px}.bean-feature h2{font-size:29px}.bean-feature>img{max-height:320px}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{transition:none!important;animation:none!important}}
 
-/* Display serif for storefront and sign-in headings (Playfair Display, Vietnamese subset).
-   Line height stays >= 1.2 so stacked Vietnamese diacritics never touch the line above. */
+/*
+ * Font serif tiêu đề cho storefront và trang đăng nhập (Playfair Display, bộ ký tự tiếng Việt).
+ * Line-height giữ >= 1.2 để dấu tiếng Việt chồng nhau không bao giờ chạm dòng trên.
+ */
 .font-display,.hero h1,.section-heading h2,.story-copy h2,.journal>h2,.journal-grid h3,.footer-top h3,.empty-menu h3{font-family:var(--font-display),'Playfair Display',Georgia,serif;font-weight:600;letter-spacing:-0.005em;line-height:1.25}
 
-/* Storefront type scale, one step per role. The legacy rules above (unlayered, so they beat
-   Tailwind utilities) shrank text to 8-12px and made sizes drift between sections; these
-   restore one scale: display headings (Playfair) > 16-17px lead > 15px body > 14px secondary
-   > 11-12px labels. Nothing readable is smaller than 11px. */
+/*
+ * Thang cỡ chữ của storefront, mỗi vai trò một bậc. Các quy tắc cũ phía trên (không nằm trong layer
+ * nên thắng các utility của Tailwind) thu chữ còn 8-12px và làm cỡ chữ lệch giữa các phần; các quy
+ * tắc này khôi phục một thang thống nhất: tiêu đề hiển thị (Playfair) > đoạn mở đầu 16-17px > nội
+ * dung 15px > phụ 14px > nhãn 11-12px. Không chữ đọc được nào nhỏ hơn 11px.
+ */
 .eyebrow{font-size:11px;letter-spacing:.18em}
 .hero-description{font-size:17px;line-height:1.7;max-width:34rem}
 .hero-foot p{font-size:14px}.hero-foot small{font-size:12px}

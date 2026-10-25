@@ -1,16 +1,16 @@
 import 'server-only'
 import { pool } from '@/lib/db'
 
-// Who placed a storefront order and where it goes. Kept next to admin_orders, keyed by order
-// code, so the order rows (shared with the POS and the mock store) keep their shape. Created on
-// first use; the migration creates it ahead of time with RLS on, since it holds phone numbers.
-// Without a database, an in-memory copy with the mock store's lifetime is used.
+// Ai đã đặt một đơn storefront và giao tới đâu. Lưu cạnh admin_orders, khóa theo mã đơn, để các
+// dòng đơn (dùng chung với POS và mock store) giữ nguyên cấu trúc. Được tạo ở lần dùng đầu;
+// migration tạo sẵn bảng này với RLS bật, vì nó chứa số điện thoại. Không có database thì dùng bản
+// sao trong bộ nhớ cùng vòng đời với mock store.
 
 export type Fulfilment = 'delivery' | 'pickup'
 
 export type OrderContact = {
   orderCode: string
-  // The account that placed it (ordering needs a sign-in); null for orders from before that rule.
+  // Tài khoản đã đặt đơn (đặt món cần đăng nhập); null với đơn có từ trước quy tắc đó.
   userId: number | null
   phone: string
   email: string | null
@@ -83,12 +83,12 @@ export async function listOrderContacts(limit = 200): Promise<OrderContact[]> {
   return readContacts(null, limit)
 }
 
-/** The orders one account placed online, newest first: its order history on /account. */
+/** Các đơn online mà một tài khoản đã đặt, mới nhất trước: lịch sử đơn của họ trên /account. */
 export async function listContactsForUser(userId: number, limit = 50): Promise<OrderContact[]> {
   return readContacts(userId, limit)
 }
 
-/** Eligibility checks must never silently treat a database failure as an empty history. */
+/** Kiểm tra quyền ưu đãi không bao giờ được âm thầm coi lỗi database là lịch sử trống. */
 export async function hasOnlineOrderForUser(userId: number): Promise<boolean> {
   if ([...memory.values()].some(contact => contact.userId === userId)) return true
   if (!pool) return false

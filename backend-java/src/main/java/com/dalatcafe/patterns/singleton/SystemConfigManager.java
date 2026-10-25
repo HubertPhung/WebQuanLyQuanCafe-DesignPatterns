@@ -1,18 +1,17 @@
 package com.dalatcafe.patterns.singleton;
 
+import com.dalatcafe.dao.IConfigDao;
 import java.io.Serial;
 import java.io.Serializable;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
-/**
- * Singleton Pattern (GoF Creational) managing global operational parameters
- * for Đà Lạt Cafe (store info, operating hours, loyalty ratios, table reservation timeouts).
- *
- * Implements Thread-safe Double-Checked Locking with volatile instance and reflection protection.
- * Every setting is read and written under this object's monitor. A caller that needs several
- * settings to belong to one update (such as opening and closing time) holds that monitor itself.
- */
 public final class SystemConfigManager implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
@@ -29,6 +28,8 @@ public final class SystemConfigManager implements Serializable {
     public static final LocalTime DEFAULT_CLOSING_TIME = LocalTime.of(22, 0);
     private static final ZoneId CAFE_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
+    private static final Logger LOGGER = Logger.getLogger(SystemConfigManager.class.getName());
+
     private static volatile SystemConfigManager instance;
 
     private String storeName;
@@ -42,6 +43,9 @@ public final class SystemConfigManager implements Serializable {
     private LocalTime openingTime;
     private LocalTime closingTime;
 
+    /** Nơi lưu cài đặt; là null cho tới khi gọi {@link #attachStore} (khi đó không có gì được lưu). */
+    private transient IConfigDao store;
+
     private SystemConfigManager() {
         if (instance != null) {
             throw new IllegalStateException("Instance đã tồn tại! Sử dụng getInstance().");
@@ -50,8 +54,8 @@ public final class SystemConfigManager implements Serializable {
     }
 
     /**
-     * Provides the single, globally accessible instance of SystemConfigManager
-     * using Double-Checked Locking.
+     * Trả về thể hiện duy nhất, dùng chung toàn hệ thống của SystemConfigManager,
+     * khởi tạo theo kỹ thuật Double-Checked Locking.
      */
     public static SystemConfigManager getInstance() {
         if (instance == null) {
@@ -65,7 +69,7 @@ public final class SystemConfigManager implements Serializable {
     }
 
     /**
-     * Resets all parameters to factory defaults.
+     * Đưa mọi tham số về giá trị mặc định ban đầu.
      */
     public synchronized void resetToDefaults() {
         this.storeName = DEFAULT_STORE_NAME;
@@ -81,8 +85,8 @@ public final class SystemConfigManager implements Serializable {
     }
 
     /**
-     * Checks if a given time falls within cafe operating hours (07:00 - 22:00 by default).
-     * A null time means now at the café, whatever time zone the server runs in.
+     * Kiểm tra một thời điểm có nằm trong giờ mở cửa của quán không (mặc định 07:00 - 22:00).
+     * Truyền null nghĩa là giờ hiện tại ở quán, bất kể máy chủ chạy theo múi giờ nào.
      */
     public synchronized boolean isWithinOperatingHours(LocalTime time) {
         if (time == null) {
@@ -92,7 +96,7 @@ public final class SystemConfigManager implements Serializable {
     }
 
     /**
-     * Calculates earned loyalty points based on total spend amount (10,000 VND = 1 point).
+     * Tính số điểm tích lũy nhận được theo tổng tiền chi tiêu (10.000 VNĐ = 1 điểm).
      */
     public synchronized int calculateLoyaltyPoints(double orderAmount) {
         if (orderAmount <= 0 || loyaltyRateVndPerPoint <= 0) {
@@ -102,7 +106,7 @@ public final class SystemConfigManager implements Serializable {
     }
 
     /**
-     * Calculates discount amount when redeeming loyalty points (1 point = 1,000 VND).
+     * Tính số tiền được giảm khi đổi điểm tích lũy (1 điểm = 1.000 VNĐ).
      */
     public synchronized double calculateDiscountFromPoints(int points) {
         if (points <= 0) {
@@ -111,12 +115,76 @@ public final class SystemConfigManager implements Serializable {
         return (double) points * pointRedeemValueVnd;
     }
 
+    /**
+     * Gắn nơi lưu trữ và nạp các cài đặt đã lưu từ đó, để giá trị vẫn còn sau khi khởi động lại.
+     * Khóa bị thiếu hoặc không đọc được thì giữ nguyên giá trị hiện tại.
+     */
+    public synchronized void attachStore(IConfigDao store) {
+        this.store = store;
+        if (store == null) {
+            return;
+        }
+        Map<String, String> saved = store.loadAll();
+        applyString(saved, "storeName", v -> this.storeName = v);
+        applyString(saved, "storeAddress", v -> this.storeAddress = v);
+        applyString(saved, "storePhone", v -> this.storePhone = v);
+        applyParsed(saved, "vatRate", Double::parseDouble, v -> this.vatRate = v);
+        applyParsed(saved, "loyaltyRateVndPerPoint", Integer::parseInt, this::setLoyaltyRateVndPerPoint);
+        applyParsed(saved, "pointRedeemValueVnd", Integer::parseInt, this::setPointRedeemValueVnd);
+        applyParsed(saved, "maxReservationGuests", Integer::parseInt, this::setMaxReservationGuests);
+        applyParsed(saved, "autoCancelMinutes", Integer::parseInt, this::setAutoCancelMinutes);
+        applyParsed(saved, "openingTime", LocalTime::parse, this::setOpeningTime);
+        applyParsed(saved, "closingTime", LocalTime::parse, this::setClosingTime);
+    }
+
+    /**
+     * Lưu toàn bộ cài đặt hiện tại trong một lần ghi. Trả về false khi chưa gắn nơi lưu trữ hoặc
+     * ghi thất bại, để nơi gọi báo cho người dùng biết thay đổi chưa được lưu lâu dài.
+     */
+    public synchronized boolean persist() {
+        if (store == null) {
+            return false;
+        }
+        Map<String, String> values = new LinkedHashMap<>();
+        values.put("storeName", storeName);
+        values.put("storeAddress", storeAddress);
+        values.put("storePhone", storePhone);
+        values.put("vatRate", String.valueOf(vatRate));
+        values.put("loyaltyRateVndPerPoint", String.valueOf(loyaltyRateVndPerPoint));
+        values.put("pointRedeemValueVnd", String.valueOf(pointRedeemValueVnd));
+        values.put("maxReservationGuests", String.valueOf(maxReservationGuests));
+        values.put("autoCancelMinutes", String.valueOf(autoCancelMinutes));
+        values.put("openingTime", openingTime.toString());
+        values.put("closingTime", closingTime.toString());
+        return store.saveAll(values);
+    }
+
+    private static void applyString(Map<String, String> saved, String key, Consumer<String> setter) {
+        String value = saved.get(key);
+        if (value != null && !value.isBlank()) {
+            setter.accept(value);
+        }
+    }
+
+    private static <T> void applyParsed(Map<String, String> saved, String key,
+                                        Function<String, T> parser, Consumer<T> setter) {
+        String value = saved.get(key);
+        if (value == null) {
+            return;
+        }
+        try {
+            setter.accept(parser.apply(value));
+        } catch (RuntimeException e) {
+            LOGGER.log(Level.WARNING, "Ignoring saved setting " + key + "=" + value + ": " + e.getMessage());
+        }
+    }
+
     @Serial
     private Object readResolve() {
         return getInstance();
     }
 
-    // Getters and Setters
+    // Getter và setter
 
     public synchronized String getStoreName() {
         return storeName;

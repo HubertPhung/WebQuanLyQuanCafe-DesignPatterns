@@ -233,7 +233,7 @@ export function KdsBoard({ orders: allOrders, tables = [] }: { orders: Order[]; 
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Top Filter and Status Strip */}
+      {/* Thanh lọc và trạng thái phía trên */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200/90 bg-white p-4 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
         <div className="flex items-center gap-2">
           <Filter className="size-4 text-stone-500" />
@@ -272,7 +272,7 @@ export function KdsBoard({ orders: allOrders, tables = [] }: { orders: Order[]; 
         </div>
       </div>
 
-      {/* Kanban Board Columns */}
+      {/* Các cột bảng Kanban */}
       <div className="grid gap-6 lg:grid-cols-3">
         {columns.map((column) => {
           const tickets = filteredOrders.filter((order) => order.status === column.status)

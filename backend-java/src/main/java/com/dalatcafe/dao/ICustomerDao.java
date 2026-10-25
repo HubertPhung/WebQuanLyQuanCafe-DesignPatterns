@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Data Access Object interface for Customer CRM entity.
+ * Interface Data Access Object cho thực thể khách hàng (CRM).
  */
 public interface ICustomerDao {
     List<Customer> findAll();
@@ -17,7 +17,7 @@ public interface ICustomerDao {
     boolean save(Customer customer);
     boolean addOrderRecord(int id, double orderAmount, int earnedPoints);
     boolean redeemPoints(int id, int points);
-    /** Returns points taken by {@link #redeemPoints} that were not spent. */
+    /** Hoàn lại số điểm đã bị {@link #redeemPoints} giữ nhưng không dùng tới. */
     boolean restorePoints(int id, int points);
     boolean deleteById(int id);
 }

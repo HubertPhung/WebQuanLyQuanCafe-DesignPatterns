@@ -1,6 +1,6 @@
 package com.dalatcafe.patterns.factory;
 
-/** The checks every payment channel applies before it takes money. */
+/** Các bước kiểm tra mọi kênh thanh toán áp dụng trước khi thu tiền. */
 final class PaymentArguments {
     private PaymentArguments() {
     }

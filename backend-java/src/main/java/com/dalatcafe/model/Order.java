@@ -8,12 +8,12 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Order entity representing a sales transaction in POS or Storefront.
+ * Thực thể Order: một giao dịch bán hàng tại POS hoặc trên Storefront.
  */
 public class Order implements Serializable {
     private static final long serialVersionUID = 1L;
 
-    public static final double DEFAULT_VAT_RATE = 0.08; // 8% VAT
+    public static final double DEFAULT_VAT_RATE = 0.08; // VAT 8%
     public static final double DELIVERY_FEE = 10_000;
 
     private Integer id;
@@ -74,7 +74,7 @@ public class Order implements Serializable {
     }
 
     /**
-     * Recalculates subtotal, VAT and total based on items and discount.
+     * Tính lại tạm tính, VAT và tổng tiền theo các món và khoản giảm giá.
      */
     public void recalculateTotals() {
         this.subtotal = items.stream().mapToDouble(OrderItem::getLineTotal).sum();
@@ -236,7 +236,10 @@ public class Order implements Serializable {
         this.completedAt = completedAt;
     }
 
-    /** Keyed on orderCode alone (unique in `orders.order_code`) so equals and hashCode agree; without one, only itself. */
+    /**
+     * So sánh chỉ theo orderCode (duy nhất trong `orders.order_code`) để equals và hashCode khớp
+     * nhau; nếu không có mã thì chỉ bằng chính nó.
+     */
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

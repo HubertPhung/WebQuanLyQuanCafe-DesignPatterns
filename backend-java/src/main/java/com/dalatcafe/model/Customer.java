@@ -5,7 +5,7 @@ import java.time.Instant;
 import java.util.Objects;
 
 /**
- * Customer profile entity managing CRM loyalty points and membership rank.
+ * Thực thể hồ sơ khách hàng, quản lý điểm tích lũy CRM và hạng thành viên.
  */
 public class Customer implements Serializable {
     private static final long serialVersionUID = 1L;
@@ -37,8 +37,8 @@ public class Customer implements Serializable {
     }
 
     /**
-     * Updates customer rank based on lifetime spend.
-     * Bronze: < 500k, Silver: 500k - 2tr, Gold: 2tr - 5tr, VIP: > 5tr
+     * Cập nhật hạng khách hàng theo tổng chi tiêu. Đồng: < 500k, Bạc: 500k - 2tr, Vàng: 2tr - 5tr,
+     * Kim cương (VIP): > 5tr
      */
     public void updateRank() {
         if (totalSpent >= 5000000) {
@@ -68,7 +68,10 @@ public class Customer implements Serializable {
         return false;
     }
 
-    /** Gives back points redeemed earlier; unlike {@link #addOrderRecord} it records no visit. */
+    /**
+     * Hoàn lại số điểm đã đổi trước đó; khác với {@link #addOrderRecord}, hàm này không tính thêm
+     * lượt ghé.
+     */
     public boolean restorePoints(int points) {
         if (points > 0) {
             this.loyaltyPoints += points;
@@ -150,7 +153,10 @@ public class Customer implements Serializable {
         this.lastVisit = lastVisit;
     }
 
-    /** Keyed on phone alone (unique in `customers.phone`) so equals and hashCode agree; without one, only itself. */
+    /**
+     * So sánh chỉ theo số điện thoại (duy nhất trong `customers.phone`) để equals và hashCode khớp
+     * nhau; nếu không có số thì chỉ bằng chính nó.
+     */
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

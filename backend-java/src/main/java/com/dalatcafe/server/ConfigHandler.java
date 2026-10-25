@@ -12,10 +12,10 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * GET /api/config (STAFF+) and PUT|PATCH /api/config (ADMIN): the store settings held by the
- * {@link SystemConfigManager} Singleton. Only settings the code reads can be changed: store
- * details, opening hours and guest limit (reservation chain), loyalty earn and redeem rates.
- * Changes live in memory and are reset when the server restarts.
+ * GET /api/config (STAFF+) và PUT|PATCH /api/config (ADMIN): cài đặt quán do Singleton {@link
+ * SystemConfigManager} giữ. Chỉ đổi được những cài đặt mà code thực sự đọc: thông tin quán, giờ mở
+ * cửa và giới hạn số khách (chuỗi đặt bàn), tỷ lệ cộng và đổi điểm. Mọi thay đổi được lưu qua kho
+ * cài đặt (PostgreSQL ở chế độ JDBC), nên còn nguyên sau khi khởi động lại.
  */
 public class ConfigHandler extends ApiHandler {
     private static final int MAX_TEXT = 120;
@@ -43,10 +43,12 @@ public class ConfigHandler extends ApiHandler {
         Map<String, Object> body = readJsonBody(exchange);
         SystemConfigManager config = SystemConfigManager.getInstance();
         Map<String, Object> saved;
-        // Read, check and write under one lock: two partial updates (say, one moving the opening
-        // time and one the closing time) must not each pass against the other's old value.
+        boolean stored;
+        // Đọc, kiểm tra và ghi trong một khóa: hai bản cập nhật một phần (ví dụ một bản đổi giờ mở
+        // cửa, một bản đổi giờ đóng cửa) không được cùng hợp lệ dựa trên giá trị cũ của nhau.
         synchronized (config) {
-            // Validate everything first so a bad field never leaves the settings half-applied.
+            // Kiểm tra hết trước, để một trường sai không bao giờ khiến cài đặt chỉ được áp dụng
+            // một nửa.
             String storeName = text(body, "storeName", config.getStoreName());
             String storeAddress = text(body, "storeAddress", config.getStoreAddress());
             String storePhone = text(body, "storePhone", config.getStorePhone());
@@ -68,8 +70,9 @@ public class ConfigHandler extends ApiHandler {
             config.setLoyaltyRateVndPerPoint(earnRate);
             config.setPointRedeemValueVnd(redeemValue);
             saved = toJson(config);
+            stored = config.persist();
         }
-        sendOk(exchange, 200, saved, "Settings updated");
+        sendOk(exchange, 200, saved, stored ? "Settings updated" : "Settings updated for now, but could not be saved for the next restart");
     }
 
     private static String text(Map<String, Object> body, String key, String current) {
@@ -122,7 +125,8 @@ public class ConfigHandler extends ApiHandler {
         json.put("maxReservationGuests", config.getMaxReservationGuests());
         json.put("loyaltyRateVndPerPoint", config.getLoyaltyRateVndPerPoint());
         json.put("pointRedeemValueVnd", config.getPointRedeemValueVnd());
-        // Shown for reference only: orders use Order.DEFAULT_VAT_RATE and nothing auto-cancels yet.
+        // Chỉ hiển thị để tham khảo: đơn dùng Order.DEFAULT_VAT_RATE và hiện chưa có gì tự động
+        // hủy.
         json.put("vatRate", config.getVatRate());
         json.put("autoCancelMinutes", config.getAutoCancelMinutes());
         return json;

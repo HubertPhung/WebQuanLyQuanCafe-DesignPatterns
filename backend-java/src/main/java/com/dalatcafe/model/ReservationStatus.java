@@ -1,7 +1,7 @@
 package com.dalatcafe.model;
 
 /**
- * Status of a table reservation request.
+ * Trạng thái của một yêu cầu đặt bàn.
  */
 public enum ReservationStatus {
     PENDING("Chờ xác nhận"),

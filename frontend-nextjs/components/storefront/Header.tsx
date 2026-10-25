@@ -47,14 +47,14 @@ export function Header({
   const [activeNav, setActiveNav] = useState<string>('#')
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
 
-  // Fetch initial cart if not loaded
+  // Tải giỏ hàng ban đầu nếu chưa có
   useEffect(() => {
     if (!cart) {
       fetchCart()
     }
   }, [cart, fetchCart])
 
-  // Scroll spy to highlight active section
+  // Theo dõi cuộn trang để làm nổi mục đang xem
   useEffect(() => {
     const handleScroll = () => {
       const currentScroll = window.scrollY || window.pageYOffset || 0
@@ -126,7 +126,7 @@ export function Header({
 
   return (
     <>
-      {/* 1. Top Announcement Bar */}
+      {/* 1. Thanh thông báo trên cùng */}
       <div className="announcement bg-[#ede6db] text-[#675642] text-xs py-1.5 px-4 text-center font-medium font-sans border-b border-stone-200/40">
         <div className="max-w-7xl mx-auto flex items-center justify-center gap-2">
           <Bean size={12} className="text-[#3E2723]" />
@@ -136,10 +136,10 @@ export function Header({
         </div>
       </div>
 
-      {/* 2. Sticky Main Header with Translucent Frosted Glass */}
+      {/* 2. Header chính dính theo cuộn, nền kính mờ */}
       <header className="sticky top-0 z-50 w-full backdrop-blur-md bg-[#FAF8F5]/90 border-b border-stone-200/80 shadow-xs transition-all duration-200 font-sans">
         <div className="site-header max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between gap-4">
-          {/* Brand Logo */}
+          {/* Logo thương hiệu */}
           <Link
             href="/"
             onClick={(e) => handleNavClick(e, '#')}
@@ -152,7 +152,7 @@ export function Header({
             />
           </Link>
 
-          {/* Desktop Navigation Links */}
+          {/* Các link điều hướng trên máy tính */}
           <nav className="desktop-nav hidden md:flex items-center gap-6 lg:gap-8 h-full" aria-label="Main navigation">
             {NAV_ITEMS.map((item) => {
               const isActive = activeNav === item.href
@@ -179,16 +179,15 @@ export function Header({
               )
             })}
 
-            {/* Hidden link strictly for automated test TC-SF-01 suite invariant */}
+            {/* Link ẩn chỉ để giữ điều kiện của test tự động TC-SF-01 */}
             <Link href="/admin" className="sr-only" tabIndex={-1}>
               Staff Portal
             </Link>
           </nav>
 
-          {/* Header actions. No legacy .header-actions class: its unlayered "button { border: 0;
-              padding: 0 }" reset overrode these Tailwind borders and broke the outlines. */}
+          {/* Các nút thao tác ở header. Không dùng class cũ .header-actions: quy tắc reset "button { border: 0; padding: 0 }" của nó không nằm trong layer nên ghi đè viền Tailwind và làm hỏng đường viền. */}
           <div className="flex items-center gap-2.5 sm:gap-3">
-            {/* Cart: bag icon with the item count only */}
+            {/* Giỏ hàng: biểu tượng túi kèm số món */}
             <motion.button
               type="button"
               onClick={openCart}
@@ -212,10 +211,10 @@ export function Header({
               </AnimatePresence>
             </motion.button>
 
-            {/* Modular Account Dropdown */}
+            {/* Menu tài khoản */}
             <AccountDropdown account={account} />
 
-            {/* Mobile Hamburger Toggle */}
+            {/* Nút mở menu trên điện thoại */}
             <button
               type="button"
               onClick={() => setIsMobileNavOpen(!isMobileNavOpen)}
@@ -227,7 +226,7 @@ export function Header({
           </div>
         </div>
 
-        {/* Mobile Navigation Dropdown Menu */}
+        {/* Menu điều hướng thả xuống trên điện thoại */}
         <AnimatePresence>
           {isMobileNavOpen && (
             <motion.div
@@ -274,7 +273,7 @@ export function Header({
         </AnimatePresence>
       </header>
 
-      {/* Slide-over Cart Sheet connected to global state */}
+      {/* Ngăn giỏ hàng trượt ra, nối với state toàn cục */}
       <CartSheet />
     </>
   )

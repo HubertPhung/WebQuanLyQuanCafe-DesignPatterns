@@ -115,12 +115,12 @@ function NavGroup({
 }
 
 export function AdminSidebar({ badges = { orders: 0 }, role = 'STAFF' }: { badges?: Badges; role?: Role }) {
-  // Only the pages this role may open (same rules as proxy.ts).
+  // Chỉ các trang vai trò này được mở (cùng quy tắc với proxy.ts).
   const allowed = <T extends { href: string }>(items: T[]) =>
     items.filter((item) => atLeast(role, requiredRoleForPath(item.href) ?? 'STAFF'))
   return (
     <Sidebar collapsible="icon" className="border-r border-stone-200/50 bg-[#F7F5F0] text-stone-800 font-sans">
-      {/* Brand Header */}
+      {/* Phần đầu thương hiệu */}
       <SidebarHeader className="p-3 border-b border-stone-200/50 bg-[#F7F5F0]">
         <SidebarMenu>
           <SidebarMenuItem>
@@ -142,14 +142,14 @@ export function AdminSidebar({ badges = { orders: 0 }, role = 'STAFF' }: { badge
         </SidebarMenu>
       </SidebarHeader>
 
-      {/* 4 Grouped Operations Menus */}
+      {/* 4 nhóm menu vận hành */}
       <SidebarContent className="py-2 bg-[#F7F5F0] overflow-y-auto">
         <NavGroup label="TỔNG QUAN" items={allowed(overviewNav)} badges={badges} />
         <NavGroup label="QUẢN LÝ CỬA HÀNG" items={allowed(storeNav)} badges={badges} />
         <NavGroup label="KINH DOANH" items={allowed(businessNav)} badges={badges} />
         <NavGroup label="NHÂN SỰ" items={allowed(staffNav)} badges={badges} />
 
-        {/* Hidden links for automated test suite backward-compatibility */}
+        {/* Link ẩn để bộ test tự động cũ vẫn chạy được */}
         <div className="sr-only">
           <Link href="/admin/customers">Customers</Link>
           <Link href="/admin/analytics">Analytics</Link>
@@ -157,7 +157,7 @@ export function AdminSidebar({ badges = { orders: 0 }, role = 'STAFF' }: { badge
         </div>
       </SidebarContent>
 
-      {/* Footer: Storefront Link */}
+      {/* Chân: link sang storefront */}
       <SidebarFooter className="p-3 border-t border-stone-200/50 bg-[#F7F5F0]">
         <SidebarMenu>
           <SidebarMenuItem>

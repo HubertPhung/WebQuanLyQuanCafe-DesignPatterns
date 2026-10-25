@@ -10,7 +10,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
- * In-memory implementation of IReservationDao using thread-safe collection.
+ * Bản cài đặt IReservationDao trong bộ nhớ, dùng collection an toàn đa luồng.
  */
 public class InMemoryReservationDao implements IReservationDao {
     private final InMemoryDatabase db;

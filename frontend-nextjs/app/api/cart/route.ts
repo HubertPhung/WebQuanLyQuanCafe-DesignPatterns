@@ -11,8 +11,9 @@ const isShopifyConfigured = Boolean(process.env.SHOPIFY_STORE_DOMAIN && process.
 
 const OPTION_KEYS = ['Milk', 'Sugar', 'Sweetness', 'Ice']
 
-// Java's VoucherCatalog decides whether a code exists (POST /api/vouchers/validate, the same
-// Strategy checkout applies); without Java, the copy of that catalog in lib/storefront/vouchers.
+// VoucherCatalog của Java quyết định một mã có tồn tại không (POST /api/vouchers/validate, đúng
+// Strategy mà checkout áp dụng); không có Java thì dùng bản sao danh mục đó trong
+// lib/storefront/vouchers.
 async function isVoucherApplicable(code: string, subtotal: number): Promise<boolean> {
   if (code.trim().toUpperCase() === 'WELCOME10') {
     const session = await getSession()
@@ -97,7 +98,7 @@ export async function POST(request: NextRequest) {
   if (request.headers.get('sec-fetch-site') !== 'same-origin' && request.headers.get('origin') !== request.nextUrl.origin) {
     return NextResponse.json({ error: 'Invalid origin' }, { status: 403 })
   }
-  // Ordering is for signed-in customers: the order, its points and its history belong to an account.
+  // Chỉ khách đã đăng nhập mới được đặt món: đơn, điểm và lịch sử của nó thuộc về một tài khoản.
   if (!(await getSession())) {
     return NextResponse.json({ error: 'Vui lòng đăng nhập để đặt món.', loginRequired: true }, { status: 401 })
   }
@@ -105,7 +106,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
 
-    // Demo Mode handling when Shopify is not configured
+    // Xử lý chế độ demo khi chưa cấu hình Shopify
     if (!isShopifyConfigured) {
       let cart = (await getLocalCart()) ?? {
         id: 'cart-demo-local',
@@ -118,7 +119,7 @@ export async function POST(request: NextRequest) {
       }
 
       if (body.action === 'add') {
-        // Price and availability come from the menu, never from the request.
+        // Giá và tình trạng còn bán lấy từ thực đơn, không bao giờ lấy từ request.
         const match = await findMenuVariant(String(body.variantId ?? ''))
         if (!match) throw new Error('Choose a valid product.')
         if (!match.variant.availableForSale) throw new Error(`${match.product.title} is sold out right now.`)
@@ -128,7 +129,8 @@ export async function POST(request: NextRequest) {
         const attributes = Object.entries(body.options ?? {})
           .filter(([k, v]) => OPTION_KEYS.includes(k) && typeof v === 'string' && v.length <= 40)
           .map(([key, value]) => ({ key, value: String(value) }))
-        // Same drink with other options (milk, sugar, ice) is a separate line, so no choice is lost.
+        // Cùng đồ uống nhưng khác tùy chọn (sữa, đường, đá) là một dòng riêng, để không mất lựa
+        // chọn nào.
         const sameOptions = (line: Cart['lines']['nodes'][number]) =>
           JSON.stringify(line.attributes) === JSON.stringify(attributes)
         const existingLine = cart.lines.nodes.find((l) => l.merchandise.id === matchedVariant.id && sameOptions(l))
@@ -180,7 +182,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(cart)
     }
 
-    // Shopify production flow
+    // Luồng Shopify cho production
     let cart = await currentCart()
     let operation: string, args: string, definitions: string, variables: Record<string, unknown>
     if (body.action === 'add') {

@@ -1,3 +1,3 @@
-// Tag the menu catalog puts on drinks, so the storefront offers sugar, ice and milk choices
-// for them and not for pastries. Shared by the server catalog and the client menu.
+// Thẻ mà thực đơn gắn cho đồ uống, để storefront cho chọn đường, đá và sữa với đồ uống mà không cho
+// với bánh ngọt. Dùng chung cho thực đơn phía server và thực đơn phía client.
 export const DRINK_TAG = 'Đồ uống'

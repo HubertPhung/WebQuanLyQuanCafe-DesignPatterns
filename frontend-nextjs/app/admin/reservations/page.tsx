@@ -9,9 +9,11 @@ export const metadata = { title: 'Quản lý Đặt bàn · Coffee Shop Admin' }
 
 export default async function AdminReservationsPage() {
   const [{ reservations, javaOnline }, tables, config] = await Promise.all([getReservations(), getTables(), fetchConfig()])
-  // The admin can change the guest limit in Java; offline, the form uses the same default as the local fallback.
+  // Admin có thể đổi giới hạn số khách bên Java; khi offline, form dùng cùng giá trị mặc định với
+  // bản dự phòng cục bộ.
   const maxGuests = config.ok ? config.data.maxReservationGuests : DEFAULT_MAX_RESERVATION_GUESTS
-  // Remount the client list whenever the server data changes, so local edits never mask fresh data.
+  // Gắn lại danh sách phía client mỗi khi dữ liệu server thay đổi, để sửa đổi cục bộ không che mất
+  // dữ liệu mới.
   const dataKey = reservations.map((r) => `${r.source}:${r.id}:${r.status}`).join('|')
 
   return (

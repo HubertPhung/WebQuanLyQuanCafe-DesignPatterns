@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 
 const root = fileURLToPath(new URL('../../', import.meta.url))
 const library = path.join(root, 'frontend-nextjs/public/vendor/vis-network/vis-network.min.js')
-// Fail before changing HTML if the bundled library is missing.
+// Dừng trước khi sửa HTML nếu thiếu thư viện đã tải về.
 await readFile(library)
 
 async function localize(directory) {
@@ -15,7 +15,7 @@ async function localize(directory) {
     } else if (entry.name.endsWith('.html')) {
       const html = await readFile(file, 'utf8')
       const relative = path.relative(directory, library).split(path.sep).join('/')
-      // CDN integrity/crossorigin attributes prevent file:// usage in browsers.
+      // Thuộc tính integrity/crossorigin của CDN khiến trình duyệt không mở được qua file://.
       const updated = html.replace(/<script\b[^>]*\bsrc=(["'])([^"']+)\1[^>]*>\s*<\/script>/gi, (tag, _quote, src) => {
         return src === 'https://unpkg.com/vis-network@9.1.6/standalone/umd/vis-network.min.js'
           || src.endsWith('frontend-nextjs/public/vendor/vis-network/vis-network.min.js')

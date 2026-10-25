@@ -1,5 +1,5 @@
-// Roles and route rules shared by proxy.ts, server code and client components.
-// Mirrors the Java UserRole order: a role includes every permission of the roles before it.
+// Vai trò và quy tắc đường dẫn dùng chung cho proxy.ts, code server và component client. Theo đúng
+// thứ tự UserRole bên Java: mỗi vai trò có mọi quyền của các vai trò đứng trước.
 
 export const roles = ['CUSTOMER', 'STAFF', 'MANAGER', 'ADMIN'] as const
 export type Role = (typeof roles)[number]
@@ -19,30 +19,30 @@ export function atLeast(role: Role, minimum: Role) {
   return roles.indexOf(role) >= roles.indexOf(minimum)
 }
 
-// Most specific prefix first. Anything else under /admin needs STAFF.
+// Tiền tố cụ thể nhất đứng trước. Mọi đường dẫn khác dưới /admin cần STAFF.
 const adminRules: { prefix: string; minimum: Role }[] = [
   { prefix: '/admin/users', minimum: 'ADMIN' },
   { prefix: '/admin/settings', minimum: 'ADMIN' },
   { prefix: '/admin/analytics', minimum: 'MANAGER' },
 ]
 
-/** The role a path needs, or null when it is open to everyone. */
+/** Vai trò mà một đường dẫn cần, hoặc null khi ai cũng vào được. */
 export function requiredRoleForPath(pathname: string): Role | null {
   if (pathname === '/account' || pathname.startsWith('/account/')) return 'CUSTOMER'
   if (pathname !== '/admin' && !pathname.startsWith('/admin/')) return null
   return adminRules.find((rule) => pathname === rule.prefix || pathname.startsWith(`${rule.prefix}/`))?.minimum ?? 'STAFF'
 }
 
-/** Where a user lands after signing in when no (allowed) destination was asked for. */
+/** Nơi người dùng tới sau khi đăng nhập khi không yêu cầu trang đích (hợp lệ) nào. */
 export function homeFor(role: Role) {
   return atLeast(role, 'STAFF') ? '/admin' : '/'
 }
 
-/** Only same-site relative paths, so ?next= cannot send people to another site. */
+/** Chỉ chấp nhận đường dẫn tương đối cùng trang, để ?next= không đưa người dùng sang trang khác. */
 export function safeNext(next: string | null | undefined): string | null {
   if (!next || !next.startsWith('/')) return null
-  // Resolve it the way a browser will: tabs and newlines are dropped and "\" counts as "/",
-  // so "/\t/evil.com" and "/\\evil.com" both mean "//evil.com".
+  // Phân giải theo cách trình duyệt sẽ làm: tab và xuống dòng bị bỏ, và "\" được coi là "/", nên
+  // "/\t/evil.com" và "/\\evil.com" đều nghĩa là "//evil.com".
   const base = 'http://same.site'
   let url: URL
   try {
