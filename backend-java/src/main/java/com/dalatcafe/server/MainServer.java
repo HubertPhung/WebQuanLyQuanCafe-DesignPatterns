@@ -7,6 +7,7 @@ import com.dalatcafe.dao.JdbcDatabase;
 import com.dalatcafe.patterns.facade.PosCheckoutFacade;
 import com.dalatcafe.patterns.observer.KitchenNotificationObserver;
 import com.dalatcafe.patterns.observer.OrderEventSubject;
+import com.dalatcafe.patterns.singleton.SystemConfigManager;
 import com.dalatcafe.patterns.observer.TableStatusSyncObserver;
 import com.dalatcafe.patterns.observer.ReservationOrderSyncObserver;
 import com.dalatcafe.security.AdminBootstrap;
@@ -61,9 +62,10 @@ public class MainServer {
         this.allowRoleHeader = auth.allowRoleHeader();
         this.serviceKey = auth.serviceKey();
         OrderEventSubject subject = new OrderEventSubject();
-        subject.attach(new TableStatusSyncObserver(daos.getTableDao(), daos.getOrderDao()));
-        subject.attach(new ReservationOrderSyncObserver(daos.getReservationDao()));
-        subject.attach(new KitchenNotificationObserver());
+        // Data first (table, reservation), the kitchen ticket last: lower number is told first.
+        subject.attach(new TableStatusSyncObserver(daos.getTableDao(), daos.getOrderDao()), 10);
+        subject.attach(new ReservationOrderSyncObserver(daos.getReservationDao()), 20);
+        subject.attach(new KitchenNotificationObserver(), 90);
         PosCheckoutFacade facade = new PosCheckoutFacade(daos.getOrderDao(), daos.getMenuDao(), subject);
 
         server = HttpServer.create(new InetSocketAddress(port), 0);
@@ -125,6 +127,8 @@ public class MainServer {
             }
         });
         DaoFactory daos = DaoFactory.getInstance();
+        // Load the saved store settings (PostgreSQL in JDBC mode) before the first request.
+        SystemConfigManager.getInstance().attachStore(daos.getConfigDao());
         // Fail closed: with a configured JDBC store, a lost connection must not fall back to memory.
         BooleanSupplier healthy = () -> daos.getMode() != DaoMode.JDBC || JdbcDatabase.isAvailable();
         AuthSettings auth = AuthSettings.fromEnvironment(env);

@@ -1,9 +1,16 @@
 package com.dalatcafe.patterns.singleton;
 
+import com.dalatcafe.dao.IConfigDao;
 import java.io.Serial;
 import java.io.Serializable;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Singleton Pattern (GoF Creational) managing global operational parameters
@@ -29,6 +36,8 @@ public final class SystemConfigManager implements Serializable {
     public static final LocalTime DEFAULT_CLOSING_TIME = LocalTime.of(22, 0);
     private static final ZoneId CAFE_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
+    private static final Logger LOGGER = Logger.getLogger(SystemConfigManager.class.getName());
+
     private static volatile SystemConfigManager instance;
 
     private String storeName;
@@ -41,6 +50,9 @@ public final class SystemConfigManager implements Serializable {
     private int autoCancelMinutes;
     private LocalTime openingTime;
     private LocalTime closingTime;
+
+    /** Where the settings are saved; null until {@link #attachStore} is called (then nothing is saved). */
+    private transient IConfigDao store;
 
     private SystemConfigManager() {
         if (instance != null) {
@@ -109,6 +121,70 @@ public final class SystemConfigManager implements Serializable {
             return 0.0;
         }
         return (double) points * pointRedeemValueVnd;
+    }
+
+    /**
+     * Connects a store and loads the saved settings from it, so the values survive a restart.
+     * Keys that are missing or unreadable keep their current value.
+     */
+    public synchronized void attachStore(IConfigDao store) {
+        this.store = store;
+        if (store == null) {
+            return;
+        }
+        Map<String, String> saved = store.loadAll();
+        applyString(saved, "storeName", v -> this.storeName = v);
+        applyString(saved, "storeAddress", v -> this.storeAddress = v);
+        applyString(saved, "storePhone", v -> this.storePhone = v);
+        applyParsed(saved, "vatRate", Double::parseDouble, v -> this.vatRate = v);
+        applyParsed(saved, "loyaltyRateVndPerPoint", Integer::parseInt, this::setLoyaltyRateVndPerPoint);
+        applyParsed(saved, "pointRedeemValueVnd", Integer::parseInt, this::setPointRedeemValueVnd);
+        applyParsed(saved, "maxReservationGuests", Integer::parseInt, this::setMaxReservationGuests);
+        applyParsed(saved, "autoCancelMinutes", Integer::parseInt, this::setAutoCancelMinutes);
+        applyParsed(saved, "openingTime", LocalTime::parse, this::setOpeningTime);
+        applyParsed(saved, "closingTime", LocalTime::parse, this::setClosingTime);
+    }
+
+    /**
+     * Saves all current settings in one write. Returns false when no store is attached or the
+     * store failed, so the caller can tell the user that the change is not permanent.
+     */
+    public synchronized boolean persist() {
+        if (store == null) {
+            return false;
+        }
+        Map<String, String> values = new LinkedHashMap<>();
+        values.put("storeName", storeName);
+        values.put("storeAddress", storeAddress);
+        values.put("storePhone", storePhone);
+        values.put("vatRate", String.valueOf(vatRate));
+        values.put("loyaltyRateVndPerPoint", String.valueOf(loyaltyRateVndPerPoint));
+        values.put("pointRedeemValueVnd", String.valueOf(pointRedeemValueVnd));
+        values.put("maxReservationGuests", String.valueOf(maxReservationGuests));
+        values.put("autoCancelMinutes", String.valueOf(autoCancelMinutes));
+        values.put("openingTime", openingTime.toString());
+        values.put("closingTime", closingTime.toString());
+        return store.saveAll(values);
+    }
+
+    private static void applyString(Map<String, String> saved, String key, Consumer<String> setter) {
+        String value = saved.get(key);
+        if (value != null && !value.isBlank()) {
+            setter.accept(value);
+        }
+    }
+
+    private static <T> void applyParsed(Map<String, String> saved, String key,
+                                        Function<String, T> parser, Consumer<T> setter) {
+        String value = saved.get(key);
+        if (value == null) {
+            return;
+        }
+        try {
+            setter.accept(parser.apply(value));
+        } catch (RuntimeException e) {
+            LOGGER.log(Level.WARNING, "Ignoring saved setting " + key + "=" + value + ": " + e.getMessage());
+        }
     }
 
     @Serial

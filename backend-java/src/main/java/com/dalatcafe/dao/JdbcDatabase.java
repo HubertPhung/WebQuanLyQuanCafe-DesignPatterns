@@ -312,6 +312,13 @@ public class JdbcDatabase {
                 last_login_at TIMESTAMP WITH TIME ZONE
             );
 
+            -- Store settings of the SystemConfigManager Singleton, one row per setting.
+            CREATE TABLE IF NOT EXISTS store_config (
+                config_key VARCHAR(60) PRIMARY KEY,
+                config_value TEXT NOT NULL,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+
             -- List-valued fields (added after the first release, so ALTER keeps old databases working).
             ALTER TABLE tables ADD COLUMN IF NOT EXISTS image_url TEXT;
             ALTER TABLE tables ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;

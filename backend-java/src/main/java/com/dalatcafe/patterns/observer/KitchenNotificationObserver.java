@@ -4,12 +4,16 @@ import com.dalatcafe.model.Order;
 
 import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.logging.Logger;
 
 public class KitchenNotificationObserver implements IOrderObserver {
+    private static final Logger LOGGER = Logger.getLogger(KitchenNotificationObserver.class.getName());
+
     private final Consumer<String> notificationSink;
 
+    /** Default sink is the application log; pass a sink to send tickets to a real display. */
     public KitchenNotificationObserver() {
-        this(System.out::println);
+        this(LOGGER::info);
     }
 
     public KitchenNotificationObserver(Consumer<String> notificationSink) {

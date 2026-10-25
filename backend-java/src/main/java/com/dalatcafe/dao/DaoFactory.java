@@ -24,6 +24,7 @@ public class DaoFactory {
     private final IReservationDao inMemoryReservationDao = new InMemoryReservationDao();
     private final ICustomerDao inMemoryCustomerDao = new InMemoryCustomerDao();
     private final IUserDao inMemoryUserDao = new InMemoryUserDao();
+    private final IConfigDao inMemoryConfigDao = new InMemoryConfigDao();
 
     // JDBC singletons
     private final ITableDao jdbcTableDao = new JdbcTableDao();
@@ -32,6 +33,7 @@ public class DaoFactory {
     private final IReservationDao jdbcReservationDao = new JdbcReservationDao();
     private final ICustomerDao jdbcCustomerDao = new JdbcCustomerDao();
     private final IUserDao jdbcUserDao = new JdbcUserDao();
+    private final IConfigDao jdbcConfigDao = new JdbcConfigDao();
 
     private DaoFactory() {
         // Auto-detect JDBC availability, default to IN_MEMORY
@@ -121,6 +123,10 @@ public class DaoFactory {
 
     public IUserDao getUserDao() {
         return (mode == DaoMode.JDBC && JdbcDatabase.isAvailable()) ? jdbcUserDao : inMemoryUserDao;
+    }
+
+    public IConfigDao getConfigDao() {
+        return (mode == DaoMode.JDBC && JdbcDatabase.isAvailable()) ? jdbcConfigDao : inMemoryConfigDao;
     }
 }
 

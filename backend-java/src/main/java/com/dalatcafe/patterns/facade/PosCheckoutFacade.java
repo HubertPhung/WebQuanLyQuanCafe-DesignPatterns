@@ -142,12 +142,15 @@ public class PosCheckoutFacade {
     }
 
     private Order buildOrder(CheckoutRequest request, Map<Integer, MenuItem> menu) {
+        DiscountContext discount = request.getDiscountStrategy() == null
+                ? new DiscountContext() : new DiscountContext(request.getDiscountStrategy());
         OrderBuilder builder = new OrderBuilder()
                 .forCustomer(request.getCustomer() == null ? null : request.getCustomer().getName())
                 .ofType(request.getOrderType())
                 .withNote(request.getNote())
                 .withPayment(request.getPaymentMethod(), false)
-                .avoidingCodes(code -> orderDao.findByOrderCode(code).isPresent());
+                .avoidingCodes(code -> orderDao.findByOrderCode(code).isPresent())
+                .discountedBy(subtotal -> discount.executeDiscount(subtotal, request.getCustomer()));
         if (request.getTableId() != null) {
             builder.atTable(request.getTableId());
         }
@@ -156,12 +159,6 @@ public class PosCheckoutFacade {
         }
         Order order = builder.build();
         order.setBranch(request.getBranch());
-        order.recalculateTotals();
-
-        DiscountContext discount = request.getDiscountStrategy() == null
-                ? new DiscountContext() : new DiscountContext(request.getDiscountStrategy());
-        order.setDiscountAmount(discount.executeDiscount(order.getSubtotal(), request.getCustomer()));
-        order.recalculateTotals();
         return order;
     }
 
