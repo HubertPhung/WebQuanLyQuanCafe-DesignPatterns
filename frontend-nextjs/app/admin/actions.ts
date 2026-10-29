@@ -27,6 +27,7 @@ import { localImageSrc } from '@/lib/assets'
 import { assertPosTableAvailable, withPosTableLock } from '@/lib/admin/pos-table-guard'
 import { isDaLatAddress, shippingFee } from '@/lib/storefront/delivery'
 import { withFirstOnlineOrder } from '@/lib/orders/first-online-order'
+import { withVoucherHold } from '@/lib/orders/voucher-hold'
 import {
   customizationSurcharge,
   describeCustomizations,
@@ -677,11 +678,10 @@ export async function placeOnlineOrder(input: OnlineOrderInput): Promise<OnlineO
         totals = cashOnDeliveryTotals(subtotal, discount)
         totals.total += shippingFee(fulfilment)
       }
-      const recorded = await recordOrderLocally({ ...order, orderCode, totals }, quantities)
-      if (!recorded.ok) {
-        if (redeemed) await releaseVoucher(orderCode)
-        return recorded
-      }
+      // Ghi đơn thất bại (kể cả ném lỗi) thì trả lượt voucher vừa giữ; trả không được thì ghi log.
+      const recorded = await withVoucherHold(redeemed, () => recordOrderLocally({ ...order, orderCode, totals }, quantities),
+        () => releaseVoucher(orderCode), (message) => console.error(`[voucher] ${orderCode}: ${message}`))
+      if (!recorded.ok) return recorded
       markPlaced()
       await saveOrderContact({
         orderCode,
