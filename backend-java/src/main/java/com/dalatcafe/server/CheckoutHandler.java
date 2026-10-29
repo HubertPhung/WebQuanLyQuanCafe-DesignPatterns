@@ -47,6 +47,8 @@ public class CheckoutHandler extends ApiHandler {
     private final IOrderDao orderDao;
     private final IReservationDao reservationDao;
     private final BooleanSupplier databaseHealthy;
+    private final VoucherService vouchers = new VoucherService(
+            com.dalatcafe.dao.DaoFactory.getInstance().getVoucherDao(), java.time.Clock.systemUTC());
 
     public CheckoutHandler(PosCheckoutFacade facade, ICustomerDao customerDao, ITableDao tableDao,
                            BooleanSupplier databaseHealthy) {
@@ -72,7 +74,7 @@ public class CheckoutHandler extends ApiHandler {
             throw ApiException.notFound("Unknown checkout resource");
         }
         Map<String, Object> body = readJsonBody(exchange);
-        if (VoucherCatalog.WELCOME10.equalsIgnoreCase(str(body, "voucherCode"))
+        if ("WELCOME10".equalsIgnoreCase(str(body, "voucherCode"))
                 && !Boolean.TRUE.equals(exchange.getAttribute(SimpleAuthFilter.STOREFRONT_SERVICE_ATTRIBUTE))) {
             throw new ApiException(400, "INVALID_VOUCHER", "WELCOME10 chỉ dùng cho đơn online đầu tiên qua cửa hàng.");
         }
@@ -310,10 +312,13 @@ public class CheckoutHandler extends ApiHandler {
         throw ApiException.badRequest("Unknown topping: " + topping);
     }
 
-    private static IDiscountStrategy discount(String voucher, Customer known) {
+    private IDiscountStrategy discount(String voucher, Customer known) {
         if (voucher != null) {
-            return VoucherCatalog.find(voucher).orElseThrow(() ->
-                    new ApiException(400, "INVALID_VOUCHER", "Invalid voucher code: " + voucher));
+            VoucherService.Verdict verdict = vouchers.check(voucher, Double.MAX_VALUE, null, true);
+            if (verdict.voucher() == null) {
+                throw new ApiException(400, "INVALID_VOUCHER", "Invalid voucher code: " + voucher);
+            }
+            return VoucherService.strategyFor(verdict.voucher());
         }
         return known != null ? new LoyaltyTierDiscountStrategy() : null;
     }
