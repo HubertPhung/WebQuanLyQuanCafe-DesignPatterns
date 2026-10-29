@@ -27,7 +27,6 @@ import { localImageSrc } from '@/lib/assets'
 import { assertPosTableAvailable, withPosTableLock } from '@/lib/admin/pos-table-guard'
 import { isDaLatAddress, shippingFee } from '@/lib/storefront/delivery'
 import { withFirstOnlineOrder } from '@/lib/orders/first-online-order'
-import { voucherDiscount } from '@/lib/storefront/vouchers'
 import {
   customizationSurcharge,
   describeCustomizations,
@@ -60,6 +59,8 @@ import {
   type StoreConfigChange,
   type SyncOrderPayload,
   validateVoucher,
+  redeemVoucher,
+  releaseVoucher,
 } from '@/lib/api-client'
 import type { Cart } from '@/lib/shopify'
 import { parseMenuVariant } from '@/lib/storefront/menu-catalog'
@@ -325,7 +326,7 @@ async function forwardCheckout(
   order: LocalOrderInput,
   localMenu: LocalMenuItem[],
   member: MemberCheckout,
-  extra: Pick<CheckoutPayload, 'voucherCode' | 'note'> = {},
+  extra: Pick<CheckoutPayload, 'voucherCode' | 'note' | 'userId'> = {},
   asService = false,
 ): Promise<CheckoutOutcome> {
   // POST /api/checkout luôn thu tiền, nên hóa đơn mở (chưa trả) được ghi cục bộ rồi đồng bộ sau.
@@ -555,19 +556,15 @@ function readCart(raw: string | undefined): Cart | null {
 }
 
 // Tiền mặt khi nhận hàng chưa thu lúc này, nên Java không tính giá đơn: các quy tắc giống hệt được
-// áp dụng ở đây (giá thực đơn, phụ thu size L, voucher theo cách Java kiểm tra, VAT trên phần còn
-// lại).
-async function cashOnDeliveryTotals(lines: LocalOrderInput['lines'], localMenu: LocalMenuItem[], voucherCode?: string) {
+// áp dụng ở đây (giá thực đơn, phụ thu size L, VAT trên phần còn lại). Mức giảm của voucher là số
+// Java trả về khi giữ lượt cho đơn.
+function cashOnDeliverySubtotal(lines: LocalOrderInput['lines'], localMenu: LocalMenuItem[]): number {
   const byId = new Map(localMenu.map((item) => [item.id, item]))
   const raw = lines.reduce((sum, line) => sum + (byId.get(line.menuItemId)!.sellPrice + customizationSurcharge(line.customizations ?? [])) * line.qty, 0)
-  const subtotal = Math.round(raw * 100) / 100
-  let discount = 0
-  if (voucherCode) {
-    const verdict = await validateVoucher(voucherCode, subtotal)
-    if (verdict.ok && verdict.data.valid) discount = verdict.data.discountAmount
-    else if (!verdict.ok && verdict.unreachable) discount = voucherDiscount(subtotal, voucherCode)
-    else throw new Error('Mã giảm giá không hợp lệ.')
-  }
+  return Math.round(raw * 100) / 100
+}
+
+function cashOnDeliveryTotals(subtotal: number, discount: number) {
   return { subtotal, total: Math.round((subtotal - discount) * (1 + TAX_RATE) * 100) / 100 }
 }
 
@@ -629,9 +626,16 @@ export async function placeOnlineOrder(input: OnlineOrderInput): Promise<OnlineO
     return await withFirstOnlineOrder<OnlineOrderResult>(session.userId, async ({ isFirstOrder, markPlaced }) => {
       const paid = input.payment !== 'cod'
       const order: LocalOrderInput = { lines, customer: name, tableId: null, orderType: fulfilment, paymentMethod, paid, branch }
-      const voucherCode = cart?.discountCodes?.find((code) => code.applicable)?.code?.trim().toUpperCase()
-      if (voucherCode === 'WELCOME10' && !isFirstOrder) {
-        throw new Error('WELCOME10 chỉ áp dụng cho đơn online đầu tiên của tài khoản mới.')
+      const voucherCode = cart?.discountCodes?.find((code) => code.applicable)?.code?.trim().toUpperCase() || undefined
+      const subtotal = cashOnDeliverySubtotal(lines, localMenu)
+      if (voucherCode) {
+        // Java quyết định mã còn dùng được không; không hỏi được thì không hứa giảm giá.
+        const verdict = await validateVoucher(voucherCode, subtotal, session.userId)
+        if (!verdict.ok) return { ok: false, error: 'Tạm thời chưa áp dụng được mã giảm giá. Hãy thử lại hoặc bỏ mã.' }
+        if (!verdict.data.valid) return { ok: false, error: verdict.data.description }
+        if (verdict.data.firstOnlineOrderOnly && !isFirstOrder) {
+          throw new Error(`${voucherCode} chỉ áp dụng cho đơn online đầu tiên của tài khoản.`)
+        }
       }
       const javaNote = ['Đơn online', `Chi nhánh ${branchById(branch).street}`, fulfilment === 'delivery' ? `Giao tới: ${address}` : 'Khách tự đến lấy', `SĐT ${phone}`, note, ...lineNotes]
         .filter(Boolean)
@@ -639,12 +643,13 @@ export async function placeOnlineOrder(input: OnlineOrderInput): Promise<OnlineO
         .slice(0, 1000)
 
       let receipt: CheckoutReceipt | undefined
-      let totals: { subtotal: number; total: number }
+      // Đơn trả trước lấy tổng tiền Java đã thu; đơn COD tính ở dưới, sau khi giữ lượt voucher.
+      let totals!: { subtotal: number; total: number }
       if (paid) {
         // Chỉ tiền thu ngay mới được cộng điểm (tiền mặt khi nhận hàng thì không): số điện thoại
         // người mua trở thành thành viên.
         const member: MemberCheckout = { customerPhone: phone, enrollMember: true, customerEmail: email ?? session.email }
-        const outcome = await forwardCheckout(order, localMenu, member, { voucherCode, note: javaNote }, true)
+        const outcome = await forwardCheckout(order, localMenu, member, { voucherCode, note: javaNote, userId: session.userId }, true)
         if (outcome.kind === 'rejected') return { ok: false, error: outcome.error }
         // Thanh toán online do Java thu; không có Java thì không được thu tiền hay hứa hẹn gì.
         if (outcome.kind === 'local') {
@@ -653,14 +658,30 @@ export async function placeOnlineOrder(input: OnlineOrderInput): Promise<OnlineO
         receipt = outcome.receipt
         markPlaced()
         totals = { subtotal: receipt.subtotal, total: receipt.finalTotal }
-      } else {
-        totals = await cashOnDeliveryTotals(lines, localMenu, voucherCode)
-        totals.total += shippingFee(fulfilment)
       }
 
       const orderCode = receipt?.orderCode ?? newLocalOrderCode()
+      let redeemed = false
+      if (!receipt) {
+        // Đơn COD giữ lượt voucher ngay lúc đặt; Java ghi lượt theo mã đơn và dùng đúng mức giảm
+        // này khi đơn được đồng bộ sang.
+        let discount = 0
+        if (voucherCode) {
+          const redemption = await redeemVoucher({ code: voucherCode, subtotal, userId: session.userId, orderCode })
+          if (!redemption.ok) {
+            return { ok: false, error: redemption.unreachable ? 'Tạm thời chưa áp dụng được mã giảm giá. Hãy thử lại hoặc bỏ mã.' : redemption.error }
+          }
+          discount = redemption.data.discountAmount
+          redeemed = true
+        }
+        totals = cashOnDeliveryTotals(subtotal, discount)
+        totals.total += shippingFee(fulfilment)
+      }
       const recorded = await recordOrderLocally({ ...order, orderCode, totals }, quantities)
-      if (!recorded.ok) return recorded
+      if (!recorded.ok) {
+        if (redeemed) await releaseVoucher(orderCode)
+        return recorded
+      }
       markPlaced()
       await saveOrderContact({
         orderCode,

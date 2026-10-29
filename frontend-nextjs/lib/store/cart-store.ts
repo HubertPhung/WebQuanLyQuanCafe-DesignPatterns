@@ -139,17 +139,19 @@ export const useCartStore = create<CartStoreState>((set, get) => ({
           code: trimmed,
         }),
       })
-      const data: Cart = await res.json()
+      const data: Cart & { voucherMessage?: string } = await res.json()
       if (!res.ok) throw new Error((data as unknown as { error?: string }).error || 'Mã không hợp lệ')
       set({ cart: data })
 
+      // voucherMessage là lý do Java đưa ra (hết hạn, cần mua thêm, cần đăng nhập...).
       const isApplied = data.discountCodes?.some((d) => d.applicable)
       if (isApplied) {
-        toast.success(`Đã áp dụng mã ưu đãi ${trimmed} (-10%)!`)
-        return { success: true, message: `Mã ${trimmed} đã được áp dụng (-10%)` }
+        toast.success(`Đã áp dụng mã ưu đãi ${trimmed}!`)
+        return { success: true, message: data.voucherMessage || `Mã ${trimmed} đã được áp dụng` }
       } else {
-        toast.error('Mã không hợp lệ hoặc đã hết hạn.')
-        return { success: false, message: 'Mã không hợp lệ hoặc đã hết hạn (Gợi ý: WELCOME10)' }
+        const reason = data.voucherMessage || 'Mã không hợp lệ hoặc đã hết hạn.'
+        toast.error(reason)
+        return { success: false, message: reason }
       }
     } catch (err) {
       toast.error((err as Error).message)

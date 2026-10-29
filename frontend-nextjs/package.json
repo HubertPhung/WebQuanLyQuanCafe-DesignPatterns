@@ -13,6 +13,7 @@
     "graphify:update": "cd .. && graphify update . && node frontend-nextjs/scripts/localize-graphify-assets.mjs",
     "test:e2e": "node --env-file-if-exists=.env.local scripts/test-e2e-stack.mjs",
     "test:table-delivery": "tsx scripts/test-table-delivery.ts",
+    "test:vouchers": "tsx scripts/test-voucher-pricing.ts",
     "test:first-order": "node --conditions=react-server --import tsx scripts/test-first-online-order.ts"
   },
   "dependencies": {

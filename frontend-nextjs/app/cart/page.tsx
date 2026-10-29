@@ -179,7 +179,7 @@ export default function CartPage() {
                   <input
                     value={promoCode}
                     onChange={(e) => setPromoCode(e.target.value)}
-                    placeholder="Mã ưu đãi (VD: WELCOME10)"
+                    placeholder="Nhập mã ưu đãi"
                     className="flex-1 rounded-xl border border-stone-200 px-3 py-2 text-xs uppercase tracking-wider focus:outline-none focus:ring-1 focus:ring-[#3E2723]"
                   />
                   <Button
@@ -201,7 +201,7 @@ export default function CartPage() {
                   </div>
                   {isDiscounted && (
                     <div className="flex justify-between text-emerald-700">
-                      <span>Ưu đãi thành viên (-10%)</span>
+                      <span>Mã ưu đãi {cart?.discountCodes?.find((d) => d.applicable)?.code}</span>
                       <span className="font-semibold tabular-nums">-{formatMoneyVND(discountAmount)}</span>
                     </div>
                   )}

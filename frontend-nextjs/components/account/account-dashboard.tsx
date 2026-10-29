@@ -25,7 +25,7 @@ import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import type { AccountOrder, AccountOverview } from '@/lib/account/queries'
 import { nextRank, rankInfo } from '@/lib/account/loyalty'
-import { VOUCHERS } from '@/lib/storefront/vouchers'
+import { voucherTerms } from '@/lib/storefront/vouchers'
 
 export type AccountUser = { name: string; email: string }
 
@@ -63,7 +63,7 @@ export function AccountDashboard({
   currentTab: string
   overview: AccountOverview
 }) {
-  const availableVouchers = VOUCHERS.filter(voucher => voucher.code !== 'WELCOME10' || overview.welcomeVoucherEligible)
+  const availableVouchers = overview.vouchers.filter(voucher => !voucher.firstOnlineOrderOnly || overview.welcomeVoucherEligible)
   const copyVoucher = (code: string) => {
     navigator.clipboard.writeText(code)
     toast.success(`Đã sao chép mã ưu đãi ${code}!`)
@@ -266,7 +266,7 @@ export function AccountDashboard({
                 </h3>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {availableVouchers.length === 0 && <p className="text-sm text-stone-500">Chưa có voucher khả dụng. WELCOME10 chỉ dành cho đơn online đầu tiên của tài khoản mới.</p>}
+                  {availableVouchers.length === 0 && <p className="text-sm text-stone-500">Chưa có voucher khả dụng lúc này.</p>}
                   {availableVouchers.map((v) => (
                     <div
                       key={v.code}
@@ -284,8 +284,8 @@ export function AccountDashboard({
                           <Copy className="size-3.5" />
                         </button>
                       </div>
-                      <h4 className="text-xs font-bold text-stone-900">{v.title}</h4>
-                      <p className="text-[11px] text-stone-600">{v.terms}</p>
+                      <h4 className="text-xs font-bold text-stone-900">{v.description || `Mã ${v.code}`}</h4>
+                      <p className="text-[11px] text-stone-600">{voucherTerms(v)}</p>
                     </div>
                   ))}
                 </div>

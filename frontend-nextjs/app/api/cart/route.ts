@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Cart, cartFields, shopify } from '@/lib/shopify'
 import { validateVoucher } from '@/lib/api-client'
 import { findMenuVariant } from '@/lib/storefront/menu-catalog'
-import { findVoucher, voucherDiscount } from '@/lib/storefront/vouchers'
+import { normalizeVoucherCode } from '@/lib/storefront/vouchers'
 import { getSession } from '@/lib/auth/session'
 import { isFirstOnlineOrderAvailable } from '@/lib/orders/first-online-order'
 
@@ -11,17 +11,37 @@ const isShopifyConfigured = Boolean(process.env.SHOPIFY_STORE_DOMAIN && process.
 
 const OPTION_KEYS = ['Milk', 'Sugar', 'Sweetness', 'Ice']
 
-// VoucherCatalog của Java quyết định một mã có tồn tại không (POST /api/vouchers/validate, đúng
-// Strategy mà checkout áp dụng); không có Java thì dùng bản sao danh mục đó trong
-// lib/storefront/vouchers.
-async function isVoucherApplicable(code: string, subtotal: number): Promise<boolean> {
-  if (code.trim().toUpperCase() === 'WELCOME10') {
-    const session = await getSession()
-    if (!session || !(await isFirstOnlineOrderAvailable(session.userId))) return false
+type VoucherCheck = { applicable: boolean; discount: number; message: string }
+
+// VoucherService bên Java quyết định một mã có dùng được không và giảm bao nhiêu (POST
+// /api/vouchers/validate, đúng Strategy mà checkout áp dụng). Không có Java thì không mã nào áp
+// dụng: storefront không kiểm tra được hạn dùng và số lượt.
+async function checkVoucher(code: string, subtotal: number): Promise<VoucherCheck> {
+  const session = await getSession()
+  const verdict = await validateVoucher(code, subtotal, session?.userId)
+  if (!verdict.ok) return { applicable: false, discount: 0, message: 'Tạm thời chưa áp dụng được mã giảm giá. Vui lòng thử lại sau.' }
+  const { valid, discountAmount, description, firstOnlineOrderOnly } = verdict.data
+  if (!valid) return { applicable: false, discount: 0, message: description }
+  if (firstOnlineOrderOnly && (!session || !(await isFirstOnlineOrderAvailable(session.userId)))) {
+    return { applicable: false, discount: 0, message: 'Mã chỉ dùng cho đơn online đầu tiên của tài khoản.' }
   }
-  const verdict = await validateVoucher(code, subtotal)
-  if (verdict.ok) return verdict.data.valid
-  return Boolean(findVoucher(code))
+  return { applicable: true, discount: discountAmount, message: description || `Đã áp dụng mã ${normalizeVoucherCode(code)}.` }
+}
+
+function cartSubtotal(lines: Cart['lines']['nodes']): number {
+  return lines.reduce((sum, line) => sum + Number(line.merchandise.price.amount) * line.quantity, 0)
+}
+
+/** Kiểm tra lại mã đang áp trên tạm tính hiện tại (đơn tối thiểu, hạn, lượt có thể đã đổi) và tính lại tổng. */
+async function refreshVoucher(cart: Cart | null): Promise<VoucherCheck | null> {
+  if (!cart || isShopifyConfigured) return null
+  let check: VoucherCheck | null = null
+  for (const code of cart.discountCodes) {
+    check = await checkVoucher(code.code, cartSubtotal(cart.lines.nodes))
+    code.applicable = check.applicable
+  }
+  cart.cost = calculateCost(cart.lines.nodes, check?.applicable ? check.discount : 0)
+  return check
 }
 
 async function getLocalCart(): Promise<Cart | null> {
@@ -50,22 +70,9 @@ async function setLocalCart(cart: Cart | null) {
   })
 }
 
-async function refreshWelcomeEligibility(cart: Cart | null): Promise<Cart | null> {
-  if (!cart || isShopifyConfigured) return cart
-  for (const code of cart.discountCodes) {
-    if (code.code.trim().toUpperCase() === 'WELCOME10') {
-      const subtotal = cart.lines.nodes.reduce((sum, line) => sum + Number(line.merchandise.price.amount) * line.quantity, 0)
-      code.applicable = await isVoucherApplicable(code.code, subtotal)
-    }
-  }
-  cart.cost = calculateCost(cart.lines.nodes, cart.discountCodes)
-  return cart
-}
-
-function calculateCost(lines: Cart['lines']['nodes'], discountCodes: { code: string; applicable: boolean }[]) {
-  const subtotal = lines.reduce((sum, line) => sum + Number(line.merchandise.price.amount) * line.quantity, 0)
-  const discount = voucherDiscount(subtotal, discountCodes.find((d) => d.applicable)?.code)
-  const total = subtotal - discount
+function calculateCost(lines: Cart['lines']['nodes'], discount: number) {
+  const subtotal = cartSubtotal(lines)
+  const total = subtotal - Math.min(subtotal, discount)
   const currencyCode = lines[0]?.merchandise.price.currencyCode ?? 'VND'
   return {
     subtotalAmount: { amount: subtotal.toFixed(2), currencyCode },
@@ -88,7 +95,9 @@ async function currentCart(): Promise<Cart | null> {
 
 export async function GET() {
   try {
-    return NextResponse.json(await refreshWelcomeEligibility(await currentCart()))
+    const cart = await currentCart()
+    await refreshVoucher(cart)
+    return NextResponse.json(cart)
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 503 })
   }
@@ -164,10 +173,8 @@ export async function POST(request: NextRequest) {
           line.quantity = body.quantity
         }
       } else if (body.action === 'discount') {
-        const code = String(body.code ?? '').trim().toUpperCase()
-        const subtotal = cart.lines.nodes.reduce((sum, l) => sum + Number(l.merchandise.price.amount) * l.quantity, 0)
-        const applicable = code ? await isVoucherApplicable(code, subtotal) : false
-        cart.discountCodes = code ? [{ code, applicable }] : []
+        const code = normalizeVoucherCode(body.code).slice(0, 30)
+        cart.discountCodes = code ? [{ code, applicable: false }] : []
       } else if (body.action === 'note') {
         cart.note = String(body.note ?? '').slice(0, 500)
       } else {
@@ -175,11 +182,11 @@ export async function POST(request: NextRequest) {
       }
 
       cart.totalQuantity = cart.lines.nodes.reduce((sum, l) => sum + l.quantity, 0)
-      await refreshWelcomeEligibility(cart)
-      cart.cost = calculateCost(cart.lines.nodes, cart.discountCodes)
+      const voucher = await refreshVoucher(cart)
 
       await setLocalCart(cart)
-      return NextResponse.json(cart)
+      // voucherMessage cho giỏ hàng biết vì sao mã vừa nhập không dùng được (hết hạn, cần mua thêm...).
+      return NextResponse.json(body.action === 'discount' && voucher ? { ...cart, voucherMessage: voucher.message } : cart)
     }
 
     // Luồng Shopify cho production
@@ -225,9 +232,8 @@ export async function POST(request: NextRequest) {
           variables = { id: cart.id, lines: [{ id: line.id, quantity: body.quantity }] }
         }
       } else if (body.action === 'discount') {
-        if (String(body.code ?? '').trim().toUpperCase() === 'WELCOME10' && !(await isVoucherApplicable('WELCOME10', Number(cart.cost.subtotalAmount.amount)))) {
-          throw new Error('WELCOME10 chỉ áp dụng cho đơn online đầu tiên của tài khoản mới.')
-        }
+        const check = await checkVoucher(String(body.code ?? ''), Number(cart.cost.subtotalAmount.amount))
+        if (!check.applicable) throw new Error(check.message)
         operation = 'cartDiscountCodesUpdate'
         definitions = '$id: ID!, $codes: [String!]!'
         args = 'cartId: $id, discountCodes: $codes'

@@ -312,7 +312,8 @@ async function runCartAndWishlistTests() {
         recordTest('TC-API-04', 'Add Barista Order Note to Cart', 'Cart & Wishlist', 'FAIL', `Note update failed`)
       }
 
-      // TC-API-05: Mã giảm giá trong giỏ
+      // TC-API-05: Mã giảm giá do Java quyết định. Bộ test chạy không có backend Java, nên giỏ hàng
+      // phải từ chối mọi mã (không có danh sách dự phòng) và nói lý do, thay vì hứa một mức giảm.
       const promoRes = await fetch(`${BASE_URL}/api/cart`, {
         method: 'POST',
         headers: {
@@ -323,10 +324,24 @@ async function runCartAndWishlistTests() {
         body: JSON.stringify({ action: 'discount', code: 'WELCOME10' })
       })
       const promoData = await promoRes.json()
-      if (promoRes.status === 200 && promoData.discountCodes?.some(d => d.applicable)) {
-        recordTest('TC-API-05', 'Apply Promo Voucher Code (WELCOME10)', 'Cart & Wishlist', 'PASS', '10% discount verified')
+      const refused = promoRes.status === 200
+        && promoData.discountCodes?.length === 1
+        && promoData.discountCodes.every(d => !d.applicable)
+        && promoData.cost?.totalAmount?.amount === promoData.cost?.subtotalAmount?.amount
+        && typeof promoData.voucherMessage === 'string' && promoData.voucherMessage.length > 0
+      if (refused) {
+        recordTest('TC-API-05', 'Cart Refuses Vouchers While Java Is Unreachable', 'Cart & Wishlist', 'PASS', promoData.voucherMessage)
       } else {
-        recordTest('TC-API-05', 'Apply Promo Voucher Code (WELCOME10)', 'Cart & Wishlist', 'FAIL', 'Promo failed')
+        recordTest('TC-API-05', 'Cart Refuses Vouchers While Java Is Unreachable', 'Cart & Wishlist', 'FAIL', JSON.stringify(promoData).slice(0, 300))
+      }
+
+      // TC-VOUCHER-02: trang tài khoản không còn danh sách mã viết cứng
+      const accountRes = await fetch(`${BASE_URL}/account/vouchers`, { headers: { Cookie: customer }, redirect: 'manual' })
+      const accountHtml = await accountRes.text()
+      if (accountRes.status === 200 && accountHtml.includes('Kho voucher') && accountHtml.includes('Chưa có voucher khả dụng lúc này') && !accountHtml.includes('WELCOME10')) {
+        recordTest('TC-VOUCHER-02', 'Account Page Lists Only Vouchers From Java', 'Cart & Wishlist', 'PASS', 'No hard-coded voucher shown while Java is down')
+      } else {
+        recordTest('TC-VOUCHER-02', 'Account Page Lists Only Vouchers From Java', 'Cart & Wishlist', 'FAIL', `status ${accountRes.status}`)
       }
 
     } else {
