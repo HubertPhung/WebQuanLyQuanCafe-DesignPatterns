@@ -68,6 +68,22 @@ class JdbcIntegrationTest {
     }
 
     @Test
+    void orderVoucherCodeRoundTrips() {
+        Order order = new Order(null, "DB-VOUCHER-1", "Khach", null, OrderType.PICKUP);
+        order.addItem(new OrderItem(null, "Tra", 1, 20_000, null, null));
+        order.setVoucherCode("SALE10K");
+        order.setDiscountAmount(5_000);
+        assertTrue(orders.save(order));
+        Order reread = orders.findByOrderCode("DB-VOUCHER-1").orElseThrow();
+        assertEquals("SALE10K", reread.getVoucherCode());
+        assertEquals(5_000, reread.getDiscountAmount());
+        // Upsert theo id giữ mã voucher.
+        assertTrue(orders.save(reread));
+        assertEquals("SALE10K", orders.findById(reread.getId()).orElseThrow().getVoucherCode());
+        orders.deleteById(reread.getId());
+    }
+
+    @Test
     void schemaUpgradeIsIdempotentAndAddsForeignKeys() throws Exception {
         try (Connection conn = JdbcDatabase.getConnection()) {
             JdbcDatabase.initializeSchema(conn);

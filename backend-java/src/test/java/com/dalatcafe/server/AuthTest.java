@@ -288,7 +288,8 @@ class AuthTest {
         HttpResponse<String> placed = call("POST", "/api/checkout", null, checkout, "X-Service-Key", SERVICE_KEY);
         assertEquals(200, placed.statusCode(), placed.body());
 
-        String welcomeCheckout = checkout.replace("\"customer\":", "\"voucherCode\":\"WELCOME10\",\"customer\":");
+        // WELCOME10 giới hạn mỗi tài khoản một lần: storefront gửi kèm tài khoản của khách.
+        String welcomeCheckout = checkout.replace("\"customer\":", "\"voucherCode\":\"WELCOME10\",\"userId\":42,\"customer\":");
         HttpResponse<String> welcome = call("POST", "/api/checkout", null, welcomeCheckout, "X-Service-Key", SERVICE_KEY);
         assertEquals(200, welcome.statusCode(), welcome.body());
         assertEquals(((Number) data(placed).get("finalTotal")).doubleValue() * 0.9,

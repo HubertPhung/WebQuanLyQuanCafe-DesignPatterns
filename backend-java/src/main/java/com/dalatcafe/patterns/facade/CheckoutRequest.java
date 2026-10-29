@@ -24,6 +24,7 @@ public final class CheckoutRequest {
     private final String note;
     private final Double tenderedAmount;
     private final String branch;
+    private final String voucherCode;
 
     public CheckoutRequest(List<CheckoutLine> lines, Integer tableId, OrderType orderType,
                            PaymentMethod paymentMethod, Customer customer,
@@ -41,6 +42,12 @@ public final class CheckoutRequest {
     public CheckoutRequest(List<CheckoutLine> lines, Integer tableId, OrderType orderType,
                            PaymentMethod paymentMethod, Customer customer,
                            IDiscountStrategy discountStrategy, String note, Double tenderedAmount, String branch) {
+        this(lines, tableId, orderType, paymentMethod, customer, discountStrategy, note, tenderedAmount, branch, null);
+    }
+
+    private CheckoutRequest(List<CheckoutLine> lines, Integer tableId, OrderType orderType,
+                            PaymentMethod paymentMethod, Customer customer, IDiscountStrategy discountStrategy,
+                            String note, Double tenderedAmount, String branch, String voucherCode) {
         Objects.requireNonNull(lines, "Lines must not be null");
         if (lines.isEmpty()) {
             throw new IllegalArgumentException("Checkout must contain at least one line");
@@ -57,6 +64,17 @@ public final class CheckoutRequest {
         }
         this.tenderedAmount = tenderedAmount;
         this.branch = Branches.orDefault(branch);
+        this.voucherCode = voucherCode;
+    }
+
+    /** Cùng đơn với một strategy giảm giá khác; {@code voucherCode} được ghi vào đơn khi lưu. */
+    public CheckoutRequest withDiscount(IDiscountStrategy strategy, String voucherCode) {
+        return new CheckoutRequest(lines, tableId, orderType, paymentMethod, customer, strategy, note, tenderedAmount,
+                branch, voucherCode);
+    }
+
+    public String getVoucherCode() {
+        return voucherCode;
     }
 
     public List<CheckoutLine> getLines() {

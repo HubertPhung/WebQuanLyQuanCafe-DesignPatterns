@@ -1,5 +1,6 @@
 package com.dalatcafe.server;
 
+import com.dalatcafe.dao.DaoFactory;
 import com.dalatcafe.dao.ICustomerDao;
 import com.dalatcafe.dao.ITableDao;
 import com.dalatcafe.dao.IOrderDao;
@@ -21,6 +22,7 @@ import com.dalatcafe.patterns.strategy.PointRedemptionDiscountStrategy;
 import com.sun.net.httpserver.HttpExchange;
 
 import java.io.IOException;
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
@@ -28,6 +30,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.OptionalDouble;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
 import java.util.logging.Level;
@@ -47,8 +50,7 @@ public class CheckoutHandler extends ApiHandler {
     private final IOrderDao orderDao;
     private final IReservationDao reservationDao;
     private final BooleanSupplier databaseHealthy;
-    private final VoucherService vouchers = new VoucherService(
-            com.dalatcafe.dao.DaoFactory.getInstance().getVoucherDao(), java.time.Clock.systemUTC());
+    private final VoucherService vouchers;
 
     public CheckoutHandler(PosCheckoutFacade facade, ICustomerDao customerDao, ITableDao tableDao,
                            BooleanSupplier databaseHealthy) {
@@ -57,6 +59,14 @@ public class CheckoutHandler extends ApiHandler {
 
     public CheckoutHandler(PosCheckoutFacade facade, ICustomerDao customerDao, ITableDao tableDao,
                            IOrderDao orderDao, IReservationDao reservationDao, BooleanSupplier databaseHealthy) {
+        this(facade, customerDao, tableDao, orderDao, reservationDao,
+                new VoucherService(DaoFactory.getInstance().getVoucherDao(), Clock.systemUTC()), databaseHealthy);
+    }
+
+    public CheckoutHandler(PosCheckoutFacade facade, ICustomerDao customerDao, ITableDao tableDao,
+                           IOrderDao orderDao, IReservationDao reservationDao, VoucherService vouchers,
+                           BooleanSupplier databaseHealthy) {
+        this.vouchers = Objects.requireNonNull(vouchers, "Voucher service must not be null");
         this.facade = Objects.requireNonNull(facade, "Facade must not be null");
         this.customerDao = Objects.requireNonNull(customerDao, "Customer DAO must not be null");
         this.tableDao = Objects.requireNonNull(tableDao, "Table DAO must not be null");
@@ -74,10 +84,10 @@ public class CheckoutHandler extends ApiHandler {
             throw ApiException.notFound("Unknown checkout resource");
         }
         Map<String, Object> body = readJsonBody(exchange);
-        if ("WELCOME10".equalsIgnoreCase(str(body, "voucherCode"))
-                && !Boolean.TRUE.equals(exchange.getAttribute(SimpleAuthFilter.STOREFRONT_SERVICE_ATTRIBUTE))) {
-            throw new ApiException(400, "INVALID_VOUCHER", "WELCOME10 chỉ dùng cho đơn online đầu tiên qua cửa hàng.");
-        }
+        boolean storefront = Boolean.TRUE.equals(exchange.getAttribute(SimpleAuthFilter.STOREFRONT_SERVICE_ATTRIBUTE));
+        // Tài khoản của khách chỉ được tin khi storefront gọi bằng service key.
+        Integer userId = storefront && body.get("userId") != null ? requireInt(body, "userId") : null;
+        String voucherCode = VoucherService.normalize(str(body, "voucherCode"));
         if (!databaseHealthy.getAsBoolean()) {
             throw new ApiException(503, "DATABASE_UNAVAILABLE",
                     "The primary database is unavailable; payment was not taken. Please retry.");
@@ -95,44 +105,66 @@ public class CheckoutHandler extends ApiHandler {
         synchronized (facade) {
             known = findCustomer(str(body, "customerPhone"));
             int requestedPoints = requestedPoints(body, known);
-            PointRedemptionDiscountStrategy redemption = requestedPoints > 0
-                    ? new PointRedemptionDiscountStrategy(discount(str(body, "voucherCode"), known), requestedPoints) : null;
             tendered = num(body, "tenderedAmount");
             if (tendered != null && tendered < 0) {
                 throw ApiException.badRequest("tenderedAmount must not be negative");
             }
             // Giảm giá được tính trên bản chụp này: thành viên thật bị trừ điểm ở bên dưới.
-            request = toRequest(body, known == null ? null : snapshot(known), redemption, tendered);
+            CheckoutRequest undiscounted = toRequest(body, known == null ? null : snapshot(known), null, tendered);
 
-            // Điểm được giữ trước khi thu tiền, nên không bao giờ giảm giá cho số điểm không trừ
-            // được. Phần strategy không dùng tới được hoàn lại sau đó.
-            if (redemption != null && !customerDao.redeemPoints(known.getId(), requestedPoints)) {
-                throw new ApiException(503, "DATABASE_UNAVAILABLE",
-                        "Loyalty points could not be deducted; payment was not taken. Please retry.");
+            // Lượt voucher được giữ trên đúng tạm tính của đơn, trước khi thu tiền; đơn không thành
+            // thì lượt được trả ở finally bên dưới. Món thiếu hoặc hết thì không giữ lượt nào:
+            // checkout sẽ báo lỗi đó.
+            VoucherService.Redemption voucher = null;
+            OptionalDouble subtotal = voucherCode == null ? OptionalDouble.empty() : facade.subtotalOf(undiscounted);
+            if (subtotal.isPresent()) {
+                voucher = vouchers.redeem(voucherCode, subtotal.getAsDouble(), userId, null, storefront);
             }
+            IDiscountStrategy base = voucher != null ? voucher.strategy() : (known != null ? new LoyaltyTierDiscountStrategy() : null);
+            PointRedemptionDiscountStrategy redemption = requestedPoints > 0
+                    ? new PointRedemptionDiscountStrategy(base, requestedPoints) : null;
+            request = undiscounted.withDiscount(redemption != null ? redemption : base,
+                    voucher == null ? null : voucher.voucher().getCode());
+
+            result = null;
             try {
-                result = facade.checkout(request);
-                if (result.isSuccess() && known == null && bool(body, "enrollMember", false)) {
-                    known = enrollMember(body, warnings);
+                // Điểm được giữ trước khi thu tiền, nên không bao giờ giảm giá cho số điểm không
+                // trừ được. Phần strategy không dùng tới được hoàn lại sau đó.
+                if (redemption != null && !customerDao.redeemPoints(known.getId(), requestedPoints)) {
+                    throw new ApiException(503, "DATABASE_UNAVAILABLE",
+                            "Loyalty points could not be deducted; payment was not taken. Please retry.");
                 }
-                if (result.isSuccess() && known != null && known.getId() != null) {
-                    // Gọi trực tiếp trên đơn này, không gắn vào subject dùng chung: /pay và /sync
-                    // phát sự kiện ở đó trong một khóa khác, và đơn của chúng không được cộng điểm
-                    // cho thành viên này.
-                    try {
-                        new LoyaltyPointObserver(customerDao, known.getId()).onOrderPaid(result.getOrder());
-                    } catch (RuntimeException e) {
-                        warnings.add("Loyalty points could not be added: " + e.getMessage());
+                try {
+                    result = facade.checkout(request);
+                    if (result.isSuccess() && known == null && bool(body, "enrollMember", false)) {
+                        known = enrollMember(body, warnings);
+                    }
+                    if (result.isSuccess() && known != null && known.getId() != null) {
+                        // Gọi trực tiếp trên đơn này, không gắn vào subject dùng chung: /pay và
+                        // /sync phát sự kiện ở đó trong một khóa khác, và đơn của chúng không được
+                        // cộng điểm cho thành viên này.
+                        try {
+                            new LoyaltyPointObserver(customerDao, known.getId()).onOrderPaid(result.getOrder());
+                        } catch (RuntimeException e) {
+                            warnings.add("Loyalty points could not be added: " + e.getMessage());
+                        }
+                    }
+                    if (result.isSuccess() && redemption != null) {
+                        pointsRedeemed = redemption.getPointsUsed();
+                    }
+                    if (result.isSuccess() && voucher != null) {
+                        vouchers.attachOrder(voucher, result.getOrder().getOrderCode());
+                    }
+                } finally {
+                    int unused = redemption == null ? 0 : requestedPoints - pointsRedeemed;
+                    if (unused > 0 && !customerDao.restorePoints(known.getId(), unused)) {
+                        LOGGER.severe("Could not give back " + unused + " loyalty points to customer " + known.getId());
+                        warnings.add("Unused loyalty points could not be given back: " + unused);
                     }
                 }
-                if (result.isSuccess() && redemption != null) {
-                    pointsRedeemed = redemption.getPointsUsed();
-                }
             } finally {
-                int unused = redemption == null ? 0 : requestedPoints - pointsRedeemed;
-                if (unused > 0 && !customerDao.restorePoints(known.getId(), unused)) {
-                    LOGGER.severe("Could not give back " + unused + " loyalty points to customer " + known.getId());
-                    warnings.add("Unused loyalty points could not be given back: " + unused);
+                if (voucher != null && (result == null || !result.isSuccess()) && !vouchers.release(voucher)) {
+                    LOGGER.severe("Could not give back voucher use " + voucher.usageId());
                 }
             }
         }
@@ -230,7 +262,7 @@ public class CheckoutHandler extends ApiHandler {
         return copy;
     }
 
-    private CheckoutRequest toRequest(Map<String, Object> body, Customer known, IDiscountStrategy redemption,
+    private CheckoutRequest toRequest(Map<String, Object> body, Customer known, IDiscountStrategy discount,
                                       Double tendered) {
         List<Object> rawLines = list(body, "lines");
         if (rawLines.isEmpty()) {
@@ -274,8 +306,7 @@ public class CheckoutHandler extends ApiHandler {
             }
         }
         return new CheckoutRequest(lines, tableId, orderType(str(body, "orderType")),
-                paymentMethod(requireStr(body, "paymentMethod")), customer,
-                redemption != null ? redemption : discount(str(body, "voucherCode"), known), str(body, "note"), tendered, branch);
+                paymentMethod(requireStr(body, "paymentMethod")), customer, discount, str(body, "note"), tendered, branch);
     }
 
     private static Set<Customization> customizations(Map<String, Object> line) {
@@ -312,17 +343,6 @@ public class CheckoutHandler extends ApiHandler {
         throw ApiException.badRequest("Unknown topping: " + topping);
     }
 
-    private IDiscountStrategy discount(String voucher, Customer known) {
-        if (voucher != null) {
-            VoucherService.Verdict verdict = vouchers.check(voucher, Double.MAX_VALUE, null, true);
-            if (verdict.voucher() == null) {
-                throw new ApiException(400, "INVALID_VOUCHER", "Invalid voucher code: " + voucher);
-            }
-            return VoucherService.strategyFor(verdict.voucher());
-        }
-        return known != null ? new LoyaltyTierDiscountStrategy() : null;
-    }
-
     private static OrderType orderType(String raw) {
         if (raw == null) {
             return OrderType.DINE_IN;
@@ -348,6 +368,7 @@ public class CheckoutHandler extends ApiHandler {
         data.put("orderCode", order.getOrderCode());
         data.put("subtotal", order.getSubtotal());
         data.put("discountAmount", order.getDiscountAmount());
+        data.put("voucherCode", order.getVoucherCode());
         data.put("vatAmount", order.getVatAmount());
         data.put("finalTotal", order.getTotal());
         data.put("shippingFee", order.getShippingFee());

@@ -522,6 +522,7 @@ public class OrderHandler extends ApiHandler {
         json.put("items", items);
         json.put("subtotal", order.getSubtotal());
         json.put("discountAmount", order.getDiscountAmount());
+        json.put("voucherCode", order.getVoucherCode());
         json.put("vatAmount", order.getVatAmount());
         json.put("total", order.getTotal());
         json.put("note", order.getNote());

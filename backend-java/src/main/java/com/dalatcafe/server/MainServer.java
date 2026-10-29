@@ -87,7 +87,7 @@ public class MainServer {
         reservations = new ReservationHandler(daos.getReservationDao(), daos.getTableDao(), daos.getOrderDao(), daos.getMenuDao());
         register("/api/reservations", reservations);
         register("/api/checkout", new CheckoutHandler(facade, daos.getCustomerDao(), daos.getTableDao(),
-                daos.getOrderDao(), daos.getReservationDao(), databaseHealthy));
+                daos.getOrderDao(), daos.getReservationDao(), vouchers, databaseHealthy));
         server.setExecutor(Executors.newFixedThreadPool(8));
     }
 
