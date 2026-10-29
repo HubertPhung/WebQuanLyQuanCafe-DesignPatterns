@@ -25,6 +25,7 @@ public class DaoFactory {
     private final ICustomerDao inMemoryCustomerDao = new InMemoryCustomerDao();
     private final IUserDao inMemoryUserDao = new InMemoryUserDao();
     private final IConfigDao inMemoryConfigDao = new InMemoryConfigDao();
+    private final IVoucherDao inMemoryVoucherDao = new InMemoryVoucherDao();
 
     // Các singleton JDBC
     private final ITableDao jdbcTableDao = new JdbcTableDao();
@@ -128,6 +129,10 @@ public class DaoFactory {
 
     public IConfigDao getConfigDao() {
         return (mode == DaoMode.JDBC && JdbcDatabase.isAvailable()) ? jdbcConfigDao : inMemoryConfigDao;
+    }
+
+    public IVoucherDao getVoucherDao() {
+        return inMemoryVoucherDao;
     }
 }
 

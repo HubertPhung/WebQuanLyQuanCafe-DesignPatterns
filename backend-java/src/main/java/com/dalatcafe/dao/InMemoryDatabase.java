@@ -20,7 +20,11 @@ public class InMemoryDatabase {
     private final Map<Integer, Reservation> reservations = new ConcurrentHashMap<>();
     private final Map<Integer, Customer> customers = new ConcurrentHashMap<>();
     private final Map<Integer, UserAccount> users = new ConcurrentHashMap<>();
+    private final Map<Integer, Voucher> vouchers = new ConcurrentHashMap<>();
+    private final Map<Integer, VoucherUsage> voucherUsages = new ConcurrentHashMap<>();
 
+    private final AtomicInteger nextVoucherId = new AtomicInteger(1);
+    private final AtomicInteger nextVoucherUsageId = new AtomicInteger(1);
     private final AtomicInteger nextOrderId = new AtomicInteger(100);
     private final AtomicInteger nextReservationId = new AtomicInteger(10);
     private final AtomicInteger nextCustomerId = new AtomicInteger(10);
@@ -52,6 +56,10 @@ public class InMemoryDatabase {
         reservations.clear();
         customers.clear();
         users.clear();
+        vouchers.clear();
+        voucherUsages.clear();
+        nextVoucherId.set(1);
+        nextVoucherUsageId.set(1);
         nextOrderId.set(100);
         nextReservationId.set(10);
         nextCustomerId.set(10);
@@ -60,7 +68,33 @@ public class InMemoryDatabase {
         seedInitialData();
     }
 
+    /**
+     * WELCOME10: không giới hạn tổng, mỗi tài khoản một lần, chỉ cho đơn online đầu tiên. Dùng
+     * chung cho kho trong bộ nhớ và lần seed PostgreSQL đầu tiên.
+     */
+    public static Voucher welcomeVoucher() {
+        Voucher welcome = new Voucher();
+        welcome.setCode("WELCOME10");
+        welcome.setType(VoucherType.PERCENT);
+        welcome.setValue(10);
+        welcome.setMaxDiscount(50_000.0);
+        welcome.setPerAccountLimit(1);
+        welcome.setFirstOnlineOrderOnly(true);
+        welcome.setStartDate(java.time.LocalDate.of(2026, 1, 1));
+        welcome.setEndDate(java.time.LocalDate.of(2099, 12, 31));
+        welcome.setDescription("Giảm 10% cho đơn online đầu tiên (tối đa 50.000 đ)");
+        welcome.setActive(true);
+        return welcome;
+    }
+
+    private void seedVouchers() {
+        Voucher welcome = welcomeVoucher();
+        welcome.setId(nextVoucherId.getAndIncrement());
+        vouchers.put(welcome.getId(), welcome);
+    }
+
     private void seedInitialData() {
+        seedVouchers();
         seedTables();
         seedMenuItems();
         seedCustomers();
@@ -272,6 +306,22 @@ public class InMemoryDatabase {
 
     public Map<Integer, Customer> getCustomers() {
         return customers;
+    }
+
+    public Map<Integer, Voucher> getVouchers() {
+        return vouchers;
+    }
+
+    public Map<Integer, VoucherUsage> getVoucherUsages() {
+        return voucherUsages;
+    }
+
+    public int generateVoucherId() {
+        return nextVoucherId.getAndIncrement();
+    }
+
+    public int generateVoucherUsageId() {
+        return nextVoucherUsageId.getAndIncrement();
     }
 
     public int generateOrderId() {
