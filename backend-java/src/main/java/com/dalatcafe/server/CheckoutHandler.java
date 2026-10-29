@@ -152,8 +152,12 @@ public class CheckoutHandler extends ApiHandler {
                     if (result.isSuccess() && redemption != null) {
                         pointsRedeemed = redemption.getPointsUsed();
                     }
-                    if (result.isSuccess() && voucher != null) {
-                        vouchers.attachOrder(voucher, result.getOrder().getOrderCode());
+                    if (result.isSuccess() && voucher != null
+                            && !vouchers.attachOrder(voucher, result.getOrder().getOrderCode())) {
+                        // Đơn đã thu tiền nên vẫn giữ; lượt không gắn được thì phải trả tay nếu hủy đơn.
+                        LOGGER.severe("Voucher use " + voucher.usageId() + " could not be linked to order "
+                                + result.getOrder().getOrderCode());
+                        warnings.add("The voucher use could not be linked to this order; release it by hand if the order is cancelled.");
                     }
                 } finally {
                     int unused = redemption == null ? 0 : requestedPoints - pointsRedeemed;

@@ -41,7 +41,17 @@ class CheckoutVoucherTest {
     private static final LocalDate TODAY = LocalDate.now(Voucher.CAFE_ZONE);
 
     private final HttpClient client = HttpClient.newHttpClient();
-    private InMemoryVoucherDao vouchers;
+    private FlakyVoucherDao vouchers;
+
+    /** Gắn lượt vào mã đơn có thể thất bại (ví dụ database mất kết nối đúng lúc đó). */
+    private static final class FlakyVoucherDao extends InMemoryVoucherDao {
+        boolean failAttach;
+
+        @Override
+        public boolean attachOrder(int usageId, String orderCode) {
+            return !failAttach && super.attachOrder(usageId, orderCode);
+        }
+    }
     private VoucherService service;
     private InMemoryOrderDao orders;
     private ExecutorService executor;
@@ -54,7 +64,7 @@ class CheckoutVoucherTest {
         MenuItem drink = new MenuItem(DRINK_ID, "Bac xiu", "Coffee", 45_000, 15_000);
         drink.setInStock(true);
         menu.save(drink);
-        vouchers = new InMemoryVoucherDao();
+        vouchers = new FlakyVoucherDao();
         service = new VoucherService(vouchers, Clock.systemUTC());
         orders = new InMemoryOrderDao();
         server = HttpServer.create(new InetSocketAddress(0), 0);
@@ -116,6 +126,18 @@ class CheckoutVoucherTest {
         assertEquals("SALE10K", order.getVoucherCode());
         assertEquals(1, used(v));
         assertEquals(10_000, service.usageForOrder(code).orElseThrow().discountAmount());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void unattachedUseIsReportedAsAWarning() throws Exception {
+        // Đơn đã thu tiền nên không được hủy, nhưng lỗi gắn lượt phải được báo, không im lặng.
+        voucher("SALE10K", 10_000);
+        vouchers.failAttach = true;
+        HttpResponse<String> response = checkout(",\"voucherCode\":\"SALE10K\"");
+        assertEquals(200, response.statusCode(), response.body());
+        List<Object> warnings = (List<Object>) data(response).get("warnings");
+        assertTrue(warnings.stream().anyMatch(w -> String.valueOf(w).contains("voucher")), String.valueOf(warnings));
     }
 
     @Test

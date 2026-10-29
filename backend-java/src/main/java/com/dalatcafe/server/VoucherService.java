@@ -115,8 +115,9 @@ public class VoucherService {
         return new ApiException(400, "INVALID_VOUCHER", message);
     }
 
-    public void attachOrder(Redemption redemption, String orderCode) {
-        dao.attachOrder(redemption.usageId(), orderCode);
+    /** False khi không gắn được lượt vào đơn; khi đó hủy đơn sẽ không tự trả lượt. */
+    public boolean attachOrder(Redemption redemption, String orderCode) {
+        return dao.attachOrder(redemption.usageId(), orderCode);
     }
 
     public boolean release(Redemption redemption) {
