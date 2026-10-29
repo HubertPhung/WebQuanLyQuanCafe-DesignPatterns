@@ -13,7 +13,7 @@
     "graphify:update": "cd .. && graphify update . && node frontend-nextjs/scripts/localize-graphify-assets.mjs",
     "test:e2e": "node --env-file-if-exists=.env.local scripts/test-e2e-stack.mjs",
     "test:table-delivery": "tsx scripts/test-table-delivery.ts",
-    "test:vouchers": "tsx scripts/test-voucher-pricing.ts && tsx scripts/test-voucher-hold.ts",
+    "test:vouchers": "tsx scripts/test-voucher-pricing.ts && tsx scripts/test-voucher-hold.ts && tsx scripts/test-voucher-api.ts",
     "test:reservation-range": "tsx scripts/test-reservation-range.ts",
     "test:first-order": "node --conditions=react-server --import tsx scripts/test-first-online-order.ts"
   },

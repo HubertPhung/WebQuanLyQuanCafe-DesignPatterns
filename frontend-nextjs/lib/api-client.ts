@@ -403,12 +403,17 @@ export type VoucherVerdict = {
 // POST /api/vouchers/validate (công khai): xem trước voucher bằng đúng Strategy mà checkout dùng.
 // Java chỉ tin userId (giới hạn mỗi tài khoản) khi storefront gửi kèm service key.
 export function validateVoucher(code: string, subtotal: number, userId?: number): Promise<JavaResult<VoucherVerdict>> {
-  const service = userId === undefined ? undefined : storefrontService() ?? undefined
-  return request<VoucherVerdict>('/api/vouchers/validate', {
-    method: 'POST',
-    body: service ? { code, subtotal, userId } : { code, subtotal },
-    ...(service ?? {}),
-  })
+  if (userId === undefined) {
+    return request<VoucherVerdict>('/api/vouchers/validate', { method: 'POST', body: { code, subtotal } })
+  }
+  // Thiếu key thì Java không biết tài khoản, và khách đã đăng nhập sẽ bị báo "Đăng nhập để dùng mã
+  // này": báo lỗi cấu hình thay vì hỏi như khách vãng lai.
+  const service = storefrontService()
+  if (service === null) {
+    console.error('[voucher] AUTH_SERVICE_KEY is not configured; per-account voucher checks are refused.')
+    return Promise.resolve(serviceKeyMissing)
+  }
+  return request<VoucherVerdict>('/api/vouchers/validate', { method: 'POST', body: { code, subtotal, userId }, ...service })
 }
 
 // GET /api/vouchers/active (công khai): các mã đang chạy, cho giỏ hàng và trang tài khoản.
