@@ -157,6 +157,16 @@ abstract class VoucherDaoContract {
     }
 
     @Test
+    void duplicateOrderCodeFailsWithoutCounting() {
+        // Một đơn chỉ giữ một lượt; lần giữ thứ hai là lỗi lưu trữ, không phải "mã không tồn tại".
+        IVoucherDao dao = newDao();
+        int id = saved(dao, voucher("SALE1111", null, null));
+        assertEquals(IVoucherDao.RedeemStatus.REDEEMED, dao.redeem(id, null, "ORD-1", 10_000).status());
+        assertEquals(IVoucherDao.RedeemStatus.FAILED, dao.redeem(id, null, "ORD-1", 10_000).status());
+        assertEquals(1, dao.findById(id).orElseThrow().getUsedCount());
+    }
+
+    @Test
     void saveRefusesMaxUsesBelowUsedCount() {
         // Kiểm tra nằm trong chính lần ghi, nên một lượt redeem chen vào giữa không làm vượt giới hạn.
         IVoucherDao dao = newDao();

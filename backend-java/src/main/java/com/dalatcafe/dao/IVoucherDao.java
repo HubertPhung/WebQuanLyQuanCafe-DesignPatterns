@@ -12,7 +12,8 @@ import java.util.Optional;
  * chạy cùng lúc.
  */
 public interface IVoucherDao {
-    enum RedeemStatus { REDEEMED, SOLD_OUT, ACCOUNT_LIMIT, UNKNOWN_VOUCHER }
+    /** FAILED: không ghi được (lỗi database, hoặc đơn này đã giữ một lượt rồi); không có lượt nào bị trừ. */
+    enum RedeemStatus { REDEEMED, SOLD_OUT, ACCOUNT_LIMIT, UNKNOWN_VOUCHER, FAILED }
 
     record RedeemResult(RedeemStatus status, int usageId) {
     }

@@ -93,6 +93,8 @@ public class InMemoryVoucherDao implements IVoucherDao {
         synchronized (db) {
             Voucher voucher = db.getVouchers().get(voucherId);
             if (voucher == null) return new RedeemResult(RedeemStatus.UNKNOWN_VOUCHER, 0);
+            // Như cột order_code UNIQUE bên PostgreSQL: mỗi đơn chỉ giữ một lượt.
+            if (orderCode != null && findUsageByOrder(orderCode).isPresent()) return new RedeemResult(RedeemStatus.FAILED, 0);
             if (voucher.isSoldOut()) return new RedeemResult(RedeemStatus.SOLD_OUT, 0);
             if (userId != null && voucher.getPerAccountLimit() != null
                     && countUsages(voucherId, userId) >= voucher.getPerAccountLimit()) {

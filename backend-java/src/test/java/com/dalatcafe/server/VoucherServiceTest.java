@@ -137,6 +137,20 @@ class VoucherServiceTest {
     }
 
     @Test
+    void storageFailureIsServiceUnavailable() {
+        save("SALE1111", VoucherType.FIXED, 10_000);
+        VoucherService failing = new VoucherService(new InMemoryVoucherDao() {
+            @Override
+            public RedeemResult redeem(int voucherId, Integer userId, String orderCode, double discountAmount) {
+                return new RedeemResult(RedeemStatus.FAILED, 0);
+            }
+        }, Clock.fixed(Instant.parse("2026-11-05T03:00:00Z"), ZoneOffset.UTC));
+        ApiException e = assertThrows(ApiException.class, () -> failing.redeem("SALE1111", 100_000, null, "ORD-1", true));
+        assertEquals(503, e.getStatus());
+        assertEquals("DATABASE_UNAVAILABLE", e.getCode());
+    }
+
+    @Test
     void releaseAndAttachRoundTrip() {
         Voucher v = save("SALE1111", VoucherType.FIXED, 10_000);
         VoucherService.Redemption redemption = service.redeem("SALE1111", 100_000, null, null, false);

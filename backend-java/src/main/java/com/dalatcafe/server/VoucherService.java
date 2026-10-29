@@ -106,6 +106,8 @@ public class VoucherService {
             case SOLD_OUT -> throw invalid("Mã đã hết lượt sử dụng.");
             case ACCOUNT_LIMIT -> throw invalid("Tài khoản của bạn đã dùng hết lượt cho mã này.");
             case UNKNOWN_VOUCHER -> throw invalid("Mã không tồn tại.");
+            case FAILED -> throw new ApiException(503, "DATABASE_UNAVAILABLE",
+                    "Chưa giữ được lượt dùng mã lúc này. Vui lòng thử lại sau ít phút.");
         };
     }
 

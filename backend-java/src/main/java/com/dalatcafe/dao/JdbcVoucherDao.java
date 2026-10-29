@@ -166,7 +166,10 @@ public class JdbcVoucherDao implements IVoucherDao {
 
     @Override
     public RedeemResult redeem(int voucherId, Integer userId, String orderCode, double discountAmount) {
-        RedeemResult failed = new RedeemResult(RedeemStatus.UNKNOWN_VOUCHER, 0);
+        // Lỗi SQL (mất kết nối, trùng order_code) rollback cả transaction và báo FAILED, không phải
+        // "mã không tồn tại".
+        RedeemResult failed = new RedeemResult(RedeemStatus.FAILED, 0);
+        RedeemResult unknown = new RedeemResult(RedeemStatus.UNKNOWN_VOUCHER, 0);
         return inTransaction("redeeming voucher " + voucherId, failed, conn -> {
             Integer maxUses;
             Integer perAccount;
@@ -175,7 +178,7 @@ public class JdbcVoucherDao implements IVoucherDao {
                     "SELECT max_uses, per_account_limit, used_count FROM vouchers WHERE id = ? FOR UPDATE")) {
                 lock.setInt(1, voucherId);
                 try (ResultSet rs = lock.executeQuery()) {
-                    if (!rs.next()) return failed;
+                    if (!rs.next()) return unknown;
                     maxUses = (Integer) rs.getObject("max_uses");
                     perAccount = (Integer) rs.getObject("per_account_limit");
                     used = rs.getInt("used_count");
