@@ -64,6 +64,8 @@ public class InMemoryVoucherDao implements IVoucherDao {
             } else {
                 Voucher current = db.getVouchers().get(stored.getId());
                 if (current == null) return false;
+                // Kiểm tra cùng lúc với lần ghi, dưới cùng khóa với redeem.
+                if (stored.getMaxUses() != null && stored.getMaxUses() < current.getUsedCount()) return false;
                 stored.setUsedCount(current.getUsedCount());
                 stored.setCreatedAt(current.getCreatedAt());
             }
@@ -75,8 +77,13 @@ public class InMemoryVoucherDao implements IVoucherDao {
     @Override
     public boolean deleteById(int id) {
         synchronized (db) {
-            if (db.getVouchers().remove(id) == null) return false;
-            db.getVoucherUsages().values().removeIf(usage -> usage.voucherId() == id);
+            Voucher voucher = db.getVouchers().get(id);
+            // Mã đã có lượt dùng không bị xóa (chỉ tắt), để lượt vừa giữ và lịch sử không mất theo.
+            if (voucher == null || voucher.getUsedCount() > 0
+                    || db.getVoucherUsages().values().stream().anyMatch(usage -> usage.voucherId() == id)) {
+                return false;
+            }
+            db.getVouchers().remove(id);
             return true;
         }
     }

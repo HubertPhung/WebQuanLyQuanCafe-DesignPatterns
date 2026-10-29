@@ -155,4 +155,30 @@ abstract class VoucherDaoContract {
         assertTrue(dao.deleteById(id));
         assertTrue(dao.findById(id).isEmpty());
     }
+
+    @Test
+    void saveRefusesMaxUsesBelowUsedCount() {
+        // Kiểm tra nằm trong chính lần ghi, nên một lượt redeem chen vào giữa không làm vượt giới hạn.
+        IVoucherDao dao = newDao();
+        int id = saved(dao, voucher("SALE1111", 5, null));
+        dao.redeem(id, null, "ORD-1", 10_000);
+        dao.redeem(id, null, "ORD-2", 10_000);
+        Voucher lowered = dao.findById(id).orElseThrow();
+        lowered.setMaxUses(1);
+        assertFalse(dao.save(lowered));
+        assertEquals(5, dao.findById(id).orElseThrow().getMaxUses());
+        lowered.setMaxUses(2);
+        assertTrue(dao.save(lowered));
+    }
+
+    @Test
+    void deleteRefusesUsedVoucherAndKeepsUsages() {
+        // Một lượt redeem vừa giữ không được bị xóa theo voucher (lịch sử và mức giảm của đơn COD).
+        IVoucherDao dao = newDao();
+        int id = saved(dao, voucher("SALE1111", null, null));
+        dao.redeem(id, null, "ORD-1", 10_000);
+        assertFalse(dao.deleteById(id));
+        assertTrue(dao.findById(id).isPresent());
+        assertTrue(dao.findUsageByOrder("ORD-1").isPresent());
+    }
 }

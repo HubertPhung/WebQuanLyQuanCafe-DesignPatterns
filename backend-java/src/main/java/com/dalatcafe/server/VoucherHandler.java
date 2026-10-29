@@ -125,20 +125,35 @@ public class VoucherHandler extends ApiHandler {
             throw conflict("Mã đã có người dùng nên không đổi được tên mã.");
         }
         if (edited.getMaxUses() != null && edited.getMaxUses() < current.getUsedCount()) {
-            throw ApiException.badRequest("Tổng số lượt không được nhỏ hơn số lượt đã dùng (" + current.getUsedCount() + ").");
+            throw maxUsesTooLow(current.getUsedCount());
         }
-        if (!dao.save(edited)) throw conflict("Mã " + edited.getCode() + " đã tồn tại.");
+        if (!dao.save(edited)) {
+            // DAO kiểm tra lại số lượt ngay lúc ghi: một lượt redeem có thể đã chen vào sau bước trên.
+            Voucher fresh = find(id);
+            if (edited.getMaxUses() != null && edited.getMaxUses() < fresh.getUsedCount()) {
+                throw maxUsesTooLow(fresh.getUsedCount());
+            }
+            throw conflict("Mã " + edited.getCode() + " đã tồn tại.");
+        }
         sendOk(exchange, 200, toJson(find(id)), "Voucher updated");
     }
 
-    /** Mã chưa ai dùng thì xóa hẳn; đã có lượt dùng thì chỉ tắt, để lịch sử đơn vẫn còn tên mã. */
+    private static ApiException maxUsesTooLow(int used) {
+        return ApiException.badRequest("Tổng số lượt không được nhỏ hơn số lượt đã dùng (" + used + ").");
+    }
+
+    /**
+     * Mã chưa ai dùng thì xóa hẳn; đã có lượt dùng thì chỉ tắt, để lịch sử đơn vẫn còn tên mã. DAO
+     * từ chối xóa nếu một lượt redeem vừa chen vào, khi đó mã cũng được tắt.
+     */
     private void delete(HttpExchange exchange, int id) throws IOException {
-        Voucher current = find(id);
+        find(id);
         Map<String, Object> data = new LinkedHashMap<>();
-        if (current.getUsedCount() == 0 && dao.findUsages(id).isEmpty()) {
-            data.put("deleted", dao.deleteById(id));
+        if (dao.deleteById(id)) {
+            data.put("deleted", true);
             data.put("deactivated", false);
         } else {
+            Voucher current = find(id);
             current.setActive(false);
             dao.save(current);
             data.put("deleted", false);

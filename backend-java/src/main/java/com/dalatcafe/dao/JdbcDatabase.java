@@ -356,7 +356,7 @@ public class JdbcDatabase {
             );
             CREATE TABLE IF NOT EXISTS voucher_usages (
                 id SERIAL PRIMARY KEY,
-                voucher_id INT NOT NULL REFERENCES vouchers(id) ON DELETE CASCADE,
+                voucher_id INT NOT NULL REFERENCES vouchers(id),
                 user_id INT,
                 order_code VARCHAR(50) UNIQUE,
                 discount_amount NUMERIC(12,2) NOT NULL DEFAULT 0,
@@ -364,6 +364,15 @@ public class JdbcDatabase {
             );
             CREATE INDEX IF NOT EXISTS idx_voucher_usages_voucher_user ON voucher_usages(voucher_id, user_id);
             ALTER TABLE orders ADD COLUMN IF NOT EXISTS voucher_code VARCHAR(30);
+            -- Usages must never vanish with their voucher; databases created with ON DELETE CASCADE are switched over.
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'voucher_usages_voucher_id_fkey' AND confdeltype = 'c') THEN
+                    ALTER TABLE voucher_usages DROP CONSTRAINT voucher_usages_voucher_id_fkey;
+                    ALTER TABLE voucher_usages ADD CONSTRAINT voucher_usages_voucher_id_fkey
+                        FOREIGN KEY (voucher_id) REFERENCES vouchers(id);
+                END IF;
+            END $$;
 
             DO $$
             BEGIN

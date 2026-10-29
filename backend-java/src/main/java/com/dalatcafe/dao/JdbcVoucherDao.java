@@ -122,12 +122,16 @@ public class JdbcVoucherDao implements IVoucherDao {
                 }
                 return true;
             }
+            // Điều kiện used_count nằm trong chính câu UPDATE (khóa dòng như redeem), nên một lượt
+            // redeem chen vào không thể làm số lượt đã dùng vượt tổng lượt mới.
             String sql = "UPDATE vouchers SET code = ?, type = ?, value = ?, max_discount = ?, min_order = ?, max_uses = ?, "
                     + "per_account_limit = ?, first_online_order_only = ?, start_date = ?, end_date = ?, description = ?, "
-                    + "active = ? WHERE id = ?";
+                    + "active = ? WHERE id = ? AND (CAST(? AS INT) IS NULL OR used_count <= CAST(? AS INT))";
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 bindFields(ps, voucher);
                 ps.setInt(13, voucher.getId());
+                ps.setObject(14, voucher.getMaxUses(), Types.INTEGER);
+                ps.setObject(15, voucher.getMaxUses(), Types.INTEGER);
                 return ps.executeUpdate() == 1;
             }
         });
@@ -151,7 +155,9 @@ public class JdbcVoucherDao implements IVoucherDao {
     @Override
     public boolean deleteById(int id) {
         return inTransaction("deleting voucher " + id, false, conn -> {
-            try (PreparedStatement ps = conn.prepareStatement("DELETE FROM vouchers WHERE id = ?")) {
+            // Chỉ xóa mã chưa ai dùng; mã có lượt dùng chỉ được tắt, để lượt vừa giữ không mất theo.
+            try (PreparedStatement ps = conn.prepareStatement("DELETE FROM vouchers WHERE id = ? AND used_count = 0 "
+                    + "AND NOT EXISTS (SELECT 1 FROM voucher_usages WHERE voucher_id = vouchers.id)")) {
                 ps.setInt(1, id);
                 return ps.executeUpdate() == 1;
             }
