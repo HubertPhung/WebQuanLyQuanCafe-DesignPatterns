@@ -17,6 +17,7 @@ import {
 import { fetchAnalytics, fetchCustomers, fetchReservations, fetchTables } from '@/lib/api-client'
 import { listSyncQueue } from './local-links'
 import { listOrderContacts, type OrderContact } from '@/lib/orders/online-contacts'
+import { reservationEnd } from '@/lib/reservation-rules'
 
 const DAY = 24 * 60 * 60 * 1000
 
@@ -273,8 +274,11 @@ export type ReservationView = {
   customer: string
   contact: string
   email: string
+  // Ngày và khoảng giờ đã định dạng, ví dụ "05/11/2026 18:00 – 19:30".
   dateTime: string
   scheduledAt: string
+  // Giờ kết thúc (ISO); phiếu cũ là giờ bắt đầu + 2 giờ.
+  endAt: string
   table: string
   tableId: number | null
   guests: number
@@ -302,6 +306,11 @@ function formatSlot(date: Date) {
   }).format(date)
 }
 
+function formatRange(start: Date, end: Date) {
+  const endClock = new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' }).format(end)
+  return `${formatSlot(start)} – ${endClock}`
+}
+
 // Phiếu đặt bàn của chi nhánh đang chọn.
 export async function getReservations(): Promise<{ reservations: ReservationView[]; javaOnline: boolean }> {
   await assertAdminAccess()
@@ -312,8 +321,9 @@ export async function getReservations(): Promise<{ reservations: ReservationView
     customer: r.customer,
     contact: r.contact,
     email: r.email ?? '',
-    dateTime: formatSlot(r.dateTime),
+    dateTime: formatRange(r.dateTime, reservationEnd(r)),
     scheduledAt: r.dateTime.toISOString(),
+    endAt: reservationEnd(r).toISOString(),
     table: r.tableName.replace('Table', 'Bàn'),
     tableId: r.tableId,
     tableIds: r.tableIds,
@@ -331,8 +341,9 @@ export async function getReservations(): Promise<{ reservations: ReservationView
     customer: r.customer,
     contact: r.contact,
     email: r.email ?? '',
-    dateTime: formatSlot(new Date(r.dateTime)),
+    dateTime: formatRange(new Date(r.dateTime), reservationEnd({ dateTime: new Date(r.dateTime), endTime: r.endTime ? new Date(r.endTime) : null })),
     scheduledAt: r.dateTime,
+    endAt: reservationEnd({ dateTime: new Date(r.dateTime), endTime: r.endTime ? new Date(r.endTime) : null }).toISOString(),
     table: r.table ?? (r.tableId ? `Bàn ${String(r.tableId).padStart(2, '0')}` : '—'),
     tableId: r.tableId,
     tableIds: r.tableIds,

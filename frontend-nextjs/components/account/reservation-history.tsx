@@ -6,6 +6,7 @@ import { branchById } from '@/lib/branches'
 const slotFormat = new Intl.DateTimeFormat('vi-VN', {
   timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
 })
+const endFormat = new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })
 
 export function ReservationHistory({ reservations, unavailable }: { reservations: AccountReservation[]; unavailable: boolean }) {
   return (
@@ -26,7 +27,7 @@ export function ReservationHistory({ reservations, unavailable }: { reservations
                 <Badge variant="outline" className="text-[11px] font-semibold">{reservation.status}</Badge>
               </div>
               <p className="flex items-center gap-2 text-xs font-semibold text-[#3E2723]">
-                <Clock className="size-4" />Giờ nhận bàn: {slotFormat.format(new Date(reservation.scheduledAt))}
+                <Clock className="size-4" />Giờ nhận bàn: {slotFormat.format(new Date(reservation.scheduledAt))} – {endFormat.format(new Date(reservation.endAt))}
               </p>
               <p className="flex items-center gap-2 text-xs text-stone-700">
                 <Users className="size-4" />{reservation.table.replaceAll('Table', 'Bàn')} · {reservation.guests} khách

@@ -710,6 +710,16 @@ async function runAuthTests() {
       },
     },
     {
+      id: 'TC-RES-END-01', name: 'Admin Reservations Page Shows Time Ranges',
+      run: async () => {
+        const res = await fetchPage(`${BASE_URL}/admin/reservations`, manual(await sessionCookie('ADMIN')))
+        const html = await res.text()
+        // Phiếu demo RES-002 đặt 18:00 – 19:30; React chèn comment giữa các phần văn bản.
+        const text = html.replace(/<!-- -->/g, '')
+        return [res.status === 200 && /\d{2}:\d{2} – \d{2}:\d{2}/.test(text), `status=${res.status}`]
+      },
+    },
+    {
       id: 'TC-AUTH-04', name: 'Token Signed With Another Secret Is Rejected',
       run: async () => {
         const forged = await sessionCookie('ADMIN', new TextEncoder().encode('an-attacker-chosen-secret-0123456789-xyz'))

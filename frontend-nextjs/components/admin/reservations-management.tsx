@@ -26,13 +26,13 @@ import type { ReservationView } from '@/lib/admin/queries'
 import type { FloorTable } from '@/lib/db/schema'
 import type { ReservationStatusLabel } from '@/lib/db/mock-store'
 import { cn } from '@/lib/utils'
-import { hasReservationStarted, reservationSlotsOverlap } from '@/lib/reservation-rules'
+import { defaultEndSlot, hasReservationStarted, reservationRangeError, reservationRangesOverlap } from '@/lib/reservation-rules'
 import styles from './reservations-management.module.css'
 
 export type ReservationStatus = ReservationStatusLabel
 type Reservation = ReservationView
 
-const emptyForm = { customer: '', contact: '', email: '', date: '', time: '10:00', guests: '2', tableId: '', note: '' }
+const emptyForm = { customer: '', contact: '', email: '', date: '', time: '10:00', endTime: '12:00', guests: '2', tableId: '', note: '' }
 // Giá trị tableId để giữ các bàn mà phiếu ghép đang có.
 const KEEP_GROUP = 'group'
 
@@ -63,7 +63,7 @@ function ReservationSchedule({ reservation: r }: { reservation: Reservation }) {
   if (Number.isNaN(date.getTime())) return <span>{r.dateTime}</span>
   return (
     <time className={styles.schedule} dateTime={r.scheduledAt}>
-      <strong><Clock aria-hidden="true" />{slotTime.format(date)}</strong>
+      <strong><Clock aria-hidden="true" />{slotTime.format(date)} – {slotTime.format(new Date(r.endAt))}</strong>
       <span>{slotDate.format(date)}</span>
     </time>
   )
@@ -168,9 +168,17 @@ export function ReservationsManagement({
   useEffect(() => { setReservations(initial) }, [initial])
 
   const requestedTime = new Date(`${form.date}T${form.time}:00+07:00`)
+  const requestedEnd = new Date(`${form.date}T${form.endTime}:00+07:00`)
+  const rangeError = form.date && form.time && form.endTime ? reservationRangeError(requestedTime, requestedEnd) : null
   const bookedTableIds = new Set(reservations
-    .filter(res => res.id !== editing?.id && res.status !== 'Đã hủy' && reservationSlotsOverlap(new Date(res.scheduledAt), requestedTime))
+    .filter(res => res.id !== editing?.id && res.status !== 'Đã hủy'
+      && reservationRangesOverlap(new Date(res.scheduledAt), new Date(res.endAt), requestedTime, requestedEnd))
     .flatMap(res => res.tableIds?.length ? res.tableIds : res.tableId ? [res.tableId] : []))
+  // Đổi giờ đến mà giờ kết thúc không còn cách đủ 30 phút thì gợi ý lại giờ kết thúc.
+  const chooseStart = (time: string) => {
+    const tooClose = reservationRangeError(new Date(`2000-01-01T${time}:00+07:00`), new Date(`2000-01-01T${form.endTime}:00+07:00`)) !== null
+    setForm({ ...form, time, endTime: tooClose ? defaultEndSlot(time) ?? form.endTime : form.endTime })
+  }
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000)
@@ -237,6 +245,7 @@ export function ReservationsManagement({
       email: res.email,
       date: formDate.format(at),
       time: formTime.format(at),
+      endTime: formTime.format(new Date(res.endAt)),
       guests: String(res.guests),
       tableId: tableIds.length > 1 ? KEEP_GROUP : String(tableIds[0] ?? ''),
       note: res.note,
@@ -261,6 +270,7 @@ export function ReservationsManagement({
       toast.error('Nhập đủ tên, số điện thoại, ngày giờ và bàn.')
       return
     }
+    if (rangeError) { toast.error(rangeError); return }
     if (chosenTaken) { toast.error('Bàn đã được đặt trong khung giờ này. Vui lòng chọn bàn hoặc giờ khác.'); return }
     const input = {
       customer: form.customer,
@@ -269,6 +279,7 @@ export function ReservationsManagement({
       note: form.note,
       // Giờ địa phương ở quán (UTC+7), đúng như OperatingHoursValidator bên Java mong đợi.
       dateTime: new Date(`${form.date}T${form.time}:00+07:00`).toISOString(),
+      endTime: requestedEnd.toISOString(),
       guests,
       tableId: chosenTables[0],
       tableIds: chosenTables,
@@ -566,7 +577,12 @@ export function ReservationsManagement({
             </label>
             <label className="space-y-1">
               <span className="font-semibold text-stone-600">Giờ đến</span>
-              <input required type="time" aria-label="Giờ đến" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} className="w-full h-9 rounded-lg border border-stone-200 px-2.5 focus:outline-none focus:border-[#5A3E2B]" />
+              <input required type="time" aria-label="Giờ đến" value={form.time} onChange={(e) => chooseStart(e.target.value)} className="w-full h-9 rounded-lg border border-stone-200 px-2.5 focus:outline-none focus:border-[#5A3E2B]" />
+            </label>
+            <label className="space-y-1">
+              <span className="font-semibold text-stone-600">Giờ kết thúc</span>
+              <input required type="time" aria-label="Giờ kết thúc" value={form.endTime} onChange={(e) => setForm({ ...form, endTime: e.target.value })} className="w-full h-9 rounded-lg border border-stone-200 px-2.5 focus:outline-none focus:border-[#5A3E2B]" />
+              {rangeError && <span className="block text-[11px] text-rose-700">{rangeError}</span>}
             </label>
             <label className="space-y-1">
               <span className="font-semibold text-stone-600">Bàn</span>

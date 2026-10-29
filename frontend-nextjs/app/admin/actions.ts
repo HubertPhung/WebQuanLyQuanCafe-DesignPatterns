@@ -68,7 +68,7 @@ import { saveOrderContact, type Fulfilment } from '@/lib/orders/online-contacts'
 import { dequeueSync, enqueueSync, listSyncQueue } from '@/lib/admin/local-links'
 import { normalizeMenuName, resolveJavaMenuIds } from '@/lib/admin/menu-link'
 import { deleteMenuItemRecord, persistMenuItem, updateMenuItemRecord, type MenuCatalogInput } from '@/lib/admin/menu-store'
-import { hasReservationTimePassed } from '@/lib/reservation-rules'
+import { hasReservationTimePassed, reservationRangeError } from '@/lib/reservation-rules'
 import { getAdminBranch, ADMIN_BRANCH_COOKIE } from '@/lib/admin/branch'
 import { DEFAULT_BRANCH_ID, branchById, isBranchId, type BranchId } from '@/lib/branches'
 import {
@@ -745,10 +745,21 @@ type NewReservationInput = {
   email?: string
   note?: string
   dateTime: string
+  // Giờ kết thúc (ISO-8601); không gửi thì Java giữ bàn hai giờ, hoặc giữ thời lượng cũ khi sửa.
+  endTime?: string
   guests: number
   tableId: number
   // Phiếu ghép nhiều bàn; khi đó tableId là bàn đầu tiên.
   tableIds?: number[]
+}
+
+// Giờ kết thúc nếu có gửi, kiểm tra cùng quy tắc với OperatingHoursValidator bên Java.
+function bookingEnd(input: NewReservationInput, dateTime: Date): Date | undefined {
+  if (!input.endTime) return undefined
+  const endTime = new Date(input.endTime)
+  const error = reservationRangeError(dateTime, endTime)
+  if (error) throw new Error(error)
+  return endTime
 }
 
 // Dùng chung cho tạo và sửa phiếu đặt bàn ở trang admin.
@@ -770,6 +781,7 @@ function bookingFields(input: NewReservationInput) {
     email: input.email?.trim() || undefined,
     note: input.note?.trim().slice(0, 500) || undefined,
     dateTime,
+    endTime: bookingEnd(input, dateTime),
     guests: input.guests,
     tableId: tableIds[0],
     tableIds,
@@ -788,7 +800,7 @@ export async function updateReservation(code: string, source: 'java' | 'local', 
       refresh()
       return res.ok ? { ok: true, message: `Đã lưu phiếu ${code}.` } : { ok: false, error: res.error ?? 'Không lưu được phiếu.' }
     }
-    const remote = await updateJavaReservation(code, { ...booking, dateTime: booking.dateTime.toISOString() })
+    const remote = await updateJavaReservation(code, { ...booking, dateTime: booking.dateTime.toISOString(), endTime: booking.endTime?.toISOString() })
     if (!remote.ok) {
       return { ok: false, error: remote.unreachable ? 'Backend Java chưa phản hồi, phiếu chưa thay đổi. Vui lòng thử lại.' : remote.error }
     }
@@ -818,6 +830,7 @@ export async function createReservation(input: NewReservationInput): Promise<Act
     if (hasReservationTimePassed(dateTime)) {
       throw new Error('Choose a date and time that has not passed yet.')
     }
+    const endTime = bookingEnd(input, dateTime)
 
     const booking = {
       customer,
@@ -825,6 +838,7 @@ export async function createReservation(input: NewReservationInput): Promise<Act
       email: input.email?.trim() || undefined,
       note: input.note?.trim().slice(0, 500) || undefined,
       dateTime: dateTime.toISOString(),
+      endTime: endTime?.toISOString(),
       guests: input.guests,
       tableId: input.tableId,
       branch: await getAdminBranch(),
@@ -844,7 +858,7 @@ export async function createReservation(input: NewReservationInput): Promise<Act
     }
 
     // Chế độ demo không có database: kho cục bộ áp cùng chuỗi kiểm tra với mặc định của Java.
-    const res = createMockReservation({ ...booking, email: booking.email ?? null, note: booking.note ?? null, dateTime })
+    const res = createMockReservation({ ...booking, email: booking.email ?? null, note: booking.note ?? null, dateTime, endTime: endTime ?? null })
     refresh()
     return res.ok ? { ok: true, message: `Reservation ${res.code} saved locally.` } : { ok: false, error: res.error ?? 'Failed' }
   } catch (error) {
