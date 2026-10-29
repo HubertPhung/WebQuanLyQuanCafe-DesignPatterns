@@ -14,6 +14,7 @@ import {
   ChevronsUpDown,
   ShieldCheck,
   ReceiptText,
+  TicketPercent,
 } from 'lucide-react'
 import {
   Sidebar,
@@ -39,6 +40,7 @@ export const overviewNav = [
 
 export const storeNav = [
   { href: '/admin/menu', labelVi: 'Thực đơn', subVi: 'Món & danh mục', icon: UtensilsCrossed },
+  { href: '/admin/vouchers', labelVi: 'Voucher', subVi: 'Mã giảm giá theo dịp', icon: TicketPercent },
   { href: '/admin/tables', labelVi: 'Bàn ăn', subVi: 'Quản lý bàn & khu vực', icon: Armchair },
   { href: '/admin/reservations', labelVi: 'Đặt bàn', subVi: 'Quản lý đặt chỗ', icon: CalendarCheck, badgeKey: 'reservations' as const },
 ]

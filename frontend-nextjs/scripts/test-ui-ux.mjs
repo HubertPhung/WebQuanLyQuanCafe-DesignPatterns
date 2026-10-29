@@ -695,6 +695,21 @@ async function runAuthTests() {
       },
     },
     {
+      id: 'TC-VOUCHER-03', name: 'Manager Opens Voucher Management Page',
+      run: async () => {
+        const res = await fetchPage(`${BASE_URL}/admin/vouchers`, manual(await sessionCookie('MANAGER')))
+        const html = await res.text()
+        return [res.status === 200 && html.includes('Quản lý Voucher') && html.includes('Thêm voucher'), `status=${res.status}`]
+      },
+    },
+    {
+      id: 'TC-VOUCHER-04', name: 'Staff Cannot Open Voucher Management Page',
+      run: async () => {
+        const res = await fetchPage(`${BASE_URL}/admin/vouchers`, manual(await sessionCookie('STAFF')))
+        return [res.status === 307 && target(res).includes('/admin?denied=1'), `status=${res.status} -> ${target(res)}`]
+      },
+    },
+    {
       id: 'TC-AUTH-04', name: 'Token Signed With Another Secret Is Rejected',
       run: async () => {
         const forged = await sessionCookie('ADMIN', new TextEncoder().encode('an-attacker-chosen-secret-0123456789-xyz'))

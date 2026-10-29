@@ -411,6 +411,43 @@ export function fetchActiveVouchers(): Promise<JavaResult<ActiveVoucher[]>> {
   return request<ActiveVoucher[]>('/api/vouchers/active', { method: 'GET', auth: false })
 }
 
+export type VoucherState = 'UPCOMING' | 'RUNNING' | 'EXPIRED' | 'SOLD_OUT' | 'DISABLED'
+
+export type AdminVoucher = ActiveVoucher & {
+  id: number
+  maxUses: number | null
+  startDate: string
+  active: boolean
+  usedCount: number
+  state: VoucherState
+}
+
+export type VoucherInput = Omit<AdminVoucher, 'id' | 'usedCount' | 'state'>
+
+export type VoucherUsageRow = { userId: number | null; orderCode: string | null; discountAmount: number; createdAt: string }
+
+// Quản lý voucher (MANAGER+), gọi bằng token của người đang đăng nhập.
+export function fetchVouchers(): Promise<JavaResult<AdminVoucher[]>> {
+  return request<AdminVoucher[]>('/api/vouchers', { method: 'GET' })
+}
+
+export function createVoucher(input: VoucherInput): Promise<JavaResult<AdminVoucher>> {
+  return request<AdminVoucher>('/api/vouchers', { method: 'POST', body: input })
+}
+
+export function updateVoucher(id: number, input: VoucherInput): Promise<JavaResult<AdminVoucher>> {
+  return request<AdminVoucher>(`/api/vouchers/${id}`, { method: 'PUT', body: input })
+}
+
+// Mã đã có người dùng thì Java chỉ tắt chứ không xóa hẳn.
+export function deleteVoucher(id: number): Promise<JavaResult<{ deleted: boolean; deactivated: boolean }>> {
+  return request<{ deleted: boolean; deactivated: boolean }>(`/api/vouchers/${id}`, { method: 'DELETE' })
+}
+
+export function fetchVoucherUsages(id: number): Promise<JavaResult<VoucherUsageRow[]>> {
+  return request<VoucherUsageRow[]>(`/api/vouchers/${id}/usages`, { method: 'GET' })
+}
+
 export type VoucherRedemption = { usageId: number; discountAmount: number; code: string }
 
 // POST /api/vouchers/redeem (service key): đơn COD giữ một lượt ngay lúc khách đặt.

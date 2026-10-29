@@ -24,6 +24,7 @@ const adminRules: { prefix: string; minimum: Role }[] = [
   { prefix: '/admin/users', minimum: 'ADMIN' },
   { prefix: '/admin/settings', minimum: 'ADMIN' },
   { prefix: '/admin/analytics', minimum: 'MANAGER' },
+  { prefix: '/admin/vouchers', minimum: 'MANAGER' },
 ]
 
 /** Vai trò mà một đường dẫn cần, hoặc null khi ai cũng vào được. */
