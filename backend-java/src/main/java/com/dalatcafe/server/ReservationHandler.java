@@ -187,10 +187,13 @@ public class ReservationHandler extends ApiHandler {
             edited.setEmail(str(body, "email"));
             edited.setNote(str(body, "note"));
             edited.setDateTime(parseDateTime(requireStr(body, "dateTime")));
-            // Không gửi giờ kết thúc thì phiếu giữ nguyên thời lượng cũ, dời theo giờ bắt đầu mới.
+            // Không gửi giờ kết thúc thì phiếu giữ nguyên thời lượng cũ, dời theo giờ bắt đầu mới. Phiếu
+            // cũ chưa lưu giờ kết thúc nhận mặc định như khi đặt (cắt về giờ đóng cửa), để phiếu buổi
+            // tối vẫn sửa được.
             Instant requestedEnd = parseEndTime(body);
-            edited.setEndTime(requestedEnd != null ? requestedEnd
-                    : edited.getDateTime().plus(java.time.Duration.between(current.getDateTime(), current.getEndTime())));
+            Instant keptEnd = current.getStoredEndTime() == null ? defaultEndTime(edited.getDateTime())
+                    : edited.getDateTime().plus(java.time.Duration.between(current.getDateTime(), current.getStoredEndTime()));
+            edited.setEndTime(requestedEnd != null ? requestedEnd : keptEnd);
             edited.setGuests(requireInt(body, "guests"));
             resolveTable(body, edited);
             ValidationResult result = validationChain.validate(edited);

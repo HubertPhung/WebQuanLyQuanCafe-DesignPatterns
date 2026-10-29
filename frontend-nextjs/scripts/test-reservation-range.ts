@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
+import { createMockReservation, getMockReservations, updateMockReservation } from '../lib/db/mock-store'
 import {
+  defaultReservationEnd,
   defaultEndSlot,
   endSlotsAfter,
   reservationEnd,
@@ -33,5 +35,18 @@ assert.equal(reservationRangesOverlap(at('18:00'), at('19:00'), at('18:45'), at(
 
 assert.equal(reservationEnd({ dateTime: at('18:00') }).getTime(), at('18:00').getTime() + RESERVATION_DEFAULT_LENGTH_MS)
 assert.equal(reservationEnd({ dateTime: at('18:00'), endTime: at('18:45') }).getTime(), at('18:45').getTime())
+
+// Phiếu cũ 20:30 không lưu giờ kết thúc vẫn sửa được (giờ kết thúc mặc định cắt về 22:00), như Java.
+assert.equal(defaultReservationEnd(at('20:30')).getTime(), at('22:00').getTime())
+const evening = new Date(Date.now() + 3 * 86_400_000)
+const eveningDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(evening)
+const legacyStart = at('20:30', eveningDay)
+const created = createMockReservation({ customer: 'Khach cu', contact: '0901234567', email: null, note: null, dateTime: legacyStart, guests: 2, tableId: 2 })
+assert.equal(created.ok, true, created.error)
+const legacy = getMockReservations().find(reservation => reservation.code === created.code)!
+legacy.endTime = null
+const edited = updateMockReservation(created.code!, { customer: 'Khach cu', contact: '0909999999', email: null, note: null, dateTime: legacyStart, guests: 2, tableId: 2 })
+assert.equal(edited.ok, true, edited.error)
+assert.equal(legacy.endTime?.getTime(), at('22:00', eveningDay).getTime())
 
 console.log('reservation range: all checks passed')

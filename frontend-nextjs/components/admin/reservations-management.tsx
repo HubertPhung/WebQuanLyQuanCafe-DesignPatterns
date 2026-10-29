@@ -26,7 +26,7 @@ import type { ReservationView } from '@/lib/admin/queries'
 import type { FloorTable } from '@/lib/db/schema'
 import type { ReservationStatusLabel } from '@/lib/db/mock-store'
 import { cn } from '@/lib/utils'
-import { defaultEndSlot, hasReservationStarted, reservationRangeError, reservationRangesOverlap } from '@/lib/reservation-rules'
+import { defaultEndSlot, defaultReservationEnd, hasReservationStarted, reservationRangeError, reservationRangesOverlap } from '@/lib/reservation-rules'
 import styles from './reservations-management.module.css'
 
 export type ReservationStatus = ReservationStatusLabel
@@ -245,7 +245,8 @@ export function ReservationsManagement({
       email: res.email,
       date: formDate.format(at),
       time: formTime.format(at),
-      endTime: formTime.format(new Date(res.endAt)),
+      // Phiếu cũ buổi tối suy ra giờ kết thúc quá giờ đóng cửa: điền giờ kết thúc mặc định để vẫn lưu được.
+      endTime: formTime.format(reservationRangeError(at, new Date(res.endAt)) ? defaultReservationEnd(at) : new Date(res.endAt)),
       guests: String(res.guests),
       tableId: tableIds.length > 1 ? KEEP_GROUP : String(tableIds[0] ?? ''),
       note: res.note,

@@ -1000,8 +1000,11 @@ export function updateMockReservation(code: string, input: NewMockReservationInp
   if (reservation.status !== 'Chờ xác nhận' && reservation.status !== 'Đã đặt') {
     return { ok: false, error: `Chỉ sửa được phiếu đang chờ hoặc đã xác nhận (${reservation.status}).` }
   }
-  // Không gửi giờ kết thúc thì giữ nguyên thời lượng cũ, dời theo giờ bắt đầu mới.
-  const endTime = input.endTime ?? new Date(input.dateTime.getTime() + reservationEnd(reservation).getTime() - reservation.dateTime.getTime())
+  // Không gửi giờ kết thúc thì giữ nguyên thời lượng cũ, dời theo giờ bắt đầu mới; phiếu cũ chưa lưu
+  // giờ kết thúc nhận mặc định như khi đặt (cắt về giờ đóng cửa), như ReservationHandler bên Java.
+  const endTime = input.endTime ?? (reservation.endTime
+    ? new Date(input.dateTime.getTime() + reservation.endTime.getTime() - reservation.dateTime.getTime())
+    : defaultReservationEnd(input.dateTime))
   const check = checkMockBooking({ ...input, endTime, branch: input.branch ?? reservation.branch }, code)
   if (!check.ok) return { ok: false, error: check.error }
   Object.assign(reservation, {

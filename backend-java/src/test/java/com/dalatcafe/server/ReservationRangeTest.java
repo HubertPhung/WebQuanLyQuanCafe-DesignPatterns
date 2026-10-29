@@ -141,6 +141,22 @@ class ReservationRangeTest {
     }
 
     @Test
+    void legacyEveningBookingStaysEditable() throws Exception {
+        // Phiếu cũ lúc 20:30 không lưu giờ kết thúc: hai giờ suy ra vượt giờ đóng cửa, nhưng sửa
+        // số điện thoại vẫn phải được.
+        Reservation legacy = new Reservation(null, null, "Khach cu", "0901234567", at("20:30"), 2);
+        legacy.setTableId(TABLE_ID);
+        assertTrue(reservations.save(legacy));
+        HttpResponse<String> edited = send("PUT", "/api/reservations/" + legacy.getReservationCode(),
+                "{\"customer\":\"Khach cu\",\"contact\":\"0909999999\",\"guests\":2,\"tableId\":" + TABLE_ID
+                        + ",\"dateTime\":\"" + at("20:30") + "\"}");
+        assertEquals(200, edited.statusCode(), edited.body());
+        Reservation stored = reservations.findByReservationCode(legacy.getReservationCode()).orElseThrow();
+        assertEquals("0909999999", stored.getContact());
+        assertEquals(at("22:00"), stored.getStoredEndTime());
+    }
+
+    @Test
     void catalogUsesEndTime() throws Exception {
         assertEquals(201, book("18:00", "19:00").statusCode());
         assertEquals(Boolean.TRUE, availability("19:00", "20:00"));
