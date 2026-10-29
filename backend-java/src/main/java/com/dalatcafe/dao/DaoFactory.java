@@ -35,6 +35,7 @@ public class DaoFactory {
     private final ICustomerDao jdbcCustomerDao = new JdbcCustomerDao();
     private final IUserDao jdbcUserDao = new JdbcUserDao();
     private final IConfigDao jdbcConfigDao = new JdbcConfigDao();
+    private final IVoucherDao jdbcVoucherDao = new JdbcVoucherDao();
 
     private DaoFactory() {
         // Tự phát hiện JDBC có dùng được không, mặc định là IN_MEMORY
@@ -70,11 +71,22 @@ public class DaoFactory {
                 seed.getMenuItems().values().forEach(menu::save);
                 LOGGER.info("Seeded " + seed.getMenuItems().size() + " menu items into PostgreSQL.");
             }
+            seedWelcomeVoucher(conn);
             JdbcDatabase.syncSequences(conn);
             return true;
         } catch (SQLException e) {
             LOGGER.log(Level.SEVERE, "Could not prepare the PostgreSQL schema: " + e.getMessage(), e);
             return false;
+        }
+    }
+
+    /** Bảng voucher còn trống (lần đầu nâng cấp) thì thêm WELCOME10, mã trước đây viết cứng trong code. */
+    private static void seedWelcomeVoucher(Connection conn) throws SQLException {
+        try (var st = conn.createStatement(); var rs = st.executeQuery("SELECT 1 FROM vouchers LIMIT 1")) {
+            if (rs.next()) return;
+        }
+        if (new JdbcVoucherDao().save(InMemoryDatabase.welcomeVoucher())) {
+            LOGGER.info("Seeded voucher WELCOME10 into PostgreSQL.");
         }
     }
 
@@ -132,7 +144,7 @@ public class DaoFactory {
     }
 
     public IVoucherDao getVoucherDao() {
-        return inMemoryVoucherDao;
+        return (mode == DaoMode.JDBC && JdbcDatabase.isAvailable()) ? jdbcVoucherDao : inMemoryVoucherDao;
     }
 }
 
