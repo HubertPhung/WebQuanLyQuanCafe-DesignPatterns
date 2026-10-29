@@ -118,6 +118,9 @@ class VoucherHandlerTest {
                 + "\"startDate\":\"" + TODAY + "\",\"endDate\":\"" + TODAY.minusDays(1) + "\"}").statusCode());
         assertEquals(400, call("POST", "/api/vouchers", "MANAGER", voucherJson("ab", "")).statusCode());
         assertEquals(400, call("POST", "/api/vouchers", "MANAGER", voucherJson("ZEROLIMIT", ",\"maxUses\":0")).statusCode());
+        // Phần trăm phải từ 1 đến 100 như spec; 0.5% bị từ chối dù lớn hơn 0.
+        assertEquals(400, call("POST", "/api/vouchers", "MANAGER",
+                voucherJson("HALFPCT", "").replace("\"FIXED\",\"value\":10000", "\"PERCENT\",\"value\":0.5")).statusCode());
         create("SALE1111", "");
         assertEquals(409, call("POST", "/api/vouchers", "MANAGER", voucherJson("sale1111", "")).statusCode());
     }

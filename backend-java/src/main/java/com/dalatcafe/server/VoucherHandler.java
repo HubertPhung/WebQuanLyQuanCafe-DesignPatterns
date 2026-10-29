@@ -258,7 +258,7 @@ public class VoucherHandler extends ApiHandler {
             throw ApiException.badRequest("type must be PERCENT or FIXED");
         }
         Double value = num(body, "value");
-        if (value == null || value <= 0 || (type == VoucherType.PERCENT && value > 100)) {
+        if (value == null || value <= 0 || (type == VoucherType.PERCENT && (value < 1 || value > 100))) {
             throw ApiException.badRequest(type == VoucherType.PERCENT ? "Phần trăm giảm phải từ 1 đến 100." : "Số tiền giảm phải lớn hơn 0.");
         }
         Double maxDiscount = type == VoucherType.PERCENT ? num(body, "maxDiscount") : null;
