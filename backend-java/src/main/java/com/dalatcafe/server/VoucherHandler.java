@@ -100,12 +100,12 @@ public class VoucherHandler extends ApiHandler {
         throw ApiException.notFound("Unknown voucher resource");
     }
 
+    /** Chỉ chấp nhận chữ số ASCII; Integer.parseInt còn nhận "+1" và chữ số của bảng mã khác. */
     private static int voucherId(String raw) {
-        try {
-            return Integer.parseInt(raw);
-        } catch (NumberFormatException e) {
+        if (!raw.matches("[0-9]{1,9}")) {
             throw ApiException.notFound("Unknown voucher resource");
         }
+        return Integer.parseInt(raw);
     }
 
     private Voucher find(int id) {

@@ -244,4 +244,20 @@ class VoucherHandlerTest {
         assertEquals(403, call("POST", "/api/vouchers", "STAFF", voucherJson("SALE1111", "")).statusCode());
         assertEquals(401, call("GET", "/api/vouchers", null, null).statusCode());
     }
+
+    @Test
+    void staffCannotReachVoucherIdsSpelledDifferently() throws Exception {
+        // Integer.parseInt nhận "+1" và chữ số không phải ASCII; quyền không được phụ thuộc cách viết id.
+        String welcome = voucherJson("WELCOME10", ",\"minOrder\":999999");
+        assertEquals(403, call("PUT", "/api/vouchers/+1", "STAFF", welcome).statusCode());
+        assertEquals(403, call("DELETE", "/api/vouchers/+1", "STAFF", null).statusCode());
+        assertEquals(403, call("GET", "/api/vouchers/+1/usages", "STAFF", null).statusCode());
+        assertEquals(403, call("PUT", "/api/vouchers/%D9%A1", "STAFF", welcome).statusCode());
+        assertEquals(0, number(find("WELCOME10"), "minOrder"));
+        // MANAGER dùng id lạ thì nhận 404, không được hiểu là voucher số 1.
+        assertEquals(404, call("PUT", "/api/vouchers/+1", "MANAGER", welcome).statusCode());
+        // Các đường dẫn công khai và của storefront vẫn giữ quyền cũ.
+        assertEquals(200, call("GET", "/api/vouchers/active", null, null).statusCode());
+        assertEquals(405, call("GET", "/api/vouchers/validate", "STAFF", null).statusCode());
+    }
 }

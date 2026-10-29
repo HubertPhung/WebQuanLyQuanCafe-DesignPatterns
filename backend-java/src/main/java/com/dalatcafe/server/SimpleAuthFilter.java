@@ -193,8 +193,11 @@ public class SimpleAuthFilter extends Filter {
                 || p.equals("/api/vouchers/active") && method.equals("GET")) {
             return Access.PUBLIC;
         }
-        // Thêm, sửa, xóa voucher và xem ai đã dùng mã; giữ/nhả lượt do handler tự đòi service key.
-        if (p.equals("/api/vouchers") || p.matches("/api/vouchers/[0-9]+(/usages)?")) {
+        // Mọi đường dẫn voucher khác validate/active/redeem/release (thêm, sửa, xóa, xem ai đã dùng)
+        // cần MANAGER, dù id được viết thế nào; giữ/nhả lượt do handler tự đòi service key.
+        if (p.equals("/api/vouchers") || p.startsWith("/api/vouchers/")
+                && !p.equals("/api/vouchers/validate") && !p.equals("/api/vouchers/active")
+                && !p.equals("/api/vouchers/redeem") && !p.equals("/api/vouchers/release")) {
             return Access.MANAGER;
         }
         if (p.equals("/api/auth/register") || p.equals("/api/auth/login") || p.equals("/api/auth/google")) {
