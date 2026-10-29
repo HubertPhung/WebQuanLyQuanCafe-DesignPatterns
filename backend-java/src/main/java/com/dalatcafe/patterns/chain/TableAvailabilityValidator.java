@@ -9,7 +9,8 @@ import java.time.Instant;
 import java.util.Objects;
 
 public final class TableAvailabilityValidator extends ReservationValidatorHandler {
-    public static final Duration DEFAULT_DURATION = Duration.ofHours(2);
+    /** Thời gian giữ bàn của phiếu không lưu giờ kết thúc. */
+    public static final Duration DEFAULT_DURATION = Reservation.DEFAULT_LENGTH;
     private final IReservationDao reservationDao;
     private final Duration duration;
 
@@ -17,7 +18,10 @@ public final class TableAvailabilityValidator extends ReservationValidatorHandle
         this(reservationDao, DEFAULT_DURATION);
     }
 
-    /** Cùng một độ dài khung giờ áp dụng cho cả phiếu đang xin và các phiếu đã có. */
+    /**
+     * Mỗi phiếu giữ bàn trong khoảng [bắt đầu, kết thúc) của nó; {@code duration} là độ dài giả định
+     * cho phiếu không lưu giờ kết thúc (phiếu cũ).
+     */
     public TableAvailabilityValidator(IReservationDao reservationDao, Duration duration) {
         this.reservationDao = Objects.requireNonNull(reservationDao, "Reservation DAO must not be null");
         this.duration = Objects.requireNonNull(duration, "Duration must not be null");
@@ -31,8 +35,9 @@ public final class TableAvailabilityValidator extends ReservationValidatorHandle
         if (reservation == null || reservation.getTableId() == null || reservation.getDateTime() == null) {
             return ValidationResult.invalid("Vui lòng cung cấp bàn và thời gian đặt bàn.");
         }
+        Instant requestedEnd;
         try {
-            reservation.getDateTime().plus(duration);
+            requestedEnd = endOf(reservation);
         } catch (DateTimeException | ArithmeticException ex) {
             return ValidationResult.invalid("Thời gian kết thúc đặt bàn không hợp lệ.");
         }
@@ -46,20 +51,26 @@ public final class TableAvailabilityValidator extends ReservationValidatorHandle
             if (existing.getDateTime() == null || existing.getStatus() == null) {
                 return ValidationResult.invalid("Lịch của bàn thiếu dữ liệu; vui lòng kiểm tra lại.");
             }
+            Instant existingEnd;
             try {
-                existing.getDateTime().plus(duration);
+                existingEnd = endOf(existing);
             } catch (DateTimeException | ArithmeticException ex) {
                 return ValidationResult.invalid("Thời gian trong lịch của bàn không hợp lệ.");
             }
-            if (slotsOverlap(reservation.getDateTime(), existing.getDateTime(), duration)) {
+            if (slotsOverlap(reservation.getDateTime(), requestedEnd, existing.getDateTime(), existingEnd)) {
                 return ValidationResult.invalid("Bàn đã được đặt trong khung giờ này.");
             }
         }
         return checkNext(reservation);
     }
 
-    /** Khung giờ nửa mở: một bàn được đặt lại đúng lúc khung trước kết thúc. */
-    public static boolean slotsOverlap(Instant first, Instant second, Duration duration) {
-        return first.isBefore(second.plus(duration)) && second.isBefore(first.plus(duration));
+    private Instant endOf(Reservation reservation) {
+        Instant stored = reservation.getStoredEndTime();
+        return stored != null ? stored : reservation.getDateTime().plus(duration);
+    }
+
+    /** Khoảng nửa mở [start, end): một bàn được đặt lại đúng lúc khoảng trước kết thúc. */
+    public static boolean slotsOverlap(Instant aStart, Instant aEnd, Instant bStart, Instant bEnd) {
+        return aStart.isBefore(bEnd) && bStart.isBefore(aEnd);
     }
 }

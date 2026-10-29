@@ -45,6 +45,20 @@ class TableUsageTest {
     }
 
     @Test
+    void usageFollowsEndTime() {
+        // Thời gian chờ dài để luật tự hủy không che mất giờ kết thúc: phiếu dài 45 phút không còn
+        // giữ bàn 50 phút sau giờ bắt đầu, dù chưa tới hai giờ.
+        SystemConfigManager.getInstance().setAutoCancelMinutes(180);
+        Reservation booking = new Reservation(null, "RES", "Guest", "0901234567", now.plusSeconds(3600), 2);
+        booking.setTableIds(List.of(3));
+        booking.setStatus(ReservationStatus.CONFIRMED);
+        booking.setEndTime(now.plusSeconds(3600 + 45 * 60));
+        assertEquals(TableStatus.RESERVED, TableUsage.status(table, List.of(), List.of(booking), now));
+        assertEquals(TableStatus.RESERVED, TableUsage.status(table, List.of(), List.of(booking), now.plusSeconds(3600 + 40 * 60)));
+        assertEquals(TableStatus.AVAILABLE, TableUsage.status(table, List.of(), List.of(booking), now.plusSeconds(3600 + 50 * 60)));
+    }
+
+    @Test
     void manualCleaningAndReservedStatesRemainUnavailable() {
         table.setStatus(TableStatus.CLEANING);
         assertEquals(TableStatus.CLEANING, TableUsage.status(table, List.of(), List.of(), now));

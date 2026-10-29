@@ -120,9 +120,10 @@ public class TableHandler extends ApiHandler {
 
     private Set<Integer> bookedTablesAt(String requestedTime) {
         Instant slot;
+        Instant slotEnd;
         try {
             slot = Instant.parse(requestedTime);
-            slot.plus(TableAvailabilityValidator.DEFAULT_DURATION);
+            slotEnd = slot.plus(TableAvailabilityValidator.DEFAULT_DURATION);
         } catch (DateTimeException | ArithmeticException e) {
             throw ApiException.badRequest("Thời gian đặt bàn không hợp lệ.");
         }
@@ -135,7 +136,7 @@ public class TableHandler extends ApiHandler {
             if (reservation.getId() != null && reservation.isNoShowAt(now, grace)) continue;
             // Lịch đã lưu không đầy đủ thì không bao giờ được báo các bàn của nó là còn trống.
             if (reservation.getDateTime() == null || reservation.getStatus() == null
-                    || TableAvailabilityValidator.slotsOverlap(slot, reservation.getDateTime(), TableAvailabilityValidator.DEFAULT_DURATION)) {
+                    || reservation.overlaps(slot, slotEnd)) {
                 booked.addAll(reservation.getTableIds());
             }
         }
