@@ -47,6 +47,7 @@ const legacy = getMockReservations().find(reservation => reservation.code === cr
 legacy.endTime = null
 const edited = updateMockReservation(created.code!, { customer: 'Khach cu', contact: '0909999999', email: null, note: null, dateTime: legacyStart, guests: 2, tableId: 2 })
 assert.equal(edited.ok, true, edited.error)
-assert.equal(legacy.endTime?.getTime(), at('22:00', eveningDay).getTime())
+const reread = getMockReservations().find(reservation => reservation.code === created.code)!
+assert.equal(reread.endTime?.getTime(), at('22:00', eveningDay).getTime())
 
 console.log('reservation range: all checks passed')
