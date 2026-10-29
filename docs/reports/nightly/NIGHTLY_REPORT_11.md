@@ -16,13 +16,15 @@ Phần còn ngoài phạm vi của [phiên 10](NIGHTLY_REPORT_10.md): thu ngân 
 
 | Bộ test | Kết quả |
 | :--- | :--- |
-| `mvn clean test` | Xem mục 3 |
+| `mvn clean test` | 445/445 |
 | `npx tsc --noEmit` | 0 lỗi |
-| `test:vouchers` (thêm 8 ca cho `posVoucherVerdict`) | Pass |
-| Bộ UI/API (thêm `TC-VOUCHER-05`: POS có ô nhập mã) | Xem mục 3 |
+| `test:assets`, `test:vouchers` (thêm 8 ca cho `posVoucherVerdict`), `test:reservation-range` | Pass |
+| `next build` | Thành công |
+| Bộ UI/API (thêm `TC-VOUCHER-05`: POS có ô nhập mã) | 48/48 |
 
 Test mới bên Java: `perAccountVoucherIsOnlineOnlyAtPos`, và một ca nhân viên gọi `validate` trong `validateTrustsUserIdOnlyFromStorefront`.
 
-## 3. Kết quả lượt chạy cuối
+## 3. Giới hạn đã biết
 
-Ghi khi chạy toàn bộ trước khi đẩy lên.
+- Mã chỉ áp khi thanh toán ngay. Muốn áp mã cho đơn trả sau thì bước `/pay` của Java phải tính lại giảm giá; chưa làm.
+- Ô nhập mã chưa có test tương tác trên trình duyệt. Phần tính tiền được kiểm tra qua `posVoucherVerdict` (dùng chung với giao diện), và Java kiểm tra lại khi thanh toán.
