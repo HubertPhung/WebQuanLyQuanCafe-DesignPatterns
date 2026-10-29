@@ -108,9 +108,10 @@ export type JavaTable = {
 const branchQuery = (branch?: BranchId) => (branch ? `branch=${encodeURIComponent(branch)}` : '')
 export function fetchTables(branch?: BranchId) { return request<JavaTable[]>(`/api/tables${branch ? `?${branchQuery(branch)}` : ''}`, { method: 'GET' }) }
 export type ReservationTableOption = Pick<JavaTable, 'id' | 'name' | 'seats' | 'zone' | 'branch'> & { available?: boolean }
-export function fetchReservationTables(dateTime?: string, branch?: BranchId) {
+export function fetchReservationTables(dateTime?: string, branch?: BranchId, endTime?: string) {
   const query = new URLSearchParams()
   if (dateTime) query.set('dateTime', dateTime)
+  if (dateTime && endTime) query.set('endTime', endTime)
   if (branch) query.set('branch', branch)
   return request<ReservationTableOption[]>(`/api/tables/catalog${query.size ? `?${query}` : ''}`, { method: 'GET', auth: false })
 }
@@ -192,6 +193,8 @@ export type ReservationPayload = {
   email?: string
   note?: string
   dateTime: string
+  // Giờ kết thúc; không gửi thì Java giữ bàn hai giờ (POST) hoặc giữ nguyên thời lượng cũ (PUT).
+  endTime?: string
   guests: number
   tableId: number
   // Java lấy chi nhánh từ các bàn; nếu có gửi thì các bàn phải thuộc chi nhánh đó.
@@ -211,6 +214,8 @@ export type JavaReservation = {
   contact: string
   email: string | null
   dateTime: string
+  // Java luôn trả giờ kết thúc; phiếu cũ là dateTime + 2 giờ.
+  endTime: string
   table: string | null
   tableId: number | null
   branch: BranchId

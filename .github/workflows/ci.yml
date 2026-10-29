@@ -51,6 +51,9 @@ jobs:
       - name: Check voucher pricing matches the Java VoucherService
         run: npm run test:vouchers
 
+      - name: Check reservation time-range rules match the Java validators
+        run: npm run test:reservation-range
+
       - name: Build Next.js Application
         run: npm run build
 

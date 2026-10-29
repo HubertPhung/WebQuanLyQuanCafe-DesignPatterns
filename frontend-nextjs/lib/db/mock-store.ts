@@ -10,7 +10,12 @@ import {
   hasReservationTimePassed,
   hasReservationStarted,
   isWithinDefaultOperatingHours,
-  reservationSlotsOverlap,
+  defaultReservationEnd,
+  reservationEnd,
+  reservationRangeError,
+  reservationRangesOverlap,
+  RESERVATION_DEFAULT_LENGTH_MS,
+  RESERVATION_NO_SHOW_GRACE_MS,
 } from '../reservation-rules'
 
 const TAX_RATE = 0.08
@@ -583,6 +588,8 @@ export type MockReservation = {
   email: string | null
   note: string | null
   dateTime: Date
+  // Giờ kết thúc; phiếu không có giữ bàn hai giờ (reservationEnd).
+  endTime?: Date | null
   guests: number
   tableId: number | null
   tableName: string
@@ -611,7 +618,7 @@ function createInitialReservations(): MockReservation[] {
     },
     {
       code: 'RES-002', customer: 'Trần Thu Hà', contact: '0987 654 321', email: 'ha.tran@outlook.com',
-      note: 'Kỷ niệm ngày cưới, chuẩn bị nến nhỏ nếu có.', dateTime: at(0, 18), guests: 2, tableId: 11, tableName: 'Table 11',
+      note: 'Kỷ niệm ngày cưới, chuẩn bị nến nhỏ nếu có.', dateTime: at(0, 18), endTime: at(0, 19, 30), guests: 2, tableId: 11, tableName: 'Table 11',
       status: 'Đã đặt', preOrders: [{ name: 'Cold Brew Cam Vàng', qty: 2, price: 55000 }],
     },
     {
@@ -911,7 +918,7 @@ export type NewMockReservationInput = Omit<MockReservation, 'code' | 'status' | 
 function releaseMockReservedTables(reservation: MockReservation, now = Date.now()): void {
   const store = getStore()
   for (const id of reservation.tableIds ?? (reservation.tableId ? [reservation.tableId] : [])) {
-    const another = store.reservations.some(other => (other.tableIds ?? [other.tableId]).includes(id) && (other.status === 'Chờ xác nhận' || other.status === 'Đã đặt') && other.dateTime.getTime() < now + 2 * 60 * 60_000)
+    const another = store.reservations.some(other => (other.tableIds ?? [other.tableId]).includes(id) && (other.status === 'Chờ xác nhận' || other.status === 'Đã đặt') && other.dateTime.getTime() < now + RESERVATION_DEFAULT_LENGTH_MS)
     const order = store.orders.some(order => (order.tableIds?.length ? order.tableIds : [order.tableId]).includes(id) && order.status !== 'completed' && order.status !== 'cancelled')
     const table = store.tables.find(table => table.id === id)
     if (table?.status === 'reserved' && !another && !order) updateMockTableStatus(id, 'available')
@@ -922,7 +929,7 @@ export function expireMockNoShows(now = Date.now()): number {
   const store = getStore()
   let expired = 0
   for (const reservation of store.reservations) {
-    if ((reservation.status !== 'Chờ xác nhận' && reservation.status !== 'Đã đặt') || now < reservation.dateTime.getTime() + 15 * 60_000) continue
+    if ((reservation.status !== 'Chờ xác nhận' && reservation.status !== 'Đã đặt') || now < reservation.dateTime.getTime() + RESERVATION_NO_SHOW_GRACE_MS) continue
     reservation.status = 'Đã hủy'
     expired++
     releaseMockReservedTables(reservation, now)
@@ -945,6 +952,10 @@ function checkMockBooking(input: NewMockReservationInput, ignoreCode?: string): 
   if (!isWithinDefaultOperatingHours(input.dateTime)) {
     return { ok: false, error: `Quán chỉ nhận đặt bàn trong giờ mở cửa (${DEFAULT_OPENING_TIME} - ${DEFAULT_CLOSING_TIME}).` }
   }
+  if (input.endTime) {
+    const rangeError = reservationRangeError(input.dateTime, input.endTime)
+    if (rangeError) return { ok: false, error: rangeError }
+  }
   if (input.guests > DEFAULT_MAX_RESERVATION_GUESTS) {
     return { ok: false, error: `Mỗi phiếu nhận tối đa ${DEFAULT_MAX_RESERVATION_GUESTS} khách.` }
   }
@@ -958,7 +969,8 @@ function checkMockBooking(input: NewMockReservationInput, ignoreCode?: string): 
   const capacity = tables.reduce((sum, table) => sum + table!.seats, 0)
   if (input.guests < 1 || input.guests > capacity) return { ok: false, error: 'Số khách vượt tổng số chỗ các bàn đã chọn.' }
   const taken = store.reservations.some(
-    (r) => r.code !== ignoreCode && ids.some(id => (r.tableIds ?? [r.tableId]).includes(id)) && r.status !== 'Đã hủy' && reservationSlotsOverlap(r.dateTime, input.dateTime),
+    (r) => r.code !== ignoreCode && ids.some(id => (r.tableIds ?? [r.tableId]).includes(id)) && r.status !== 'Đã hủy'
+      && reservationRangesOverlap(r.dateTime, reservationEnd(r), input.dateTime, reservationEnd(input)),
   )
   if (taken) return { ok: false, error: 'Bàn đã được đặt trong khung giờ này.' }
   return { ok: true, ids, tables: tables as FloorTable[], branch }
@@ -967,6 +979,8 @@ function checkMockBooking(input: NewMockReservationInput, ignoreCode?: string): 
 export function createMockReservation(input: NewMockReservationInput): { ok: boolean; code?: string; error?: string } {
   expireMockNoShows()
   const store = getStore()
+  // Như Java: thiếu giờ kết thúc thì giữ bàn hai giờ, cắt về giờ đóng cửa.
+  input = { ...input, endTime: input.endTime ?? defaultReservationEnd(input.dateTime) }
   const check = checkMockBooking(input)
   if (!check.ok) return { ok: false, error: check.error }
   const { ids, tables, branch } = check
@@ -986,7 +1000,9 @@ export function updateMockReservation(code: string, input: NewMockReservationInp
   if (reservation.status !== 'Chờ xác nhận' && reservation.status !== 'Đã đặt') {
     return { ok: false, error: `Chỉ sửa được phiếu đang chờ hoặc đã xác nhận (${reservation.status}).` }
   }
-  const check = checkMockBooking({ ...input, branch: input.branch ?? reservation.branch }, code)
+  // Không gửi giờ kết thúc thì giữ nguyên thời lượng cũ, dời theo giờ bắt đầu mới.
+  const endTime = input.endTime ?? new Date(input.dateTime.getTime() + reservationEnd(reservation).getTime() - reservation.dateTime.getTime())
+  const check = checkMockBooking({ ...input, endTime, branch: input.branch ?? reservation.branch }, code)
   if (!check.ok) return { ok: false, error: check.error }
   Object.assign(reservation, {
     customer: input.customer,
@@ -994,6 +1010,7 @@ export function updateMockReservation(code: string, input: NewMockReservationInp
     email: input.email,
     note: input.note,
     dateTime: input.dateTime,
+    endTime,
     guests: input.guests,
     tableId: check.ids[0],
     tableIds: check.ids,

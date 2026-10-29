@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { getReservationTableOptions as getCustomerReservationTables } from '../lib/reservations/availability'
 import { createMockReservation, saveMockTable, updateMockReservationStatus } from '../lib/db/mock-store'
-import { RESERVATION_SLOT_MS } from '../lib/reservation-rules'
+import { RESERVATION_DEFAULT_LENGTH_MS } from '../lib/reservation-rules'
 import { DEFAULT_BRANCH_ID } from '../lib/branches'
 
 async function main() {
@@ -20,9 +20,9 @@ async function main() {
       return ids.map(id => result.tables.find(table => table.id === id)!.available)
     }
     assert.deepEqual(await available(slot), [false, false, true])
-    assert.deepEqual(await available(new Date(slot.getTime() + RESERVATION_SLOT_MS - 1)), [false, false, true])
-    assert.deepEqual(await available(new Date(slot.getTime() + RESERVATION_SLOT_MS)), [true, true, true])
-    assert.deepEqual(await available(new Date(slot.getTime() - RESERVATION_SLOT_MS)), [true, true, true])
+    assert.deepEqual(await available(new Date(slot.getTime() + RESERVATION_DEFAULT_LENGTH_MS - 1)), [false, false, true])
+    assert.deepEqual(await available(new Date(slot.getTime() + RESERVATION_DEFAULT_LENGTH_MS)), [true, true, true])
+    assert.deepEqual(await available(new Date(slot.getTime() - RESERVATION_DEFAULT_LENGTH_MS)), [true, true, true])
     assert.equal(updateMockReservationStatus(booking.code!, 'Đã hủy').ok, true)
     assert.deepEqual(await available(slot), [true, true, true])
 

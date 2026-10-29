@@ -6,8 +6,14 @@
 /** OperatingHoursValidator.PAST_GRACE: phiếu nhập cho "bây giờ" đã bắt đầu rồi. */
 export const RESERVATION_PAST_GRACE_MS = 15 * 60 * 1000
 
-/** TableAvailabilityValidator.DEFAULT_DURATION: mỗi phiếu giữ bàn trong hai giờ. */
-export const RESERVATION_SLOT_MS = 2 * 60 * 60 * 1000
+/** Reservation.DEFAULT_LENGTH: phiếu không ghi giờ kết thúc giữ bàn hai giờ. */
+export const RESERVATION_DEFAULT_LENGTH_MS = 2 * 60 * 60 * 1000
+
+/** OperatingHoursValidator.MIN_LENGTH: một phiếu giữ bàn ít nhất 30 phút. */
+export const RESERVATION_MIN_LENGTH_MS = 30 * 60 * 1000
+
+/** SystemConfigManager.DEFAULT_AUTO_CANCEL_MINUTES: phiếu chưa nhận bàn tự hủy sau 30 phút. */
+export const RESERVATION_NO_SHOW_GRACE_MS = 30 * 60 * 1000
 
 /** SystemConfigManager.DEFAULT_OPENING_TIME / DEFAULT_CLOSING_TIME, tính cả hai mốc. */
 export const DEFAULT_OPENING_TIME = '07:00'
@@ -50,9 +56,48 @@ export function isWithinDefaultOperatingHours(dateTime: Date): boolean {
 }
 
 /**
- * Cùng phép kiểm tra trùng như TableAvailabilityValidator: hai khoảng [start, start + slot) giao
- * nhau.
+ * Cùng phép kiểm tra trùng như TableAvailabilityValidator: hai khoảng nửa mở [start, end) giao
+ * nhau, nên hai phiếu nối tiếp nhau không bị coi là trùng.
  */
-export function reservationSlotsOverlap(a: Date, b: Date): boolean {
-  return a.getTime() < b.getTime() + RESERVATION_SLOT_MS && b.getTime() < a.getTime() + RESERVATION_SLOT_MS
+export function reservationRangesOverlap(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): boolean {
+  return aStart.getTime() < bEnd.getTime() && bStart.getTime() < aEnd.getTime()
+}
+
+/** Giờ kết thúc của một phiếu; phiếu cũ không ghi giờ kết thúc giữ bàn hai giờ. */
+export function reservationEnd(reservation: { dateTime: Date; endTime?: Date | null }): Date {
+  return reservation.endTime ?? new Date(reservation.dateTime.getTime() + RESERVATION_DEFAULT_LENGTH_MS)
+}
+
+function slotLabel(seconds: number): string {
+  const minutes = Math.floor(seconds / 60)
+  return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
+}
+
+/** Các mốc giờ kết thúc chọn được: sau giờ bắt đầu ít nhất 30 phút, không quá giờ đóng cửa. */
+export function endSlotsAfter(start: string, closing = DEFAULT_CLOSING_TIME): string[] {
+  const earliest = secondsOf(start) + RESERVATION_MIN_LENGTH_MS / 1000
+  return RESERVATION_TIME_SLOTS.filter((slot) => secondsOf(slot) >= earliest && secondsOf(slot) <= secondsOf(closing))
+}
+
+/** Giờ kết thúc gợi ý: hai giờ sau giờ bắt đầu, cắt về giờ đóng cửa; null khi không còn đủ 30 phút. */
+export function defaultEndSlot(start: string, closing = DEFAULT_CLOSING_TIME): string | null {
+  if (endSlotsAfter(start, closing).length === 0) return null
+  return slotLabel(Math.min(secondsOf(start) + RESERVATION_DEFAULT_LENGTH_MS / 1000, secondsOf(closing)))
+}
+
+/** ReservationHandler.defaultEndTime: hai giờ sau giờ bắt đầu, cắt về giờ đóng cửa của cùng ngày. */
+export function defaultReservationEnd(start: Date, closing = DEFAULT_CLOSING_TIME): Date {
+  const dayStart = start.getTime() - secondsOfCafeDay(start) * 1000
+  const closingAt = dayStart + secondsOf(closing) * 1000
+  return new Date(Math.min(start.getTime() + RESERVATION_DEFAULT_LENGTH_MS, closingAt))
+}
+
+/** Lỗi của khoảng giờ đặt bàn, cùng thông báo với OperatingHoursValidator bên Java; hợp lệ thì null. */
+export function reservationRangeError(start: Date, end: Date, closing = DEFAULT_CLOSING_TIME): string | null {
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) return 'Giờ kết thúc không hợp lệ.'
+  if (end.getTime() - start.getTime() < RESERVATION_MIN_LENGTH_MS) return 'Giờ kết thúc phải sau giờ bắt đầu ít nhất 30 phút.'
+  const sameDay = Math.floor((start.getTime() + CAFE_UTC_OFFSET_MS) / DAY_MS) === Math.floor((end.getTime() + CAFE_UTC_OFFSET_MS) / DAY_MS)
+  if (!sameDay) return 'Giờ kết thúc không hợp lệ.'
+  if (secondsOfCafeDay(end) > secondsOf(closing)) return `Giờ kết thúc không được quá giờ đóng cửa (${closing}).`
+  return null
 }

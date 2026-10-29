@@ -28,7 +28,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useReservationStore } from '@/lib/store/reservation-store'
 import { bookCustomerTable, getCustomerReservationTables } from '@/app/actions/reservation-actions'
-import { RESERVATION_TIME_SLOTS } from '@/lib/reservation-rules'
+import { RESERVATION_TIME_SLOTS, defaultEndSlot, endSlotsAfter } from '@/lib/reservation-rules'
 import { formatMoneyVND } from '@/lib/store/cart-store'
 import { DEFAULT_BRANCH_ID, branchById, branches, type BranchId } from '@/lib/branches'
 
@@ -58,6 +58,13 @@ export function ReservationDialog() {
   const [availabilityVersion, setAvailabilityVersion] = useState(0)
   const [selectedTableIds, setSelectedTableIds] = useState<number[]>([])
   const [selectedTimeSlot, setSelectedTimeSlot] = useState('09:30')
+  const [selectedEndSlot, setSelectedEndSlot] = useState(() => defaultEndSlot('09:30') ?? '11:30')
+  // Giờ kết thúc phải sau giờ đến ít nhất 30 phút và không quá giờ đóng cửa.
+  const endOptions = endSlotsAfter(selectedTimeSlot)
+  const chooseStart = (slot: string) => {
+    setSelectedTimeSlot(slot)
+    if (!endSlotsAfter(slot).includes(selectedEndSlot)) setSelectedEndSlot(defaultEndSlot(slot) ?? '')
+  }
   const [selectedDateOption, setSelectedDateOption] = useState<'today' | 'tomorrow' | 'custom'>('today')
   const [customDate, setCustomDate] = useState('')
   const [note, setNote] = useState('')
@@ -103,13 +110,14 @@ export function ReservationDialog() {
   }
 
   const requestedTime = `${getDateString()}T${selectedTimeSlot}:00+07:00`
-  const availabilityKey = `${branchId}/${requestedTime}/${availabilityVersion}`
+  const requestedEnd = selectedEndSlot ? `${getDateString()}T${selectedEndSlot}:00+07:00` : ''
+  const availabilityKey = `${branchId}/${requestedTime}/${requestedEnd}/${availabilityVersion}`
   const tablesLoading = loadingRequest || loadedFor !== availabilityKey
   useEffect(() => {
     if (!isOpen) return
     let active = true
     setLoadingRequest(true)
-    getCustomerReservationTables(requestedTime, branchId).then(result => {
+    getCustomerReservationTables(requestedTime, branchId, requestedEnd || undefined).then(result => {
       if (!active) return
       setTables(result.tables)
       setSelectedTableIds(ids => ids.filter(id => result.tables.some(table => table.id === id && table.available === true)))
@@ -120,7 +128,7 @@ export function ReservationDialog() {
       if (active) { setLoadingRequest(false); setLoadedFor(availabilityKey) }
     })
     return () => { active = false }
-  }, [isOpen, requestedTime, branchId, availabilityKey])
+  }, [isOpen, requestedTime, requestedEnd, branchId, availabilityKey])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -139,6 +147,7 @@ export function ReservationDialog() {
 
     const dateStr = getDateString()
     if (selectedTableIds.length === 0 || totalSeats < guests) { toast.error('Chọn các bàn có tổng số chỗ đủ cho số khách.'); return }
+    if (!selectedEndSlot) { toast.error('Giờ kết thúc phải sau giờ bắt đầu ít nhất 30 phút.'); return }
     const dateTimeStr = `${dateStr}T${selectedTimeSlot}:00+07:00`
 
     startTransition(async () => {
@@ -148,6 +157,7 @@ export function ReservationDialog() {
         email: email.trim() || undefined,
         note: note.trim() || undefined,
         dateTime: dateTimeStr,
+        endTime: `${dateStr}T${selectedEndSlot}:00+07:00`,
         guests,
         tableId: selectedTableIds[0],
         tableIds: selectedTableIds,
@@ -163,7 +173,7 @@ export function ReservationDialog() {
         setConfirmedData({
           customer,
           contact,
-          time: `${selectedTimeSlot} ngày ${dateStr}`,
+          time: `${selectedTimeSlot} – ${selectedEndSlot} ngày ${dateStr}`,
           tableName: `${selectedTables.map(table => `${table.name} (${table.zone})`).join(', ')} · ${branchById(branchId).street}`,
           guests,
         })
@@ -357,14 +367,28 @@ export function ReservationDialog() {
               )}
 
               {/* Các khung giờ */}
-              <div>
-                <span className="text-[11px] font-medium text-stone-500 block mb-1.5">Khung giờ đón khách:</span>
-                <select aria-label="Khung giờ đón khách" value={selectedTimeSlot} onChange={event => setSelectedTimeSlot(event.target.value)} className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm font-semibold">
-                  {RESERVATION_TIME_SLOTS.map((slot) => (
-                    <option key={slot} value={slot}>{slot}</option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="reservation-start" className="text-[11px] font-medium text-stone-500 block mb-1.5">Giờ đến:</label>
+                  <select id="reservation-start" value={selectedTimeSlot} onChange={event => chooseStart(event.target.value)} className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm font-semibold">
+                    {RESERVATION_TIME_SLOTS.map((slot) => (
+                      <option key={slot} value={slot}>{slot}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="reservation-end" className="text-[11px] font-medium text-stone-500 block mb-1.5">Giờ kết thúc:</label>
+                  <select id="reservation-end" value={selectedEndSlot} disabled={endOptions.length === 0} onChange={event => setSelectedEndSlot(event.target.value)} className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm font-semibold disabled:opacity-60">
+                    {endOptions.length === 0 && <option value="">—</option>}
+                    {endOptions.map((slot) => (
+                      <option key={slot} value={slot}>{slot}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
+              {endOptions.length === 0 && (
+                <p className="text-xs text-rose-700">Giờ kết thúc phải sau giờ bắt đầu ít nhất 30 phút, không quá giờ đóng cửa. Hãy chọn giờ đến sớm hơn.</p>
+              )}
             </div>
 
             {/* 3. Số khách và chọn khu vực */}
@@ -493,7 +517,7 @@ export function ReservationDialog() {
             <div className="pt-2">
               <Button
                 type="submit"
-                disabled={isPending || tablesLoading || selectedTableIds.length === 0 || totalSeats < guests}
+                disabled={isPending || tablesLoading || !selectedEndSlot || selectedTableIds.length === 0 || totalSeats < guests}
                 className="w-full h-12 rounded-xl bg-[#3E2723] hover:bg-[#2b1b18] text-white font-bold text-sm shadow-md cursor-pointer transition-all"
               >
                 {isPending ? 'Đang gửi thông tin giữ bàn...' : 'Xác nhận giữ bàn ngay'}
