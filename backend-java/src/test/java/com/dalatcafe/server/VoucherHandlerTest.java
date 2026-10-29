@@ -209,6 +209,9 @@ class VoucherHandlerTest {
         HttpResponse<String> anonymous = call("POST", "/api/vouchers/validate", null,
                 "{\"code\":\"WELCOME10\",\"subtotal\":100000,\"userId\":7}");
         assertEquals("LOGIN_REQUIRED", data(anonymous).get("reason"));
+        // Nhân viên ở quầy hỏi: mã giới hạn theo tài khoản chỉ dùng khi đặt online.
+        HttpResponse<String> atPos = call("POST", "/api/vouchers/validate", "STAFF", "{\"code\":\"WELCOME10\",\"subtotal\":100000}");
+        assertEquals("ONLINE_ONLY", data(atPos).get("reason"));
         HttpResponse<String> storefront = service("/api/vouchers/validate", "{\"code\":\"WELCOME10\",\"subtotal\":900000,\"userId\":7}");
         assertEquals(Boolean.TRUE, data(storefront).get("valid"), storefront.body());
         assertEquals(50_000, number(data(storefront), "discountAmount"));

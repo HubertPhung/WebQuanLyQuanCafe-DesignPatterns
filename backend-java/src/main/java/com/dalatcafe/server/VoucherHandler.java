@@ -187,7 +187,9 @@ public class VoucherHandler extends ApiHandler {
         String code = VoucherService.normalize(requireStr(body, "code"));
         double subtotal = subtotal(body);
         boolean storefront = isStorefront(exchange);
-        VoucherService.Verdict verdict = service.check(code, subtotal, storefront ? userId(body) : null, storefront);
+        // Khách ẩn danh trên web vẫn là kênh online; chỉ nhân viên đăng nhập (quầy POS) mới là đơn tại quầy.
+        boolean online = storefront || exchange.getAttribute(SimpleAuthFilter.USER_ATTRIBUTE) == null;
+        VoucherService.Verdict verdict = service.check(code, subtotal, storefront ? userId(body) : null, online);
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("code", code);
         data.put("valid", verdict.valid());

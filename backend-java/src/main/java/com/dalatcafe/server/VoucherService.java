@@ -74,6 +74,8 @@ public class VoucherService {
         if (!voucher.isWithinDates(now)) return reject(voucher.getCode(), Reason.EXPIRED, "Mã đã hết hạn.", voucher, 0);
         if (voucher.isSoldOut()) return reject(voucher.getCode(), Reason.SOLD_OUT, "Mã đã hết lượt sử dụng.", voucher, 0);
         if (voucher.getPerAccountLimit() != null) {
+            // Quầy POS không biết tài khoản của khách: mã giới hạn theo tài khoản chỉ dùng khi đặt online.
+            if (!storefront) return reject(voucher.getCode(), Reason.ONLINE_ONLY, "Mã này chỉ dùng khi đặt online.", voucher, 0);
             if (userId == null) return reject(voucher.getCode(), Reason.LOGIN_REQUIRED, "Đăng nhập để dùng mã này.", voucher, 0);
             if (dao.countUsages(voucher.getId(), userId) >= voucher.getPerAccountLimit()) {
                 return reject(voucher.getCode(), Reason.ACCOUNT_LIMIT, "Tài khoản của bạn đã dùng hết lượt cho mã này.", voucher, 0);
