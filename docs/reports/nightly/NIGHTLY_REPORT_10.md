@@ -84,4 +84,4 @@ Reviewer kết luận không có lỗi Critical. Đã sửa, mỗi lỗi có tes
 
 ## 6. Còn ngoài phạm vi
 
-- Ô nhập voucher trên POS tại quầy: thiết kế để sang đợt sau. Backend đã nhận `voucherCode` từ POS.
+- Ô nhập voucher trên POS tại quầy: đã làm ở [phiên 11](NIGHTLY_REPORT_11.md).

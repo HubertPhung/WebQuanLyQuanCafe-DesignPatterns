@@ -167,7 +167,7 @@ Danh sách phiếu (lọc bằng `?branch=`): `id` (mã `RES-xxxx`), `customer`,
 - `orderType`: `dine-in`, `pickup` hoặc `delivery`. `paymentMethod`: `cash`, `qr` hoặc `card`.
 - Mỗi dòng có thể kèm `size` (`S`, `M`, `L`; chỉ `L` tính phụ thu), `toppings` (chứa "pearl" / "trân châu" hoặc "cheese" / "foam" / "phô mai") hoặc `customizations` (`SIZE_L`, `CHEESE_FOAM`, `WHITE_PEARL`).
 - **Giảm giá:**
-  - `voucherCode` chỉ nhận `WELCOME10`: giảm 10%, tối đa 50.000đ.
+  - `voucherCode`: một mã đang chạy do admin tạo (mục 3.16b). `VoucherService` kiểm tra hạn dùng, số lượt, đơn tối thiểu, rồi giữ một lượt trước khi thu tiền; checkout thất bại thì trả lượt. Đơn tại quầy (người gọi không phải storefront) không dùng được mã "chỉ cho đơn online" hay mã giới hạn theo tài khoản. Storefront gửi kèm `userId` để áp giới hạn mỗi tài khoản. Voucher thay cho giảm theo hạng thành viên; mã không dùng được trả 400 `INVALID_VOUCHER`.
   - Không có voucher nhưng `customerPhone` khớp một khách đã lưu: giảm theo hạng thành viên. Khách đó cũng được cộng điểm qua `LoyaltyPointObserver`, gọi trực tiếp trên đúng đơn của lần checkout này (không gắn lên subject dùng chung, nên đơn của quầy khác thanh toán cùng lúc không cộng nhầm cho khách).
   - **Đổi điểm:** `useLoyaltyPoints` (số nguyên) cần `customerPhone` của một thành viên và không vượt số điểm đang có (nếu vượt: 400 `INSUFFICIENT_POINTS`). `PointRedemptionDiscountStrategy` cộng giá trị điểm (1 điểm = 1.000đ) lên trên voucher hoặc giảm theo hạng, và chỉ dùng số điểm mà phần tiền còn lại hấp thụ được. Số điểm yêu cầu bị giữ (trừ khỏi số dư) **trước** khi thu tiền; nếu không giữ được thì trả 503 `DATABASE_UNAVAILABLE`, không thu tiền, không ghi đơn. Sau khi Facade chạy xong, số điểm strategy không dùng tới được hoàn lại; checkout thất bại thì hoàn đủ.
 - **Kiểm tra trước khi thu tiền:** `tableId` phải là một bàn có thật, nếu không trả **404** `NOT_FOUND`. Với `paymentMethod = cash`, nếu có gửi `tenderedAmount` thì số đó phải ≥ tổng tiền sau giảm giá và VAT, nếu không trả **400** `INVALID_INPUT`; `tenderedAmount` âm cũng trả 400. Hai trường hợp này không thu tiền và không lưu đơn. Không gửi `tenderedAmount` thì không kiểm. Trường này tuỳ chọn: POS gửi nó khi thu ngân nhập ô "Tiền khách đưa", và khoá nút thanh toán khi số đó thiếu so với tổng tạm tính; khi Java tắt, bản lưu cục bộ (`cashTenderError` trong `mock-store.ts`) áp cùng quy tắc.
@@ -365,7 +365,7 @@ Hai endpoint này dùng định dạng JSON riêng (không theo khung `{ ok, dat
 | Endpoint | Phương thức | Mô tả |
 | :--- | :---: | :--- |
 | `/api/cart` | GET | Lấy giỏ hàng hiện tại, theo cookie |
-| `/api/cart` | POST | Body dạng `{ action, … }` với `action` là `add` (kèm tuỳ chọn Sữa / Độ ngọt / Đá), `quantity`, `discount` (mã `WELCOME`, `WELCOME10`, `DALATCAFE`, `COFFEE`, `DISCOUNT`; mã nào cũng giảm cố định 10%) hoặc `note` |
+| `/api/cart` | POST | Body dạng `{ action, … }` với `action` là `add` (kèm tuỳ chọn Sữa / Độ ngọt / Đá), `quantity`, `discount` (một mã đang chạy bên Java; mức giảm và lý do từ chối lấy từ `POST /api/vouchers/validate`, kèm `voucherMessage` trong phản hồi) hoặc `note` |
 | `/api/favorites` | GET, POST | Danh sách món yêu thích, lưu trong cookie `dalatcafe-favorites` |
 
-> Giỏ hàng Storefront tính giá bằng USD (dữ liệu demo kiểu Shopify), nên chỉ lấy phán quyết hợp lệ của Java (mục 3.16) rồi giảm cố định 10%. Khi Java không phản hồi, danh sách mã demo (`WELCOME`, `WELCOME10`, `DALATCAFE`, `COFFEE`, `DISCOUNT`) được dùng.
+> Giỏ hàng lấy mức giảm và lý do từ chối từ Java (mục 3.16), kiểm tra lại mã mỗi khi giỏ thay đổi (đơn tối thiểu, hạn, số lượt). Khi Java không phản hồi, mọi mã đều bị từ chối: storefront không còn danh sách mã dự phòng.
