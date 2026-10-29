@@ -257,4 +257,23 @@ class ObserverTest {
         order.setStatus(OrderStatus.COMPLETED);
         return order;
     }
+
+    @Test
+    void cancelledOrderReleasesVoucher() {
+        InMemoryDatabase.getInstance().reset();
+        com.dalatcafe.dao.InMemoryVoucherDao vouchers = new com.dalatcafe.dao.InMemoryVoucherDao();
+        com.dalatcafe.server.VoucherService service = new com.dalatcafe.server.VoucherService(vouchers, java.time.Clock.systemUTC());
+        int welcome = vouchers.findByCode("WELCOME10").orElseThrow().getId();
+        service.redeem("WELCOME10", 100_000, 7, "ORD-9", true);
+        assertEquals(1, vouchers.findById(welcome).orElseThrow().getUsedCount());
+
+        OrderEventSubject subject = new OrderEventSubject();
+        subject.attach(new com.dalatcafe.patterns.observer.VoucherReleaseObserver(service), 30);
+        Order order = new Order(null, "ORD-9", "Khach", null, com.dalatcafe.model.OrderType.PICKUP);
+        subject.notifyOrderCancelled(order);
+        assertEquals(0, vouchers.findById(welcome).orElseThrow().getUsedCount());
+        // Đơn không dùng voucher: không có gì để nhả.
+        assertDoesNotThrow(() -> subject.notifyOrderCancelled(new Order(null, "ORD-NONE", "Khach", null,
+                com.dalatcafe.model.OrderType.PICKUP)));
+    }
 }

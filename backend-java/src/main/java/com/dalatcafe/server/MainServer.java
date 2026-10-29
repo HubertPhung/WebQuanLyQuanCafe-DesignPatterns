@@ -10,6 +10,7 @@ import com.dalatcafe.patterns.observer.OrderEventSubject;
 import com.dalatcafe.patterns.singleton.SystemConfigManager;
 import com.dalatcafe.patterns.observer.TableStatusSyncObserver;
 import com.dalatcafe.patterns.observer.ReservationOrderSyncObserver;
+import com.dalatcafe.patterns.observer.VoucherReleaseObserver;
 import com.dalatcafe.security.AdminBootstrap;
 import com.dalatcafe.security.AuthSettings;
 import com.dalatcafe.security.LoginThrottle;
@@ -68,6 +69,7 @@ public class MainServer {
         // trước.
         subject.attach(new TableStatusSyncObserver(daos.getTableDao(), daos.getOrderDao()), 10);
         subject.attach(new ReservationOrderSyncObserver(daos.getReservationDao()), 20);
+        subject.attach(new VoucherReleaseObserver(vouchers), 30);
         subject.attach(new KitchenNotificationObserver(), 90);
         PosCheckoutFacade facade = new PosCheckoutFacade(daos.getOrderDao(), daos.getMenuDao(), subject);
 
@@ -78,7 +80,7 @@ public class MainServer {
         register("/api/users", new UserHandler(users, hasher));
         register("/api/menu", new MenuHandler(daos.getMenuDao()));
         register("/api/orders", new OrderHandler(daos.getOrderDao(), daos.getMenuDao(),
-                daos.getTableDao(), daos.getCustomerDao(), subject, databaseHealthy));
+                daos.getTableDao(), daos.getCustomerDao(), subject, vouchers, databaseHealthy));
         register("/api/customers", new CustomerHandler(daos.getCustomerDao()));
         register("/api/analytics", new AnalyticsHandler(daos.getOrderDao(), daos.getMenuDao(), daos.getTableDao()));
         register("/api/vouchers", new VoucherHandler(vouchers, daos.getVoucherDao()));

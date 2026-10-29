@@ -51,9 +51,18 @@ public class OrderHandler extends ApiHandler {
     private final ICustomerDao customerDao;
     private final OrderEventSubject eventSubject;
     private final BooleanSupplier databaseHealthy;
+    private final VoucherService vouchers;
 
     public OrderHandler(IOrderDao orderDao, IMenuDao menuDao, ITableDao tableDao, ICustomerDao customerDao,
                         OrderEventSubject eventSubject, BooleanSupplier databaseHealthy) {
+        this(orderDao, menuDao, tableDao, customerDao, eventSubject,
+                new VoucherService(com.dalatcafe.dao.DaoFactory.getInstance().getVoucherDao(), java.time.Clock.systemUTC()),
+                databaseHealthy);
+    }
+
+    public OrderHandler(IOrderDao orderDao, IMenuDao menuDao, ITableDao tableDao, ICustomerDao customerDao,
+                        OrderEventSubject eventSubject, VoucherService vouchers, BooleanSupplier databaseHealthy) {
+        this.vouchers = Objects.requireNonNull(vouchers, "Voucher service must not be null");
         this.orderDao = Objects.requireNonNull(orderDao, "Order DAO must not be null");
         this.menuDao = Objects.requireNonNull(menuDao, "Menu DAO must not be null");
         this.tableDao = Objects.requireNonNull(tableDao, "Table DAO must not be null");
@@ -311,6 +320,10 @@ public class OrderHandler extends ApiHandler {
                     }
                     Order order = importedOrder(input, code, warnings);
                     save(order);
+                    // Đơn đã bị hủy trước khi kịp đồng bộ: trả lại lượt voucher nó đã giữ.
+                    if (order.getStatus() == OrderStatus.CANCELLED) {
+                        vouchers.releaseOrder(code);
+                    }
                     notifyImported(order, warnings);
                 }
                 row.put("result", "created");
@@ -383,6 +396,11 @@ public class OrderHandler extends ApiHandler {
             }
             order.addItem(new OrderItem(menuItemId, requireStr(line, "name"), qty, price, str(line, "variation"), null));
         }
+        // Đơn COD đã giữ lượt voucher lúc khách đặt: dùng đúng mức giảm đã giữ, không trừ lượt lần hai.
+        vouchers.usageForOrder(code).ifPresent(usage -> {
+            order.setVoucherCode(vouchers.findById(usage.voucherId()).map(com.dalatcafe.model.Voucher::getCode).orElse(null));
+            order.setDiscountAmount(usage.discountAmount());
+        });
         order.recalculateTotals();
         Double total = num(input, "total");
         if (total != null && Math.abs(total - order.getTotal()) > 1) {
