@@ -69,12 +69,19 @@ Reviewer kết luận không có lỗi Critical. Đã sửa, mỗi lỗi có tes
 - Các test cũ dựa trên thời gian chờ 15 phút được cập nhật lên 30 phút.
 - `VoucherReleaseObserver` (package `patterns.observer`) phụ thuộc vào `server.VoucherService`.
 
-## 5. Việc còn mở (Minor, chưa sửa)
+## 5. Lỗi phát hiện sau khi mở PR #75 và các lỗi nhỏ đã sửa
 
-- Giảm tổng lượt có thể chạy song song với một lượt redeem (kiểm tra rồi mới lưu, không nguyên tử).
-- Xóa voucher có thể chạy song song với redeem; `ON DELETE CASCADE` khi đó có thể xóa mất lượt COD vừa giữ.
-- Lỗi SQL lúc redeem hiện ra cho khách là "Mã không tồn tại" thay vì 503.
-- `CheckoutHandler` bỏ qua kết quả `attachOrder`; observer không ghi log khi trả lượt thất bại.
-- API nhận phần trăm trong khoảng (0, 1); spec yêu cầu 1–100, còn giao diện đã chặn từ 1.
-- Thiếu `AUTH_SERVICE_KEY` thì `validateVoucher` bỏ `userId` mà không cảnh báo.
-- Ô nhập voucher trên POS chưa làm (ngoài phạm vi đợt này).
+**CI GitHub (chạy lúc 22:11 giờ Việt Nam):** tra bàn trống sau giờ đóng cửa mà không gửi `endTime` thì trả 400, vì giờ kết thúc mặc định bị cắt về 22:00, sớm hơn giờ bắt đầu. Máy local không lộ lỗi vì chạy test trong giờ mở cửa. Đã sửa: khi tra cứu, nếu giờ kết thúc mặc định không còn sau giờ bắt đầu thì dùng nguyên 2 giờ. Test: `catalogAfterClosingStillAnswers` với giờ cố định 22:05.
+
+**Sáu lỗi nhỏ từ review**, đã sửa hết, mỗi lỗi có test fail trước khi sửa:
+
+1. **Giảm tổng lượt chạy song song với redeem.** Điều kiện `used_count <= maxUses` giờ nằm trong chính câu `UPDATE`, chung khóa dòng với redeem; vi phạm trả 400 kèm số lượt thật. Test: `saveRefusesMaxUsesBelowUsedCount` (DAO) và `loweringMaxUsesWhileARedeemLandsReportsTheLimit` (handler).
+2. **Xóa voucher chạy song song với redeem.** `DELETE` chỉ xóa khi `used_count = 0` và chưa có lượt nào; nếu không xóa được thì handler tắt mã. Khóa ngoại `voucher_usages` bỏ `ON DELETE CASCADE`; database cũ được đổi khi khởi động. Test: `deleteRefusesUsedVoucherAndKeepsUsages`, `deletingWhileARedeemLandsDeactivatesInstead`.
+3. **Lỗi lưu trữ lúc redeem.** Trạng thái mới `RedeemStatus.FAILED` (lỗi database hoặc một đơn giữ lượt hai lần), trả 503 `DATABASE_UNAVAILABLE` thay vì "Mã không tồn tại". Kho in-memory cũng chặn giữ lượt hai lần cho cùng một mã đơn, giống cột `order_code` UNIQUE. Test: `duplicateOrderCodeFailsWithoutCounting`, `storageFailureIsServiceUnavailable`.
+4. **Lỗi gắn lượt vào đơn bị bỏ qua.** Giờ được ghi log và trả kèm cảnh báo trong kết quả checkout. Test: `unattachedUseIsReportedAsAWarning`. Observer trả lượt khi hủy đơn không cần sửa: `releaseByOrder` trả `false` cũng là trường hợp bình thường (đơn không dùng mã), còn lỗi database thật đã được DAO JDBC ghi log ở mức SEVERE.
+5. **API nhận phần trăm dưới 1%.** Giờ API bắt buộc 1–100 như spec.
+6. **Thiếu `AUTH_SERVICE_KEY`.** Khi kiểm tra mã cho một tài khoản, `validateVoucher` giờ ghi log lỗi cấu hình và trả lỗi, thay vì âm thầm hỏi Java như khách vãng lai. Test: `scripts/test-voucher-api.ts`.
+
+## 6. Còn ngoài phạm vi
+
+- Ô nhập voucher trên POS tại quầy: thiết kế để sang đợt sau. Backend đã nhận `voucherCode` từ POS.

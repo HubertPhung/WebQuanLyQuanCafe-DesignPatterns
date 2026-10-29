@@ -303,11 +303,11 @@ Xem trước voucher bằng đúng Strategy mà checkout dùng (`VoucherService`
 ### 3.16b. Quản lý voucher `/api/vouchers` (MANAGER+)
 Voucher JSON: `{ id, code, type: "PERCENT"|"FIXED", value, maxDiscount, minOrder, maxUses, perAccountLimit, firstOnlineOrderOnly, startDate: "YYYY-MM-DD", endDate, description, active, usedCount, state }`. `maxUses` và `perAccountLimit` để `null` nghĩa là không giới hạn. `state` tính ra từ dữ liệu: `UPCOMING`, `RUNNING`, `EXPIRED`, `SOLD_OUT`, `DISABLED`. Mã hợp lệ từ 00:00 ngày bắt đầu đến 23:59:59 ngày hết hạn, giờ Việt Nam.
 - `GET /api/vouchers`: tất cả voucher. `POST /api/vouchers`: tạo mới, trả 201. `PUT /api/vouchers/{id}`: sửa.
-- Kiểm tra khi lưu: mã `^[A-Z0-9_-]{3,30}$` (tự viết hoa, trùng trả 409); `PERCENT` 1–100, `FIXED` > 0; đơn tối thiểu ≥ 0; hai giới hạn nếu có thì ≥ 1; ngày hết hạn ≥ ngày bắt đầu; tổng lượt không nhỏ hơn số lượt đã dùng; không đổi mã của voucher đã có lượt dùng (409).
-- `DELETE /api/vouchers/{id}`: mã chưa ai dùng thì xoá hẳn (`{ deleted: true }`); đã có lượt dùng thì chỉ tắt (`{ deleted: false, deactivated: true }`).
+- Kiểm tra khi lưu: mã `^[A-Z0-9_-]{3,30}$` (tự viết hoa, trùng trả 409); `PERCENT` 1–100, `FIXED` > 0; đơn tối thiểu ≥ 0; hai giới hạn nếu có thì ≥ 1; ngày hết hạn ≥ ngày bắt đầu; tổng lượt không nhỏ hơn số lượt đã dùng (kiểm tra ngay trong lần ghi, nên một lượt redeem chen vào cũng bị tính; vi phạm trả 400); không đổi mã của voucher đã có lượt dùng (409). Id trong đường dẫn chỉ gồm chữ số; mọi đường dẫn `/api/vouchers/...` trừ `validate`, `active`, `redeem`, `release` đều cần MANAGER.
+- `DELETE /api/vouchers/{id}`: mã chưa ai dùng thì xoá hẳn (`{ deleted: true }`); đã có lượt dùng, kể cả một lượt vừa chen vào, thì chỉ tắt (`{ deleted: false, deactivated: true }`). Lượt dùng không bao giờ bị xoá theo voucher.
 - `GET /api/vouchers/{id}/usages`: `[{ userId, orderCode, discountAmount, createdAt }]`.
 - `GET /api/vouchers/active` (công khai): các mã đang chạy, không kèm số lượt đã dùng: `{ code, type, value, maxDiscount, minOrder, perAccountLimit, firstOnlineOrderOnly, endDate, description }`.
-- `POST /api/vouchers/redeem` (chỉ service key): `{ code, subtotal, userId?, orderCode }` → `{ usageId, discountAmount, code }`. Storefront gọi lúc khách đặt đơn COD; lượt bị trừ ngay. Không dùng được thì 400 `INVALID_VOUCHER`.
+- `POST /api/vouchers/redeem` (chỉ service key): `{ code, subtotal, userId?, orderCode }` → `{ usageId, discountAmount, code }`. Storefront gọi lúc khách đặt đơn COD; lượt bị trừ ngay. Không dùng được thì 400 `INVALID_VOUCHER`. Không ghi được lượt (lỗi database, hoặc mã đơn này đã giữ một lượt) thì 503 `DATABASE_UNAVAILABLE`, không trừ lượt nào; checkout cũng trả 503 trong trường hợp này.
 - `POST /api/vouchers/release` (chỉ service key): `{ orderCode }` → `{ released }`. Nhả lượt khi đơn COD không ghi được; gọi lần hai trả `released: false`.
 
 ### 3.17. `POST /api/orders/sync`

@@ -182,7 +182,7 @@ Dữ liệu mẫu của mock store gồm 15 bàn ở 123 Phan Đình Phùng, 8 b
 | `customers` | `phone` duy nhất, `loyalty_points`, `total_spent` | `rank`: `BRONZE` (Đồng, 0%), `SILVER` (Bạc, 5%), `GOLD` (Vàng, 10%), `VIP` (Kim Cương, 15%) |
 | `users` | `email` duy nhất (chữ thường), `name`, `password_hash` (PBKDF2, rỗng với khách chỉ đăng nhập Google), `google_subject` duy nhất (chỉ tài khoản khách hàng), `active`, `created_at`, `last_login_at` | `role`: `CUSTOMER`, `STAFF`, `MANAGER`, `ADMIN` |
 | `vouchers` | `code` duy nhất (in hoa), `value` (phần trăm 1–100 hoặc số tiền), `max_discount`, `min_order`, `max_uses` và `per_account_limit` (NULL = không giới hạn), `first_online_order_only`, `start_date`/`end_date` (DATE, theo giờ Việt Nam), `active`, `used_count` | `type`: `PERCENT`, `FIXED` |
-| `voucher_usages` | `voucher_id` → `vouchers(id)` (ON DELETE CASCADE), `user_id` (NULL với khách vãng lai), `order_code` duy nhất (NULL trong lúc checkout đang giữ lượt), `discount_amount` | — |
+| `voucher_usages` | `voucher_id` → `vouchers(id)` (không cascade: voucher còn lượt dùng thì không xoá được, chỉ tắt; database tạo trước đó được đổi khoá ngoại khi khởi động), `user_id` (NULL với khách vãng lai), `order_code` duy nhất (NULL trong lúc checkout đang giữ lượt), `discount_amount` | — |
 
 DAO ghi trạng thái bằng **tên enum in hoa** (giá trị mặc định trong DDL cũng in hoa). Khi đọc thì so khớp không phân biệt hoa thường, nên dữ liệu cũ ghi chữ thường vẫn đọc được.
 
