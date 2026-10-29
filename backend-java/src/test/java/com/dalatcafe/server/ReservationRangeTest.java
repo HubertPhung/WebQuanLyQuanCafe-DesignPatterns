@@ -157,6 +157,12 @@ class ReservationRangeTest {
     }
 
     @Test
+    void catalogAfterClosingStillAnswers() throws Exception {
+        // Tra bàn lúc 22:05 không gửi giờ kết thúc: không được báo lỗi chỉ vì giờ đóng cửa đã qua.
+        assertEquals(Boolean.TRUE, availability("22:05", null));
+    }
+
+    @Test
     void catalogUsesEndTime() throws Exception {
         assertEquals(201, book("18:00", "19:00").statusCode());
         assertEquals(Boolean.TRUE, availability("19:00", "20:00"));

@@ -119,13 +119,23 @@ public class TableHandler extends ApiHandler {
         return tableDao.findAll().stream().filter(t -> branch == null || branch.equals(t.getBranch())).toList();
     }
 
+    /**
+     * Giờ kết thúc khi tra bàn mà không gửi endTime: như khi đặt (+2 giờ, cắt về giờ đóng cửa). Tra
+     * lúc đã qua giờ đóng cửa thì không cắt được nữa, nên dùng nguyên hai giờ: đây chỉ là tra cứu,
+     * việc đặt bàn vẫn bị chuỗi kiểm tra từ chối.
+     */
+    private static Instant lookupEnd(Instant slot) {
+        Instant end = ReservationHandler.defaultEndTime(slot);
+        return end.isAfter(slot) ? end : slot.plus(TableAvailabilityValidator.DEFAULT_DURATION);
+    }
+
     /** Bàn bị một phiếu chưa hủy giữ trong khoảng [requestedTime, requestedEnd); thiếu giờ kết thúc thì như khi đặt. */
     private Set<Integer> bookedTablesAt(String requestedTime, String requestedEnd) {
         Instant slot;
         Instant slotEnd;
         try {
             slot = Instant.parse(requestedTime);
-            slotEnd = requestedEnd == null ? ReservationHandler.defaultEndTime(slot) : Instant.parse(requestedEnd);
+            slotEnd = requestedEnd == null ? lookupEnd(slot) : Instant.parse(requestedEnd);
         } catch (DateTimeException | ArithmeticException e) {
             throw ApiException.badRequest("Thời gian đặt bàn không hợp lệ.");
         }
