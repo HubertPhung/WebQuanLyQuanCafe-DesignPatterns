@@ -698,7 +698,7 @@ async function runAuthTests() {
       id: 'TC-VOUCHER-03', name: 'Manager Opens Voucher Management Page',
       run: async () => {
         const res = await fetchPage(`${BASE_URL}/admin/vouchers`, manual(await sessionCookie('MANAGER')))
-        const html = await res.text()
+        const html = res.body
         return [res.status === 200 && html.includes('Quản lý Voucher') && html.includes('Thêm voucher'), `status=${res.status}`]
       },
     },
@@ -713,7 +713,7 @@ async function runAuthTests() {
       id: 'TC-RES-END-01', name: 'Admin Reservations Page Shows Time Ranges',
       run: async () => {
         const res = await fetchPage(`${BASE_URL}/admin/reservations`, manual(await sessionCookie('ADMIN')))
-        const html = await res.text()
+        const html = res.body
         // Phiếu demo RES-002 đặt 18:00 – 19:30; React chèn comment giữa các phần văn bản.
         const text = html.replace(/<!-- -->/g, '')
         return [res.status === 200 && /\d{2}:\d{2} – \d{2}:\d{2}/.test(text), `status=${res.status}`]
