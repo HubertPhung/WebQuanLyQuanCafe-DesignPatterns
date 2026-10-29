@@ -171,7 +171,8 @@ class ServerTest {
             reservation.setReservationCode("NOSHOW-" + i);
             reservation.setCustomer("No show test"); reservation.setContact("0901234567");
             reservation.setTableId(1);
-            reservation.setDateTime(now.minusSeconds(i == 1 ? 899 : 900));
+            // Phiếu chưa nhận bàn được giữ 30 phút tính từ giờ khách đến.
+            reservation.setDateTime(now.minusSeconds(i == 1 ? 1799 : 1800));
             reservation.setStatus(i == 2 ? ReservationStatus.SEATED : ReservationStatus.CONFIRMED);
             assertTrue(daos.getReservationDao().save(reservation));
         }
@@ -348,8 +349,8 @@ class ServerTest {
         String seated = createReservation(4, 2);
         assertEquals(200, call("POST", "/api/reservations/" + seated + "/transfer-pos", "STAFF", null).statusCode());
         var seatedBooking = reservations.findByReservationCode(seated).orElseThrow();
-        waitingBooking.setDateTime(java.time.Instant.now().minusSeconds(16 * 60));
-        seatedBooking.setDateTime(java.time.Instant.now().minusSeconds(16 * 60));
+        waitingBooking.setDateTime(java.time.Instant.now().minusSeconds(31 * 60));
+        seatedBooking.setDateTime(java.time.Instant.now().minusSeconds(31 * 60));
         var slot = java.net.URLEncoder.encode(java.time.Instant.now().toString(), StandardCharsets.UTF_8);
         var response = call("GET", "/api/tables/catalog?dateTime=" + slot, null, null);
         assertEquals(200, response.statusCode(), response.body());

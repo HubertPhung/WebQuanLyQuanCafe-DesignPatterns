@@ -121,6 +121,8 @@ public class ReservationHandler extends ApiHandler {
         }
         reservation.setNote(str(body, "note"));
         reservation.setDateTime(parseDateTime(requireStr(body, "dateTime")));
+        Instant requestedEnd = parseEndTime(body);
+        reservation.setEndTime(requestedEnd != null ? requestedEnd : defaultEndTime(reservation.getDateTime()));
         reservation.setGuests(requireInt(body, "guests"));
         reservation.setStatus(ReservationStatus.PENDING);
         resolveTable(body, reservation);
@@ -185,6 +187,10 @@ public class ReservationHandler extends ApiHandler {
             edited.setEmail(str(body, "email"));
             edited.setNote(str(body, "note"));
             edited.setDateTime(parseDateTime(requireStr(body, "dateTime")));
+            // Không gửi giờ kết thúc thì phiếu giữ nguyên thời lượng cũ, dời theo giờ bắt đầu mới.
+            Instant requestedEnd = parseEndTime(body);
+            edited.setEndTime(requestedEnd != null ? requestedEnd
+                    : edited.getDateTime().plus(java.time.Duration.between(current.getDateTime(), current.getEndTime())));
             edited.setGuests(requireInt(body, "guests"));
             resolveTable(body, edited);
             ValidationResult result = validationChain.validate(edited);
@@ -393,6 +399,28 @@ public class ReservationHandler extends ApiHandler {
         }
     }
 
+    private static Instant parseEndTime(Map<String, Object> body) {
+        String raw = str(body, "endTime");
+        if (raw == null) return null;
+        try {
+            return Instant.parse(raw);
+        } catch (DateTimeParseException e) {
+            throw ApiException.badRequest("endTime must be an ISO-8601 instant, e.g. 2026-10-15T17:00:00Z");
+        }
+    }
+
+    /**
+     * Client không gửi giờ kết thúc (client cũ, test): giữ bàn hai giờ nhưng không quá giờ đóng cửa
+     * của chính ngày đó.
+     */
+    static Instant defaultEndTime(Instant start) {
+        java.time.ZoneId zone = java.time.ZoneId.of("Asia/Ho_Chi_Minh");
+        Instant closing = start.atZone(zone).toLocalDate()
+                .atTime(SystemConfigManager.getInstance().getClosingTime()).atZone(zone).toInstant();
+        Instant twoHours = start.plus(Reservation.DEFAULT_LENGTH);
+        return twoHours.isAfter(closing) ? closing : twoHours;
+    }
+
     static Map<String, Object> toJson(Reservation r) {
         Map<String, Object> json = new LinkedHashMap<>();
         json.put("id", r.getReservationCode());
@@ -400,6 +428,7 @@ public class ReservationHandler extends ApiHandler {
         json.put("contact", r.getContact());
         json.put("email", r.getEmail());
         json.put("dateTime", r.getDateTime());
+        json.put("endTime", r.getEndTime());
         json.put("table", r.getTableName());
         json.put("tableId", r.getTableId());
         json.put("tableIds", r.getTableIds());

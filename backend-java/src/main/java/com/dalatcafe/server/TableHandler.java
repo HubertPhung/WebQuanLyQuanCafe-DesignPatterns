@@ -46,7 +46,8 @@ public class TableHandler extends ApiHandler {
         List<String> parts = segments(exchange);
         if (parts.size() == 3 && parts.get(2).equals("catalog") && method.equals("GET")) {
             String requestedTime = queryParam(exchange, "dateTime");
-            Set<Integer> bookedTables = requestedTime == null ? Set.of() : bookedTablesAt(requestedTime);
+            Set<Integer> bookedTables = requestedTime == null ? Set.of()
+                    : bookedTablesAt(requestedTime, queryParam(exchange, "endTime"));
             List<Object> data = new ArrayList<>();
             for (Table table : tablesOf(branchFilter(exchange))) {
                 Map<String, Object> item = new LinkedHashMap<>();
@@ -118,14 +119,18 @@ public class TableHandler extends ApiHandler {
         return tableDao.findAll().stream().filter(t -> branch == null || branch.equals(t.getBranch())).toList();
     }
 
-    private Set<Integer> bookedTablesAt(String requestedTime) {
+    /** Bàn bị một phiếu chưa hủy giữ trong khoảng [requestedTime, requestedEnd); thiếu giờ kết thúc thì như khi đặt. */
+    private Set<Integer> bookedTablesAt(String requestedTime, String requestedEnd) {
         Instant slot;
         Instant slotEnd;
         try {
             slot = Instant.parse(requestedTime);
-            slotEnd = slot.plus(TableAvailabilityValidator.DEFAULT_DURATION);
+            slotEnd = requestedEnd == null ? ReservationHandler.defaultEndTime(slot) : Instant.parse(requestedEnd);
         } catch (DateTimeException | ArithmeticException e) {
             throw ApiException.badRequest("Thời gian đặt bàn không hợp lệ.");
+        }
+        if (!slotEnd.isAfter(slot)) {
+            throw ApiException.badRequest("Giờ kết thúc phải sau giờ bắt đầu.");
         }
         if (reservationDao == null) throw new ApiException(503, "DATABASE_UNAVAILABLE", "Chưa kiểm tra được lịch đặt bàn.");
         Set<Integer> booked = new HashSet<>();

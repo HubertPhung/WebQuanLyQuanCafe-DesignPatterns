@@ -36,8 +36,9 @@ class TableUsageTest {
         Reservation booking = new Reservation(null, "RES", "Guest", "0901234567", now.plusSeconds(1800), 4);
         booking.setTableIds(List.of(1, 3));
         assertEquals(TableStatus.RESERVED, TableUsage.status(table, List.of(), List.of(booking), now));
-        assertEquals(TableStatus.RESERVED, TableUsage.status(table, List.of(), List.of(booking), now.plusSeconds(2699)));
-        assertEquals(TableStatus.AVAILABLE, TableUsage.status(table, List.of(), List.of(booking), now.plusSeconds(2700)));
+        // Giữ bàn 30 phút sau giờ khách đến (now + 30 phút).
+        assertEquals(TableStatus.RESERVED, TableUsage.status(table, List.of(), List.of(booking), now.plusSeconds(3599)));
+        assertEquals(TableStatus.AVAILABLE, TableUsage.status(table, List.of(), List.of(booking), now.plusSeconds(3600)));
         booking.setDateTime(now.plusSeconds(86400));
         assertEquals(TableStatus.AVAILABLE, TableUsage.status(table, List.of(), List.of(booking), now));
         booking.setStatus(ReservationStatus.CANCELLED);

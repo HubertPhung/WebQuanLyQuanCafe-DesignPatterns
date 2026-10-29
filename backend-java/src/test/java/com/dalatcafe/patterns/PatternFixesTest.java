@@ -56,6 +56,18 @@ class PatternFixesTest {
     }
 
     @Test
+    void autoCancelDefaultIsThirtyAndIgnoresStoredValue() {
+        SystemConfigManager config = SystemConfigManager.getInstance();
+        config.resetToDefaults();
+        assertEquals(30, config.getAutoCancelMinutes());
+        // Giá trị 15 được lưu từ trước khi quy tắc giữ bàn 30 phút ra đời không còn tác dụng.
+        InMemoryConfigDao store = new InMemoryConfigDao();
+        store.saveAll(java.util.Map.of("autoCancelMinutes", "15"));
+        config.attachStore(store);
+        assertEquals(30, config.getAutoCancelMinutes());
+    }
+
+    @Test
     void persistWithoutAStoreReportsFailure() {
         assertFalse(SystemConfigManager.getInstance().persist());
     }

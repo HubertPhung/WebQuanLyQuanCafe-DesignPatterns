@@ -57,7 +57,7 @@ Ngoại lệ: một đường dẫn nằm ngoài các nhóm đã đăng ký (`/a
 Quán có hai chi nhánh, id cố định ở `com.dalatcafe.model.Branches` và `frontend-nextjs/lib/branches.ts`: `phan-dinh-phung` (123 Phan Đình Phùng, chi nhánh mặc định) và `bui-thi-xuan` (456 Bùi Thị Xuân).
 - **Thuộc về một chi nhánh:** bàn, đơn hàng, phiếu đặt bàn (trường `branch` trong JSON). **Dùng chung:** thực đơn, khách hàng thành viên, tài khoản, cài đặt quán.
 - **Lọc danh sách:** `GET /api/tables`, `/api/tables/catalog`, `/api/orders`, `/api/reservations`, `/api/analytics/overview` nhận `?branch=<id>`. Không gửi thì trả cả quán; id lạ trả 400.
-- **Kiểm tra lịch bàn:** `GET /api/tables/catalog?dateTime=<ISO-8601>&branch=<id>` thêm `available` cho từng bàn, không trả thông tin khách. Bàn thuộc bất kỳ phiếu chưa hủy nào có thời gian sử dụng chồng nhau đều không chọn được, kể cả bàn phụ trong phiếu ghép. Máy chủ kiểm tra lại khi lưu; các bàn khác vẫn đặt cùng giờ được. Khách chưa nhận bàn quá thời gian chờ (mặc định 15 phút) không còn giữ chỗ; khách đã nhận bàn không bị tự nhả bàn. Khi không đọc được lịch hoặc mất kết nối, frontend không ghi nhận phiếu bằng dữ liệu độc lập; chế độ demo chỉ dùng khi `JAVA_BACKEND_URL=off`.
+- **Kiểm tra lịch bàn:** `GET /api/tables/catalog?dateTime=<ISO-8601>&endTime=<ISO-8601>&branch=<id>` thêm `available` cho từng bàn, không trả thông tin khách. `endTime` không bắt buộc (mặc định như khi đặt: +2 giờ, cắt ở giờ đóng cửa). Bàn thuộc bất kỳ phiếu chưa hủy nào có khoảng giờ chồng lên `[dateTime, endTime)` đều không chọn được, kể cả bàn phụ trong phiếu ghép. Máy chủ kiểm tra lại khi lưu; các bàn khác vẫn đặt cùng giờ được. Khách chưa nhận bàn quá 30 phút tính từ giờ đến thì phiếu tự hủy và không còn giữ chỗ (áp dụng cho mọi phiếu, cả phiếu nhân viên tạo hộ); khách đã nhận bàn không bị tự nhả bàn. Khi không đọc được lịch hoặc mất kết nối, frontend không ghi nhận phiếu bằng dữ liệu độc lập; chế độ demo chỉ dùng khi `JAVA_BACKEND_URL=off`.
 - **Chi nhánh của bản ghi mới:** bàn mới vào chi nhánh trong `branch` của body (mặc định chi nhánh đầu), sửa bàn không đổi chi nhánh. Đơn tại bàn và phiếu đặt lấy chi nhánh của bàn; đơn mang đi / giao hàng lấy `branch` trong body. Gửi `branch` khác chi nhánh của bàn, hoặc ghép bàn của hai chi nhánh vào một phiếu, đều trả 400 trước khi thu tiền hay lưu.
 - Tên bàn chỉ cần không trùng **trong cùng chi nhánh** (cả hai chi nhánh đều có `Bàn 01`).
 
@@ -142,13 +142,14 @@ Danh sách phiếu (lọc bằng `?branch=`): `id` (mã `RES-xxxx`), `customer`,
 ```json
 {
   "customer": "Nguyễn Văn An", "contact": "0912345678", "email": "an@example.com",
-  "dateTime": "2026-10-20T05:00:00Z", "tableId": 9, "guests": 3, "note": "Sinh nhật",
+  "dateTime": "2026-10-20T05:00:00Z", "endTime": "2026-10-20T06:30:00Z", "tableId": 9, "guests": 3, "note": "Sinh nhật",
   "preOrders": [{ "menuItemId": 2, "qty": 2 }]
 }
 ```
+- `endTime` (giờ kết thúc, ISO-8601) không bắt buộc. Thiếu thì mặc định là `dateTime` + 2 giờ, cắt lại ở giờ đóng cửa của cùng ngày. Sai định dạng trả 400. Mọi JSON phiếu đặt bàn đều trả `endTime`; phiếu cũ không lưu giờ kết thúc trả `dateTime` + 2 giờ.
 - Mỗi món đặt trước phải có `menuItemId` của một món trong menu. Tên và giá lấy từ menu tại thời điểm đặt; `name` và `price` do client gửi bị bỏ qua (endpoint công khai). Món không tồn tại hoặc thiếu `menuItemId` trả **400** `INVALID_INPUT`. `menuItemId` được giữ trên đơn POS khi `transfer-pos`.
 - Chỉ định bàn bằng `tableId`, hoặc bằng tên bàn trong trường `table` (ví dụ `"Bàn 09"`). `dateTime` phải là một thời điểm ISO-8601.
-- Phiếu đi qua chuỗi `OperatingHoursValidator` (giờ đến không sớm hơn hiện tại quá 15 phút, trong 07:00–22:00 giờ Việt Nam) → `CapacityGuestValidator` (1–20 khách, không vượt số ghế) → `TableAvailabilityValidator` (không giao nhau trong khung 2 giờ trên cùng bàn).
+- Phiếu đi qua chuỗi `OperatingHoursValidator` (giờ đến không sớm hơn hiện tại quá 15 phút, trong 07:00–22:00 giờ Việt Nam; giờ kết thúc cùng ngày, sau giờ đến ít nhất 30 phút và không quá giờ đóng cửa) → `CapacityGuestValidator` (1–20 khách, không vượt số ghế) → `TableAvailabilityValidator` (khoảng `[dateTime, endTime)` không giao với phiếu chưa hủy khác trên cùng bàn; hai phiếu nối tiếp nhau như 18:00–19:00 và 19:00–20:30 không bị coi là trùng).
 - Hợp lệ trả **201**: `{ "ok": true, "data": { "id": "RES-0010", "status": "Chờ xác nhận" } }`.
 - Không qua chuỗi trả **400** `CHAIN_VALIDATION_FAILED`, thông báo lấy từ mắt xích đầu tiên thất bại.
 
@@ -265,7 +266,7 @@ Bật / tắt bán một món. Hệ thống không theo dõi số lượng tồn
 ```json
 { "customer": "An", "contact": "0911000111", "email": null, "note": "Sinh nhật", "dateTime": "2026-10-20T08:00:00Z", "tableIds": [5, 6], "guests": 8 }
 ```
-Sửa phiếu đang `pending` hoặc `confirmed` (trạng thái khác trả 409, không có phiếu trả 404). Bàn chọn như mục 3.5 (`tableIds`, `tableId` hoặc `table`). Mã phiếu, trạng thái và món đặt trước được giữ nguyên. Cả chuỗi Chain of Responsibility chạy lại; phiếu đang sửa không bị tính là trùng lịch với chính nó. Bị từ chối thì trả 400 `CHAIN_VALIDATION_FAILED` và phiếu không đổi. Bàn cũ không còn dùng được trả về `available` nếu không còn phiếu hay đơn nào giữ.
+Sửa phiếu đang `pending` hoặc `confirmed` (trạng thái khác trả 409, không có phiếu trả 404). Body nhận thêm `endTime`; không gửi thì phiếu giữ nguyên thời lượng cũ, dời theo `dateTime` mới. Bàn chọn như mục 3.5 (`tableIds`, `tableId` hoặc `table`). Mã phiếu, trạng thái và món đặt trước được giữ nguyên. Cả chuỗi Chain of Responsibility chạy lại; phiếu đang sửa không bị tính là trùng lịch với chính nó. Bị từ chối thì trả 400 `CHAIN_VALIDATION_FAILED` và phiếu không đổi. Bàn cũ không còn dùng được trả về `available` nếu không còn phiếu hay đơn nào giữ.
 
 ### 3.13. `PATCH /api/reservations/{code}/status`
 ```json

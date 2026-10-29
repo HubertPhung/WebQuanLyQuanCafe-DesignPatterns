@@ -23,7 +23,8 @@ public final class SystemConfigManager implements Serializable {
     public static final int DEFAULT_LOYALTY_RATE_VND = 10000;
     public static final int DEFAULT_POINT_REDEEM_VND = 1000;
     public static final int DEFAULT_MAX_RESERVATION_GUESTS = 20;
-    public static final int DEFAULT_AUTO_CANCEL_MINUTES = 15;
+    /** Phiếu chưa nhận bàn được giữ 30 phút tính từ giờ bắt đầu, rồi tự hủy. */
+    public static final int DEFAULT_AUTO_CANCEL_MINUTES = 30;
     public static final LocalTime DEFAULT_OPENING_TIME = LocalTime.of(7, 0);
     public static final LocalTime DEFAULT_CLOSING_TIME = LocalTime.of(22, 0);
     private static final ZoneId CAFE_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
@@ -132,7 +133,8 @@ public final class SystemConfigManager implements Serializable {
         applyParsed(saved, "loyaltyRateVndPerPoint", Integer::parseInt, this::setLoyaltyRateVndPerPoint);
         applyParsed(saved, "pointRedeemValueVnd", Integer::parseInt, this::setPointRedeemValueVnd);
         applyParsed(saved, "maxReservationGuests", Integer::parseInt, this::setMaxReservationGuests);
-        applyParsed(saved, "autoCancelMinutes", Integer::parseInt, this::setAutoCancelMinutes);
+        // autoCancelMinutes không đọc lại: API không sửa được nó, và giá trị 15 lưu từ trước quy tắc
+        // giữ bàn 30 phút không được ghi đè mặc định mới.
         applyParsed(saved, "openingTime", LocalTime::parse, this::setOpeningTime);
         applyParsed(saved, "closingTime", LocalTime::parse, this::setClosingTime);
     }
