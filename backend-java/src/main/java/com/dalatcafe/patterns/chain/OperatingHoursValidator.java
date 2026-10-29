@@ -13,6 +13,8 @@ public final class OperatingHoursValidator extends ReservationValidatorHandler {
     private static final ZoneId CAFE_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     /** Phiếu nhập cho thời điểm "bây giờ" (chính xác tới phút) đã bắt đầu ngay khi được gửi đi. */
     public static final Duration PAST_GRACE = Duration.ofMinutes(15);
+    /** Một phiếu giữ bàn ít nhất 30 phút. */
+    public static final Duration MIN_LENGTH = Duration.ofMinutes(30);
     private final Clock clock;
 
     public OperatingHoursValidator() {
@@ -45,7 +47,39 @@ public final class OperatingHoursValidator extends ReservationValidatorHandler {
                 return ValidationResult.invalid("Quán chỉ nhận đặt bàn trong giờ mở cửa ("
                         + config.getOpeningTime() + " - " + config.getClosingTime() + ").");
             }
+            ValidationResult end = checkEnd(reservation, config.getClosingTime());
+            if (end != null) {
+                return end;
+            }
         }
         return checkNext(reservation);
+    }
+
+    /**
+     * Giờ kết thúc khách chọn: cùng ngày, sau giờ bắt đầu ít nhất {@link #MIN_LENGTH}, không quá giờ
+     * đóng cửa. Phiếu chưa có giờ kết thúc (phiếu cũ) không bị kiểm tra lại ở đây.
+     */
+    private static ValidationResult checkEnd(Reservation reservation, LocalTime closing) {
+        if (reservation.getStoredEndTime() == null) {
+            return null;
+        }
+        java.time.ZonedDateTime start;
+        java.time.ZonedDateTime end;
+        try {
+            start = reservation.getDateTime().atZone(CAFE_ZONE);
+            end = reservation.getStoredEndTime().atZone(CAFE_ZONE);
+        } catch (DateTimeException ex) {
+            return ValidationResult.invalid("Giờ kết thúc không hợp lệ.");
+        }
+        if (start.plus(MIN_LENGTH).isAfter(end)) {
+            return ValidationResult.invalid("Giờ kết thúc phải sau giờ bắt đầu ít nhất 30 phút.");
+        }
+        if (!end.toLocalDate().equals(start.toLocalDate())) {
+            return ValidationResult.invalid("Giờ kết thúc không hợp lệ.");
+        }
+        if (end.toLocalTime().isAfter(closing)) {
+            return ValidationResult.invalid("Giờ kết thúc không được quá giờ đóng cửa (" + closing + ").");
+        }
+        return null;
     }
 }

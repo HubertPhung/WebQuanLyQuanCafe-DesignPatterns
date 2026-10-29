@@ -10,6 +10,7 @@ import com.dalatcafe.patterns.observer.OrderEventSubject;
 import com.dalatcafe.patterns.singleton.SystemConfigManager;
 import com.dalatcafe.patterns.observer.TableStatusSyncObserver;
 import com.dalatcafe.patterns.observer.ReservationOrderSyncObserver;
+import com.dalatcafe.patterns.observer.VoucherReleaseObserver;
 import com.dalatcafe.security.AdminBootstrap;
 import com.dalatcafe.security.AuthSettings;
 import com.dalatcafe.security.LoginThrottle;
@@ -61,11 +62,14 @@ public class MainServer {
         this.tokens = new TokenService(auth.jwtSecret(), auth.tokenTtl(), Clock.systemUTC());
         this.allowRoleHeader = auth.allowRoleHeader();
         this.serviceKey = auth.serviceKey();
+        // Một VoucherService dùng chung cho kiểm tra mã, checkout và đồng bộ đơn.
+        VoucherService vouchers = new VoucherService(daos.getVoucherDao(), Clock.systemUTC());
         OrderEventSubject subject = new OrderEventSubject();
         // Dữ liệu trước (bàn, phiếu đặt), phiếu cho quầy pha chế sau cùng: số nhỏ hơn được báo
         // trước.
         subject.attach(new TableStatusSyncObserver(daos.getTableDao(), daos.getOrderDao()), 10);
         subject.attach(new ReservationOrderSyncObserver(daos.getReservationDao()), 20);
+        subject.attach(new VoucherReleaseObserver(vouchers), 30);
         subject.attach(new KitchenNotificationObserver(), 90);
         PosCheckoutFacade facade = new PosCheckoutFacade(daos.getOrderDao(), daos.getMenuDao(), subject);
 
@@ -76,16 +80,16 @@ public class MainServer {
         register("/api/users", new UserHandler(users, hasher));
         register("/api/menu", new MenuHandler(daos.getMenuDao()));
         register("/api/orders", new OrderHandler(daos.getOrderDao(), daos.getMenuDao(),
-                daos.getTableDao(), daos.getCustomerDao(), subject, databaseHealthy));
+                daos.getTableDao(), daos.getCustomerDao(), subject, vouchers, databaseHealthy));
         register("/api/customers", new CustomerHandler(daos.getCustomerDao()));
         register("/api/analytics", new AnalyticsHandler(daos.getOrderDao(), daos.getMenuDao(), daos.getTableDao()));
-        register("/api/vouchers", new VoucherHandler());
+        register("/api/vouchers", new VoucherHandler(vouchers, daos.getVoucherDao()));
         register("/api/config", new ConfigHandler());
         register("/api/tables", new TableHandler(daos.getTableDao(), daos.getOrderDao(), daos.getReservationDao()));
         reservations = new ReservationHandler(daos.getReservationDao(), daos.getTableDao(), daos.getOrderDao(), daos.getMenuDao());
         register("/api/reservations", reservations);
         register("/api/checkout", new CheckoutHandler(facade, daos.getCustomerDao(), daos.getTableDao(),
-                daos.getOrderDao(), daos.getReservationDao(), databaseHealthy));
+                daos.getOrderDao(), daos.getReservationDao(), vouchers, databaseHealthy));
         server.setExecutor(Executors.newFixedThreadPool(8));
     }
 

@@ -80,12 +80,13 @@ export function CartSheet({
     try {
       if (onUpdateCart) {
         const updated = await onUpdateCart({ action: 'discount', code: promoCode.trim() })
+        const reason = (updated as { voucherMessage?: string } | null | undefined)?.voucherMessage
         if (updated && updated.discountCodes?.some((c) => c.applicable)) {
-          setPromoNotice('Mã ưu đãi đã áp dụng thành công (-10%)!')
+          setPromoNotice(reason || 'Mã ưu đãi đã áp dụng thành công!')
           toast.success('Áp dụng mã giảm giá thành công!')
         } else {
-          setPromoNotice('Mã ưu đãi không hợp lệ. (Thử mã: WELCOME10)')
-          toast.error('Mã không hợp lệ hoặc đã hết hạn.')
+          setPromoNotice(reason || 'Mã ưu đãi không hợp lệ hoặc đã hết hạn.')
+          toast.error(reason || 'Mã không hợp lệ hoặc đã hết hạn.')
         }
       } else {
         const res = await store.applyPromo(promoCode)
@@ -250,7 +251,7 @@ export function CartSheet({
                 <form onSubmit={handleApplyPromo} className="promo-form flex gap-2">
                   <input
                     aria-label="Mã giảm giá"
-                    placeholder="Mã ưu đãi (VD: WELCOME10)"
+                    placeholder="Nhập mã ưu đãi"
                     value={promoCode}
                     onChange={(e) => setPromoCode(e.target.value)}
                     className="flex-1 rounded-xl border border-stone-200/80 bg-white px-3.5 py-2 text-xs text-stone-900 placeholder:text-stone-400 uppercase tracking-wider focus:outline-none focus:ring-1 focus:ring-[#5A3E2B] truncate"

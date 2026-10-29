@@ -7,6 +7,7 @@ const REQUEST_TIMEOUT_MS = 2500
 // SimpleAuthFilter bên Java nhận diện người gọi bằng Bearer access token của người dùng đã đăng
 // nhập (API_SPEC 1.3) và đọc lại vai trò từ tài khoản, nên không gửi vai trò từ đây.
 import type { BranchId } from '@/lib/branches'
+import type { ActiveVoucher } from '@/lib/storefront/vouchers'
 import { SESSION_COOKIE } from '@/lib/auth/token'
 // Các mã 5xx mà backend dùng để chủ động từ chối chứ không phải do sập (API_SPEC 1.2).
 const FAIL_CLOSED_CODES = new Set(['DATABASE_UNAVAILABLE'])
@@ -107,9 +108,10 @@ export type JavaTable = {
 const branchQuery = (branch?: BranchId) => (branch ? `branch=${encodeURIComponent(branch)}` : '')
 export function fetchTables(branch?: BranchId) { return request<JavaTable[]>(`/api/tables${branch ? `?${branchQuery(branch)}` : ''}`, { method: 'GET' }) }
 export type ReservationTableOption = Pick<JavaTable, 'id' | 'name' | 'seats' | 'zone' | 'branch'> & { available?: boolean }
-export function fetchReservationTables(dateTime?: string, branch?: BranchId) {
+export function fetchReservationTables(dateTime?: string, branch?: BranchId, endTime?: string) {
   const query = new URLSearchParams()
   if (dateTime) query.set('dateTime', dateTime)
+  if (dateTime && endTime) query.set('endTime', endTime)
   if (branch) query.set('branch', branch)
   return request<ReservationTableOption[]>(`/api/tables/catalog${query.size ? `?${query}` : ''}`, { method: 'GET', auth: false })
 }
@@ -136,8 +138,10 @@ export type CheckoutPayload = {
   customerEmail?: string
   // Tiền mặt khách đưa; Java từ chối đơn tiền mặt không đủ và trả về tiền thối.
   tenderedAmount?: number
-  // Mã voucher trong VoucherCatalog (Strategy) và ghi chú tự do lưu trên đơn bên Java.
+  // Mã voucher do admin tạo (VoucherService chọn Strategy) và ghi chú tự do lưu trên đơn bên Java.
   voucherCode?: string
+  // Tài khoản của khách online, để Java áp giới hạn mỗi tài khoản; chỉ được tin khi gửi kèm service key.
+  userId?: number
   note?: string
   // Đơn đến lấy và giao hàng tự ghi chi nhánh; với đơn tại bàn thì bàn đã quyết định.
   branch?: BranchId
@@ -189,6 +193,8 @@ export type ReservationPayload = {
   email?: string
   note?: string
   dateTime: string
+  // Giờ kết thúc; không gửi thì Java giữ bàn hai giờ (POST) hoặc giữ nguyên thời lượng cũ (PUT).
+  endTime?: string
   guests: number
   tableId: number
   // Java lấy chi nhánh từ các bàn; nếu có gửi thì các bàn phải thuộc chi nhánh đó.
@@ -208,6 +214,8 @@ export type JavaReservation = {
   contact: string
   email: string | null
   dateTime: string
+  // Java luôn trả giờ kết thúc; phiếu cũ là dateTime + 2 giờ.
+  endTime: string
   table: string | null
   tableId: number | null
   branch: BranchId
@@ -382,11 +390,88 @@ export function fetchCustomers(): Promise<JavaResult<JavaCustomerSummary[]>> {
   return request<JavaCustomerSummary[]>('/api/customers', { method: 'GET' })
 }
 
-export type VoucherVerdict = { code: string; valid: boolean; discountAmount: number; description: string }
+export type VoucherVerdict = {
+  code: string
+  valid: boolean
+  reason: string
+  discountAmount: number
+  shortfall: number
+  description: string
+  firstOnlineOrderOnly: boolean
+}
 
 // POST /api/vouchers/validate (công khai): xem trước voucher bằng đúng Strategy mà checkout dùng.
-export function validateVoucher(code: string, subtotal: number): Promise<JavaResult<VoucherVerdict>> {
-  return request<VoucherVerdict>('/api/vouchers/validate', { method: 'POST', body: { code, subtotal } })
+// Java chỉ tin userId (giới hạn mỗi tài khoản) khi storefront gửi kèm service key.
+export function validateVoucher(code: string, subtotal: number, userId?: number): Promise<JavaResult<VoucherVerdict>> {
+  if (userId === undefined) {
+    return request<VoucherVerdict>('/api/vouchers/validate', { method: 'POST', body: { code, subtotal } })
+  }
+  // Thiếu key thì Java không biết tài khoản, và khách đã đăng nhập sẽ bị báo "Đăng nhập để dùng mã
+  // này": báo lỗi cấu hình thay vì hỏi như khách vãng lai.
+  const service = storefrontService()
+  if (service === null) {
+    console.error('[voucher] AUTH_SERVICE_KEY is not configured; per-account voucher checks are refused.')
+    return Promise.resolve(serviceKeyMissing)
+  }
+  return request<VoucherVerdict>('/api/vouchers/validate', { method: 'POST', body: { code, subtotal, userId }, ...service })
+}
+
+// GET /api/vouchers/active (công khai): các mã đang chạy, cho giỏ hàng và trang tài khoản.
+export function fetchActiveVouchers(): Promise<JavaResult<ActiveVoucher[]>> {
+  return request<ActiveVoucher[]>('/api/vouchers/active', { method: 'GET', auth: false })
+}
+
+export type VoucherState = 'UPCOMING' | 'RUNNING' | 'EXPIRED' | 'SOLD_OUT' | 'DISABLED'
+
+export type AdminVoucher = ActiveVoucher & {
+  id: number
+  maxUses: number | null
+  startDate: string
+  active: boolean
+  usedCount: number
+  state: VoucherState
+}
+
+export type VoucherInput = Omit<AdminVoucher, 'id' | 'usedCount' | 'state'>
+
+export type VoucherUsageRow = { userId: number | null; orderCode: string | null; discountAmount: number; createdAt: string }
+
+// Quản lý voucher (MANAGER+), gọi bằng token của người đang đăng nhập.
+export function fetchVouchers(): Promise<JavaResult<AdminVoucher[]>> {
+  return request<AdminVoucher[]>('/api/vouchers', { method: 'GET' })
+}
+
+export function createVoucher(input: VoucherInput): Promise<JavaResult<AdminVoucher>> {
+  return request<AdminVoucher>('/api/vouchers', { method: 'POST', body: input })
+}
+
+export function updateVoucher(id: number, input: VoucherInput): Promise<JavaResult<AdminVoucher>> {
+  return request<AdminVoucher>(`/api/vouchers/${id}`, { method: 'PUT', body: input })
+}
+
+// Mã đã có người dùng thì Java chỉ tắt chứ không xóa hẳn.
+export function deleteVoucher(id: number): Promise<JavaResult<{ deleted: boolean; deactivated: boolean }>> {
+  return request<{ deleted: boolean; deactivated: boolean }>(`/api/vouchers/${id}`, { method: 'DELETE' })
+}
+
+export function fetchVoucherUsages(id: number): Promise<JavaResult<VoucherUsageRow[]>> {
+  return request<VoucherUsageRow[]>(`/api/vouchers/${id}/usages`, { method: 'GET' })
+}
+
+export type VoucherRedemption = { usageId: number; discountAmount: number; code: string }
+
+// POST /api/vouchers/redeem (service key): đơn COD giữ một lượt ngay lúc khách đặt.
+export function redeemVoucher(input: { code: string; subtotal: number; userId?: number; orderCode: string }): Promise<JavaResult<VoucherRedemption>> {
+  const service = storefrontService()
+  if (service === null) return Promise.resolve(serviceKeyMissing)
+  return request<VoucherRedemption>('/api/vouchers/redeem', { method: 'POST', body: input, ...service })
+}
+
+// POST /api/vouchers/release (service key): trả lượt khi đơn COD không ghi được.
+export function releaseVoucher(orderCode: string): Promise<JavaResult<{ released: boolean }>> {
+  const service = storefrontService()
+  if (service === null) return Promise.resolve(serviceKeyMissing)
+  return request<{ released: boolean }>('/api/vouchers/release', { method: 'POST', body: { orderCode }, ...service })
 }
 
 export type StoreConfig = {

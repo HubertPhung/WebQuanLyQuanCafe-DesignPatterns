@@ -25,6 +25,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.OptionalDouble;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -122,6 +123,19 @@ public class PosCheckoutFacade {
         return CheckoutResult.success(order, payment, warnings);
     }
 
+    /**
+     * Tạm tính của đơn theo đúng giá thực đơn và phụ thu mà checkout sẽ dùng, không thu tiền và
+     * không lưu gì. Rỗng khi một món không còn hoặc đã hết; checkout sẽ báo lỗi đó.
+     */
+    public OptionalDouble subtotalOf(CheckoutRequest request) {
+        Objects.requireNonNull(request, "Request must not be null");
+        Map<Integer, MenuItem> menu = new LinkedHashMap<>();
+        if (resolveMenu(request, menu) != null) {
+            return OptionalDouble.empty();
+        }
+        return OptionalDouble.of(buildOrder(request.withDiscount(null, null), menu).getSubtotal());
+    }
+
     private CheckoutResult resolveMenu(CheckoutRequest request, Map<Integer, MenuItem> menu) {
         for (CheckoutLine line : request.getLines()) {
             MenuItem item = menu.get(line.getMenuItemId());
@@ -158,6 +172,7 @@ public class PosCheckoutFacade {
         }
         Order order = builder.build();
         order.setBranch(request.getBranch());
+        order.setVoucherCode(request.getVoucherCode());
         return order;
     }
 

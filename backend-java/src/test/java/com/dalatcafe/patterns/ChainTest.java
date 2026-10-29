@@ -312,6 +312,58 @@ class ChainTest {
         return reservation;
     }
 
+    private static Reservation ranged(String start, String end) {
+        Reservation reservation = booking(start);
+        reservation.setEndTime(at(end));
+        return reservation;
+    }
+
+    @Test
+    void endAtClosingTimeIsAllowed() {
+        assertTrue(chain.validate(ranged("21:00", "22:00")).isValid());
+        ValidationResult late = chain.validate(ranged("21:00", "22:30"));
+        assertFalse(late.isValid());
+        assertEquals("Giờ kết thúc không được quá giờ đóng cửa (22:00).", late.getErrorMessage());
+    }
+
+    @Test
+    void minimumLengthIsThirtyMinutes() {
+        assertTrue(chain.validate(ranged("18:00", "18:30")).isValid());
+        ValidationResult tooShort = chain.validate(ranged("18:00", "18:29"));
+        assertFalse(tooShort.isValid());
+        assertEquals("Giờ kết thúc phải sau giờ bắt đầu ít nhất 30 phút.", tooShort.getErrorMessage());
+        assertFalse(chain.validate(ranged("18:00", "17:00")).isValid());
+    }
+
+    @Test
+    void endOnNextDayIsRejected() {
+        Reservation overnight = booking("21:00");
+        overnight.setEndTime(at("07:30").plus(Duration.ofDays(1)));
+        assertFalse(chain.validate(overnight).isValid());
+    }
+
+    @Test
+    void backToBackBookingsDoNotClash() {
+        reservations.entries.add(ranged("18:00", "19:00"));
+        assertTrue(chain.validate(ranged("19:00", "20:30")).isValid());
+        assertFalse(chain.validate(ranged("18:45", "19:15")).isValid());
+        assertTrue(chain.validate(ranged("17:00", "18:00")).isValid());
+    }
+
+    @Test
+    void legacyReservationHoldsTwoHours() {
+        reservations.entries.add(booking("18:00"));
+        assertFalse(chain.validate(ranged("19:59", "20:30")).isValid());
+        assertTrue(chain.validate(ranged("20:00", "21:00")).isValid());
+    }
+
+    @Test
+    void rangedRequestAgainstLongerStoredRange() {
+        reservations.entries.add(ranged("09:00", "13:00"));
+        assertFalse(chain.validate(ranged("12:30", "13:30")).isValid());
+        assertTrue(chain.validate(ranged("13:00", "14:00")).isValid());
+    }
+
     private static final class CountingTables extends InMemoryTableDao {
         final Table table = new Table(1, "Bàn 1", 4, "Main");
         int reads;

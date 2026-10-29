@@ -4,6 +4,8 @@ import { joinContactOrders } from '@/lib/admin/queries'
 import { listContactsForUser } from '@/lib/orders/online-contacts'
 import { isFirstOnlineOrderAvailable } from '@/lib/orders/first-online-order'
 import type { Session } from '@/lib/auth/session'
+import { loadActiveVouchers } from '@/lib/storefront/active-vouchers'
+import type { ActiveVoucher } from '@/lib/storefront/vouchers'
 import type { Rank } from './loyalty'
 import { getAccountReservations, type AccountReservation } from './reservations'
 
@@ -36,13 +38,16 @@ export type AccountOverview = {
   // Không hỏi được Java, nên không biết số điện thoại có phải thành viên hay không.
   memberUnknown: boolean
   welcomeVoucherEligible: boolean
+  // Mã đang chạy bên Java; rỗng khi không hỏi được Java.
+  vouchers: ActiveVoucher[]
 }
 
 export async function getAccountOverview(session: Session): Promise<AccountOverview> {
-  const [contacts, welcomeVoucherEligible, reservationHistory] = await Promise.all([
+  const [contacts, welcomeVoucherEligible, reservationHistory, vouchers] = await Promise.all([
     listContactsForUser(session.userId),
     isFirstOnlineOrderAvailable(session.userId).catch(() => false),
     getAccountReservations(session),
+    loadActiveVouchers(),
   ])
   const orders = (await joinContactOrders(contacts)).map<AccountOrder>((order) => ({
     orderCode: order.orderCode,
@@ -82,6 +87,7 @@ export async function getAccountOverview(session: Session): Promise<AccountOverv
   return {
     ...reservationHistory,
     welcomeVoucherEligible,
+    vouchers,
     orders,
     addresses: [...addresses.values()],
     phone: member?.phone ?? phones[0] ?? null,

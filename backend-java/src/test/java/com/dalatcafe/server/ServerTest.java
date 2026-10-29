@@ -171,7 +171,8 @@ class ServerTest {
             reservation.setReservationCode("NOSHOW-" + i);
             reservation.setCustomer("No show test"); reservation.setContact("0901234567");
             reservation.setTableId(1);
-            reservation.setDateTime(now.minusSeconds(i == 1 ? 899 : 900));
+            // Phiếu chưa nhận bàn được giữ 30 phút tính từ giờ khách đến.
+            reservation.setDateTime(now.minusSeconds(i == 1 ? 1799 : 1800));
             reservation.setStatus(i == 2 ? ReservationStatus.SEATED : ReservationStatus.CONFIRMED);
             assertTrue(daos.getReservationDao().save(reservation));
         }
@@ -348,8 +349,8 @@ class ServerTest {
         String seated = createReservation(4, 2);
         assertEquals(200, call("POST", "/api/reservations/" + seated + "/transfer-pos", "STAFF", null).statusCode());
         var seatedBooking = reservations.findByReservationCode(seated).orElseThrow();
-        waitingBooking.setDateTime(java.time.Instant.now().minusSeconds(16 * 60));
-        seatedBooking.setDateTime(java.time.Instant.now().minusSeconds(16 * 60));
+        waitingBooking.setDateTime(java.time.Instant.now().minusSeconds(31 * 60));
+        seatedBooking.setDateTime(java.time.Instant.now().minusSeconds(31 * 60));
         var slot = java.net.URLEncoder.encode(java.time.Instant.now().toString(), StandardCharsets.UTF_8);
         var response = call("GET", "/api/tables/catalog?dateTime=" + slot, null, null);
         assertEquals(200, response.statusCode(), response.body());
@@ -885,12 +886,24 @@ class ServerTest {
 
     @Test
     void voucherValidationIsPublicAndMatchesCheckout() throws Exception {
-        HttpResponse<String> ok = call("POST", "/api/vouchers/validate", null, "{\"code\":\"welcome10\",\"subtotal\":100000}");
+        com.dalatcafe.model.Voucher sale = new com.dalatcafe.model.Voucher();
+        sale.setCode("SALE10");
+        sale.setType(com.dalatcafe.model.VoucherType.PERCENT);
+        sale.setValue(10);
+        sale.setMaxDiscount(50_000.0);
+        sale.setStartDate(LocalDate.now(com.dalatcafe.model.Voucher.CAFE_ZONE).minusDays(1));
+        sale.setEndDate(LocalDate.now(com.dalatcafe.model.Voucher.CAFE_ZONE).plusDays(1));
+        assertTrue(DaoFactory.getInstance().getVoucherDao().save(sale));
+        HttpResponse<String> ok = call("POST", "/api/vouchers/validate", null, "{\"code\":\"sale10\",\"subtotal\":100000}");
         assertEquals(200, ok.statusCode(), ok.body());
         assertEquals(Boolean.TRUE, data(ok).get("valid"));
         assertEquals(10_000.0, number(data(ok), "discountAmount"));
-        HttpResponse<String> capped = call("POST", "/api/vouchers/validate", null, "{\"code\":\"WELCOME10\",\"subtotal\":900000}");
+        HttpResponse<String> capped = call("POST", "/api/vouchers/validate", null, "{\"code\":\"SALE10\",\"subtotal\":900000}");
         assertEquals(50_000.0, number(data(capped), "discountAmount"));
+        // WELCOME10 giới hạn mỗi tài khoản một lần, nên khách vãng lai phải đăng nhập.
+        HttpResponse<String> welcome = call("POST", "/api/vouchers/validate", null, "{\"code\":\"WELCOME10\",\"subtotal\":100000}");
+        assertEquals(Boolean.FALSE, data(welcome).get("valid"));
+        assertEquals("LOGIN_REQUIRED", data(welcome).get("reason"));
         HttpResponse<String> bad = call("POST", "/api/vouchers/validate", null, "{\"code\":\"NOPE\",\"subtotal\":100000}");
         assertEquals(Boolean.FALSE, data(bad).get("valid"));
         assertEquals(400, call("POST", "/api/vouchers/validate", null, "{\"code\":\"WELCOME10\"}").statusCode());
@@ -905,6 +918,9 @@ class ServerTest {
         assertEquals(SimpleAuthFilter.Access.PUBLIC, SimpleAuthFilter.required("GET", "/api/menu/"));
         assertEquals(SimpleAuthFilter.Access.PUBLIC, SimpleAuthFilter.required("POST", "/api/reservations"));
         assertEquals(SimpleAuthFilter.Access.PUBLIC, SimpleAuthFilter.required("POST", "/api/vouchers/validate"));
+        assertEquals(SimpleAuthFilter.Access.PUBLIC, SimpleAuthFilter.required("GET", "/api/vouchers/active"));
+        assertEquals(SimpleAuthFilter.Access.MANAGER, SimpleAuthFilter.required("POST", "/api/vouchers"));
+        assertEquals(SimpleAuthFilter.Access.MANAGER, SimpleAuthFilter.required("GET", "/api/vouchers/3/usages"));
         assertEquals(SimpleAuthFilter.Access.STAFF, SimpleAuthFilter.required("GET", "/api/anything-new"));
         assertEquals(SimpleAuthFilter.Access.MANAGER, SimpleAuthFilter.required("POST", "/api/menu"));
         assertEquals(SimpleAuthFilter.Access.STAFF, SimpleAuthFilter.required("PATCH", "/api/menu/1/stock"));

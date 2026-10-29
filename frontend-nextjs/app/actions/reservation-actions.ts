@@ -1,7 +1,7 @@
 'use server'
 
 import { createReservation as createJavaReservation, getJavaBackendUrl } from '@/lib/api-client'
-import { isWithinDefaultOperatingHours, hasReservationTimePassed, DEFAULT_OPENING_TIME, DEFAULT_CLOSING_TIME } from '@/lib/reservation-rules'
+import { isWithinDefaultOperatingHours, hasReservationTimePassed, reservationRangeError, DEFAULT_OPENING_TIME, DEFAULT_CLOSING_TIME } from '@/lib/reservation-rules'
 import { createMockReservation, getMockMenuItems } from '@/lib/db/mock-store'
 import { getReservationTableOptions } from '@/lib/reservations/availability'
 import { isDbConfigured } from '@/lib/db'
@@ -9,8 +9,8 @@ import { DEFAULT_BRANCH_ID, isBranchId, type BranchId } from '@/lib/branches'
 import { getSession } from '@/lib/auth/session'
 import { revalidatePath } from 'next/cache'
 
-export async function getCustomerReservationTables(dateTime?: string, branch?: BranchId) {
-  return getReservationTableOptions(dateTime, branch)
+export async function getCustomerReservationTables(dateTime?: string, branch?: BranchId, endTime?: string) {
+  return getReservationTableOptions(dateTime, branch, endTime)
 }
 
 export interface CustomerReservationInput {
@@ -19,6 +19,8 @@ export interface CustomerReservationInput {
   email?: string
   note?: string
   dateTime: string
+  // Giờ kết thúc khách chọn (ISO-8601).
+  endTime: string
   guests: number
   tableId: number
   tableIds?: number[]
@@ -67,6 +69,9 @@ export async function bookCustomerTable(input: CustomerReservationInput): Promis
     if (!isWithinDefaultOperatingHours(dateTime)) {
       return { ok: false, error: `Quán chỉ phục vụ đặt bàn trong khung giờ mở cửa (${DEFAULT_OPENING_TIME} - ${DEFAULT_CLOSING_TIME}).` }
     }
+    const endTime = new Date(input.endTime)
+    const rangeError = reservationRangeError(dateTime, endTime)
+    if (rangeError) return { ok: false, error: rangeError }
 
     const session = await getSession()
     const booking = {
@@ -75,6 +80,7 @@ export async function bookCustomerTable(input: CustomerReservationInput): Promis
       email: input.email?.trim() || session?.email || undefined,
       note: input.note?.trim().slice(0, 500) || undefined,
       dateTime: dateTime.toISOString(),
+      endTime: endTime.toISOString(),
       guests: input.guests,
       tableId: tableIds[0],
       tableIds,
@@ -112,6 +118,7 @@ export async function bookCustomerTable(input: CustomerReservationInput): Promis
       email: booking.email ?? null,
       note: booking.note ?? null,
       dateTime,
+      endTime,
       guests: booking.guests,
       tableId: booking.tableId,
       tableIds,

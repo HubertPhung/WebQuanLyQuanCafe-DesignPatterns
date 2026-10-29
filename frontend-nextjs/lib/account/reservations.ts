@@ -3,10 +3,13 @@ import { fetchMyReservations, getJavaBackendUrl } from '@/lib/api-client'
 import type { Session } from '@/lib/auth/session'
 import { getMockReservations } from '@/lib/db/mock-store'
 import type { BranchId } from '@/lib/branches'
+import { reservationEnd } from '@/lib/reservation-rules'
 
 export type AccountReservation = {
   code: string
   scheduledAt: string
+  // Giờ kết thúc (ISO); phiếu cũ là giờ bắt đầu + 2 giờ.
+  endAt: string
   table: string
   branch: BranchId
   guests: number
@@ -28,6 +31,7 @@ export async function getAccountReservations(session: Session): Promise<{
     .map<AccountReservation>(reservation => ({
       code: reservation.code,
       scheduledAt: reservation.dateTime.toISOString(),
+      endAt: reservationEnd(reservation).toISOString(),
       table: reservation.tableName,
       branch: reservation.branch,
       guests: reservation.guests,
@@ -38,6 +42,7 @@ export async function getAccountReservations(session: Session): Promise<{
   const fromJava: AccountReservation[] = remote.ok ? remote.data.map(reservation => ({
     code: reservation.id,
     scheduledAt: reservation.dateTime,
+    endAt: reservation.endTime ?? reservationEnd({ dateTime: new Date(reservation.dateTime) }).toISOString(),
     table: reservation.table ?? 'Đang xếp bàn',
     branch: reservation.branch,
     guests: reservation.guests,

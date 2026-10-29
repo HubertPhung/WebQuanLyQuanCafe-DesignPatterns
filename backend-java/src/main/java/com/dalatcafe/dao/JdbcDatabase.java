@@ -329,10 +329,50 @@ public class JdbcDatabase {
             ALTER TABLE orders ADD COLUMN IF NOT EXISTS items JSONB NOT NULL DEFAULT '[]'::jsonb;
             ALTER TABLE reservations ADD COLUMN IF NOT EXISTS pre_orders JSONB NOT NULL DEFAULT '[]'::jsonb;
             ALTER TABLE reservations ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id);
+            -- End of the booked range; NULL on bookings made before it existed (they hold two hours).
+            ALTER TABLE reservations ADD COLUMN IF NOT EXISTS end_time TIMESTAMPTZ;
             -- Branch of each table, order and booking; rows from before branches belong to the first one.
             ALTER TABLE tables ADD COLUMN IF NOT EXISTS branch VARCHAR(40) NOT NULL DEFAULT 'phan-dinh-phung';
             ALTER TABLE orders ADD COLUMN IF NOT EXISTS branch VARCHAR(40) NOT NULL DEFAULT 'phan-dinh-phung';
             ALTER TABLE reservations ADD COLUMN IF NOT EXISTS branch VARCHAR(40) NOT NULL DEFAULT 'phan-dinh-phung';
+
+            -- Vouchers managed by staff; NULL limits mean unlimited. One usage row per redeemed use.
+            CREATE TABLE IF NOT EXISTS vouchers (
+                id SERIAL PRIMARY KEY,
+                code VARCHAR(30) UNIQUE NOT NULL,
+                type VARCHAR(10) NOT NULL,
+                value NUMERIC(12,2) NOT NULL,
+                max_discount NUMERIC(12,2),
+                min_order NUMERIC(12,2) NOT NULL DEFAULT 0,
+                max_uses INT,
+                per_account_limit INT,
+                first_online_order_only BOOLEAN NOT NULL DEFAULT FALSE,
+                start_date DATE NOT NULL,
+                end_date DATE NOT NULL,
+                description TEXT,
+                active BOOLEAN NOT NULL DEFAULT TRUE,
+                used_count INT NOT NULL DEFAULT 0,
+                created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS voucher_usages (
+                id SERIAL PRIMARY KEY,
+                voucher_id INT NOT NULL REFERENCES vouchers(id),
+                user_id INT,
+                order_code VARCHAR(50) UNIQUE,
+                discount_amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+                created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_voucher_usages_voucher_user ON voucher_usages(voucher_id, user_id);
+            ALTER TABLE orders ADD COLUMN IF NOT EXISTS voucher_code VARCHAR(30);
+            -- Usages must never vanish with their voucher; databases created with ON DELETE CASCADE are switched over.
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'voucher_usages_voucher_id_fkey' AND confdeltype = 'c') THEN
+                    ALTER TABLE voucher_usages DROP CONSTRAINT voucher_usages_voucher_id_fkey;
+                    ALTER TABLE voucher_usages ADD CONSTRAINT voucher_usages_voucher_id_fkey
+                        FOREIGN KEY (voucher_id) REFERENCES vouchers(id);
+                END IF;
+            END $$;
 
             DO $$
             BEGIN
@@ -373,6 +413,8 @@ public class JdbcDatabase {
             SELECT setval(pg_get_serial_sequence('reservations', 'id'), COALESCE((SELECT MAX(id) FROM reservations), 0) + 1, false);
             SELECT setval(pg_get_serial_sequence('customers', 'id'), COALESCE((SELECT MAX(id) FROM customers), 0) + 1, false);
             SELECT setval(pg_get_serial_sequence('users', 'id'), COALESCE((SELECT MAX(id) FROM users), 0) + 1, false);
+            SELECT setval(pg_get_serial_sequence('vouchers', 'id'), COALESCE((SELECT MAX(id) FROM vouchers), 0) + 1, false);
+            SELECT setval(pg_get_serial_sequence('voucher_usages', 'id'), COALESCE((SELECT MAX(id) FROM voucher_usages), 0) + 1, false);
         """;
         try (Statement stmt = conn.createStatement()) {
             stmt.execute(sql);

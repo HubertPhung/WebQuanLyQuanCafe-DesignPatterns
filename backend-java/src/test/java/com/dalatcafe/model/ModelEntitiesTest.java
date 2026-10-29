@@ -343,6 +343,27 @@ class ModelEntitiesTest {
     class ReservationTest {
 
         @Test
+        void endTimeDefaultsToTwoHours() {
+            Instant start = Instant.parse("2026-11-05T11:00:00Z");
+            Reservation res = new Reservation(1, "RES-001", "Khach", "0912345678", start, 2);
+            assertNull(res.getStoredEndTime());
+            assertEquals(start.plus(Reservation.DEFAULT_LENGTH), res.getEndTime());
+            res.setEndTime(start.plusSeconds(1800));
+            assertEquals(start.plusSeconds(1800), res.getEndTime());
+            assertEquals(start.plusSeconds(1800), res.getStoredEndTime());
+        }
+
+        @Test
+        void overlapsIsHalfOpen() {
+            Instant start = Instant.parse("2026-11-05T11:00:00Z");
+            Reservation res = new Reservation(1, "RES-001", "Khach", "0912345678", start, 2);
+            res.setEndTime(start.plusSeconds(3600));
+            assertFalse(res.overlaps(start.plusSeconds(3600), start.plusSeconds(9000)));
+            assertTrue(res.overlaps(start.plusSeconds(1800), start.plusSeconds(5400)));
+            assertFalse(res.overlaps(start.minusSeconds(3600), start));
+        }
+
+        @Test
         @DisplayName("Should initialize defaults and manage pre-orders")
         void testReservationDefaultsAndPreOrders() {
             Instant bookingTime = Instant.now().plusSeconds(7200);
@@ -453,6 +474,54 @@ class ModelEntitiesTest {
             assertNotEquals(c1, sameId);
             assertNotEquals(new Customer(), new Customer());
             assertTrue(c1.toString().contains("User A"));
+        }
+    }
+
+    @Nested
+    @DisplayName("Voucher")
+    class VoucherTest {
+        private Voucher voucher(java.time.LocalDate start, java.time.LocalDate end) {
+            Voucher v = new Voucher();
+            v.setCode("SALE1111");
+            v.setType(VoucherType.PERCENT);
+            v.setValue(10);
+            v.setStartDate(start);
+            v.setEndDate(end);
+            v.setActive(true);
+            return v;
+        }
+
+        @Test
+        void expiresAtVietnamMidnight() {
+            Voucher v = voucher(java.time.LocalDate.of(2026, 11, 1), java.time.LocalDate.of(2026, 11, 11));
+            assertTrue(v.isWithinDates(Instant.parse("2026-11-11T16:59:59Z")));
+            assertFalse(v.isWithinDates(Instant.parse("2026-11-11T17:00:00Z")));
+            assertFalse(v.isWithinDates(Instant.parse("2026-10-31T16:59:59Z")));
+            assertTrue(v.isWithinDates(Instant.parse("2026-10-31T17:00:00Z")));
+        }
+
+        @Test
+        void stateAtPriority() {
+            Instant now = Instant.parse("2026-11-20T03:00:00Z");
+            Voucher expiredAndDisabled = voucher(java.time.LocalDate.of(2026, 11, 1), java.time.LocalDate.of(2026, 11, 11));
+            expiredAndDisabled.setActive(false);
+            assertEquals(Voucher.VoucherState.DISABLED, expiredAndDisabled.stateAt(now));
+
+            Voucher expiredAndSoldOut = voucher(java.time.LocalDate.of(2026, 11, 1), java.time.LocalDate.of(2026, 11, 11));
+            expiredAndSoldOut.setMaxUses(1);
+            expiredAndSoldOut.setUsedCount(1);
+            assertEquals(Voucher.VoucherState.EXPIRED, expiredAndSoldOut.stateAt(now));
+
+            Voucher soldOut = voucher(java.time.LocalDate.of(2026, 11, 1), java.time.LocalDate.of(2026, 12, 1));
+            soldOut.setMaxUses(1);
+            soldOut.setUsedCount(1);
+            assertEquals(Voucher.VoucherState.SOLD_OUT, soldOut.stateAt(now));
+
+            Voucher upcoming = voucher(java.time.LocalDate.of(2026, 12, 1), java.time.LocalDate.of(2026, 12, 31));
+            assertEquals(Voucher.VoucherState.UPCOMING, upcoming.stateAt(now));
+
+            Voucher running = voucher(java.time.LocalDate.of(2026, 11, 1), java.time.LocalDate.of(2026, 12, 1));
+            assertEquals(Voucher.VoucherState.RUNNING, running.stateAt(now));
         }
     }
 }

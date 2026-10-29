@@ -24,7 +24,7 @@ Ngoại lệ: một đường dẫn nằm ngoài các nhóm đã đăng ký (`/a
 | 400 | `INVALID_INPUT` | Thiếu hoặc sai trường, JSON hỏng, đổi điểm mà không có SĐT thành viên, thanh toán bị từ chối (`PAYMENT_FAILED`) |
 | 400 | `INSUFFICIENT_POINTS` | `useLoyaltyPoints` lớn hơn số điểm khách đang có |
 | 400 | `CHAIN_VALIDATION_FAILED` | Phiếu đặt bàn không qua chuỗi kiểm định |
-| 400 | `INVALID_VOUCHER` | Mã giảm giá khác `WELCOME10` |
+| 400 | `INVALID_VOUCHER` | Mã giảm giá không dùng được: không tồn tại, đã tắt, chưa tới ngày, hết hạn, hết lượt, tài khoản đã dùng hết lượt, cần đăng nhập, chỉ cho đơn online, hoặc chưa đạt đơn tối thiểu (thông báo nói rõ lý do) |
 | 401 | `UNAUTHORIZED` | Thiếu, sai hoặc hết hạn Bearer token; tài khoản đã bị khoá; sai `X-Service-Key` |
 | 403 | `STAFF_PASSWORD_ONLY` | Đăng nhập Google vào tài khoản nhân viên (chỉ khách hàng được dùng Google) |
 | 401 | `INVALID_CREDENTIALS` | Sai email hoặc mật khẩu (cùng một câu trả lời cho cả hai trường hợp) |
@@ -42,14 +42,14 @@ Ngoại lệ: một đường dẫn nằm ngoài các nhóm đã đăng ký (`/a
 ### 1.3. Xác thực, phân quyền & CORS
 - **Xác thực:** gửi `Authorization: Bearer <token>`, với token lấy từ `/api/auth/login`, `/api/auth/register` hoặc `/api/auth/google` (mục 3.19). Token là JWT HS256 có `sub` (id tài khoản), `email`, `name`, `role`, `exp` (mặc định 8 giờ), ký bằng `AUTH_JWT_SECRET`. Frontend dùng cùng khoá để kiểm cookie phiên.
 - **Vai trò** (thấp đến cao): `CUSTOMER` < `STAFF` < `MANAGER` < `ADMIN`; vai trò cao gồm mọi quyền của vai trò thấp hơn. Mỗi request đọc lại vai trò **từ tài khoản**, không tin vai trò ghi trong token, nên đổi vai trò hay khoá tài khoản có hiệu lực ngay với cả token cũ. Chi tiết tại [ARCHITECTURE §4](ARCHITECTURE.md#4-xác-thực--phân-quyền-rbac).
-- **Công khai:** `GET /api/menu`, `POST /api/reservations`, `POST /api/vouchers/validate`, `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/google` (cần `X-Service-Key`). Token hỏng hoặc hết hạn ở endpoint công khai bị bỏ qua, không làm lỗi request.
+- **Công khai:** `GET /api/menu`, `POST /api/reservations`, `POST /api/vouchers/validate`, `GET /api/vouchers/active`, `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/google` (cần `X-Service-Key`). Token hỏng hoặc hết hạn ở endpoint công khai bị bỏ qua, không làm lỗi request.
 - **Mọi tài khoản đã đăng nhập:** `GET /api/auth/me`, `POST /api/auth/password`.
 - **Chỉ ADMIN:** `/api/users`, `PUT | PATCH /api/config`.
-- **Cần MANAGER hoặc ADMIN:** `POST /api/menu`, `GET /api/analytics/overview`.
+- **Cần MANAGER hoặc ADMIN:** `POST /api/menu`, `GET /api/analytics/overview`, `/api/vouchers` (GET, POST), `/api/vouchers/{id}` (PUT, DELETE), `GET /api/vouchers/{id}/usages`.
 - **Cần STAFF, MANAGER hoặc ADMIN:** mọi endpoint còn lại. `SimpleAuthFilter` từ chối theo mặc định, nên một endpoint mới không bao giờ vô tình thành công khai.
 - Chỉ chính đường dẫn gốc của nhóm và đường dẫn con của nó mới thuộc nhóm đó: `/api/users`, `/api/users/7` là của `/api/users`, còn `/api/usersX` trả 404 `NOT_FOUND`. (`HttpServer` chọn handler theo tiền tố chuỗi, nên nếu không chặn, `/api/usersX` sẽ tới handler tài khoản mà chỉ cần quyền STAFF.)
 - Mật khẩu ở `login` và `currentPassword` ở `/api/auth/password` được so **đúng như đã gõ**, không cắt khoảng trắng, giống lúc đăng ký và đổi mật khẩu.
-- **Đơn online của khách (server tới server):** không có Bearer token, header `X-Service-Key: <AUTH_SERVICE_KEY>` được coi là một caller STAFF, nhưng **chỉ** ở `POST /api/checkout` và `POST /api/orders/sync`. Frontend dùng khoá này khi khách (vãng lai hoặc đã đăng nhập) đặt hàng ở `/checkout`, và khi đó không gửi token của khách. Ở mọi endpoint khác khoá này không có tác dụng (vẫn 401). Java phải chạy với cùng `AUTH_SERVICE_KEY` như frontend.
+- **Đơn online của khách (server tới server):** không có Bearer token, header `X-Service-Key: <AUTH_SERVICE_KEY>` được coi là một caller STAFF, nhưng **chỉ** ở `POST /api/checkout`, `POST /api/orders/sync` và `POST /api/vouchers/validate|redeem|release`. Hai endpoint giữ và nhả lượt voucher **chỉ** nhận khoá này (nhân viên gọi trả 403); `userId` trong body checkout và validate chỉ được tin khi đi kèm khoá. Frontend dùng khoá này khi khách (vãng lai hoặc đã đăng nhập) đặt hàng ở `/checkout`, và khi đó không gửi token của khách. Ở mọi endpoint khác khoá này không có tác dụng (vẫn 401). Java phải chạy với cùng `AUTH_SERVICE_KEY` như frontend.
 - Thiếu token hoặc token sai trả 401 `UNAUTHORIZED`; vai trò không đủ trả 403 `FORBIDDEN`. Header `X-User-Role` tự khai **chỉ** được chấp nhận khi server chạy với `AUTH_ALLOW_ROLE_HEADER=true` (dành cho phát triển và bộ test REST cũ); khi có Bearer token thì token luôn thắng.
 - **CORS:** `Access-Control-Allow-Origin: *`. Cho phép các phương thức GET, POST, PUT, PATCH, DELETE và OPTIONS. Preflight `OPTIONS` trả 204, không cần token.
 
@@ -57,7 +57,7 @@ Ngoại lệ: một đường dẫn nằm ngoài các nhóm đã đăng ký (`/a
 Quán có hai chi nhánh, id cố định ở `com.dalatcafe.model.Branches` và `frontend-nextjs/lib/branches.ts`: `phan-dinh-phung` (123 Phan Đình Phùng, chi nhánh mặc định) và `bui-thi-xuan` (456 Bùi Thị Xuân).
 - **Thuộc về một chi nhánh:** bàn, đơn hàng, phiếu đặt bàn (trường `branch` trong JSON). **Dùng chung:** thực đơn, khách hàng thành viên, tài khoản, cài đặt quán.
 - **Lọc danh sách:** `GET /api/tables`, `/api/tables/catalog`, `/api/orders`, `/api/reservations`, `/api/analytics/overview` nhận `?branch=<id>`. Không gửi thì trả cả quán; id lạ trả 400.
-- **Kiểm tra lịch bàn:** `GET /api/tables/catalog?dateTime=<ISO-8601>&branch=<id>` thêm `available` cho từng bàn, không trả thông tin khách. Bàn thuộc bất kỳ phiếu chưa hủy nào có thời gian sử dụng chồng nhau đều không chọn được, kể cả bàn phụ trong phiếu ghép. Máy chủ kiểm tra lại khi lưu; các bàn khác vẫn đặt cùng giờ được. Khách chưa nhận bàn quá thời gian chờ (mặc định 15 phút) không còn giữ chỗ; khách đã nhận bàn không bị tự nhả bàn. Khi không đọc được lịch hoặc mất kết nối, frontend không ghi nhận phiếu bằng dữ liệu độc lập; chế độ demo chỉ dùng khi `JAVA_BACKEND_URL=off`.
+- **Kiểm tra lịch bàn:** `GET /api/tables/catalog?dateTime=<ISO-8601>&endTime=<ISO-8601>&branch=<id>` thêm `available` cho từng bàn, không trả thông tin khách. `endTime` không bắt buộc (mặc định như khi đặt: +2 giờ, cắt ở giờ đóng cửa). Bàn thuộc bất kỳ phiếu chưa hủy nào có khoảng giờ chồng lên `[dateTime, endTime)` đều không chọn được, kể cả bàn phụ trong phiếu ghép. Máy chủ kiểm tra lại khi lưu; các bàn khác vẫn đặt cùng giờ được. Khách chưa nhận bàn quá 30 phút tính từ giờ đến thì phiếu tự hủy và không còn giữ chỗ (áp dụng cho mọi phiếu, cả phiếu nhân viên tạo hộ); khách đã nhận bàn không bị tự nhả bàn. Khi không đọc được lịch hoặc mất kết nối, frontend không ghi nhận phiếu bằng dữ liệu độc lập; chế độ demo chỉ dùng khi `JAVA_BACKEND_URL=off`.
 - **Chi nhánh của bản ghi mới:** bàn mới vào chi nhánh trong `branch` của body (mặc định chi nhánh đầu), sửa bàn không đổi chi nhánh. Đơn tại bàn và phiếu đặt lấy chi nhánh của bàn; đơn mang đi / giao hàng lấy `branch` trong body. Gửi `branch` khác chi nhánh của bàn, hoặc ghép bàn của hai chi nhánh vào một phiếu, đều trả 400 trước khi thu tiền hay lưu.
 - Tên bàn chỉ cần không trùng **trong cùng chi nhánh** (cả hai chi nhánh đều có `Bàn 01`).
 
@@ -86,6 +86,11 @@ Quán có hai chi nhánh, id cố định ở `com.dalatcafe.model.Branches` và
 | `/api/customers` | GET | STAFF+ | — | 🟢 Đã triển khai |
 | `/api/analytics/overview` | GET | MANAGER+ | — | 🟢 Đã triển khai |
 | `/api/vouchers/validate` | POST | Công khai | **Strategy** | 🟢 Đã triển khai |
+| `/api/vouchers` | GET, POST | MANAGER+ | — | 🟢 Đã triển khai |
+| `/api/vouchers/{id}` | PUT, DELETE | MANAGER+ | — | 🟢 Đã triển khai |
+| `/api/vouchers/{id}/usages` | GET | MANAGER+ | — | 🟢 Đã triển khai |
+| `/api/vouchers/active` | GET | Công khai | — | 🟢 Đã triển khai |
+| `/api/vouchers/redeem`, `/api/vouchers/release` | POST | Service key | — | 🟢 Đã triển khai |
 | `/api/orders/sync` | POST | STAFF+ | — | 🟢 Đã triển khai |
 | `/api/config` | GET | STAFF+ | **Singleton** | 🟢 Đã triển khai |
 | `/api/config` | PUT, PATCH | ADMIN | **Singleton** | 🟢 Đã triển khai |
@@ -137,13 +142,14 @@ Danh sách phiếu (lọc bằng `?branch=`): `id` (mã `RES-xxxx`), `customer`,
 ```json
 {
   "customer": "Nguyễn Văn An", "contact": "0912345678", "email": "an@example.com",
-  "dateTime": "2026-10-20T05:00:00Z", "tableId": 9, "guests": 3, "note": "Sinh nhật",
+  "dateTime": "2026-10-20T05:00:00Z", "endTime": "2026-10-20T06:30:00Z", "tableId": 9, "guests": 3, "note": "Sinh nhật",
   "preOrders": [{ "menuItemId": 2, "qty": 2 }]
 }
 ```
+- `endTime` (giờ kết thúc, ISO-8601) không bắt buộc. Thiếu thì mặc định là `dateTime` + 2 giờ, cắt lại ở giờ đóng cửa của cùng ngày. Sai định dạng trả 400. Mọi JSON phiếu đặt bàn đều trả `endTime`; phiếu cũ không lưu giờ kết thúc trả `dateTime` + 2 giờ.
 - Mỗi món đặt trước phải có `menuItemId` của một món trong menu. Tên và giá lấy từ menu tại thời điểm đặt; `name` và `price` do client gửi bị bỏ qua (endpoint công khai). Món không tồn tại hoặc thiếu `menuItemId` trả **400** `INVALID_INPUT`. `menuItemId` được giữ trên đơn POS khi `transfer-pos`.
 - Chỉ định bàn bằng `tableId`, hoặc bằng tên bàn trong trường `table` (ví dụ `"Bàn 09"`). `dateTime` phải là một thời điểm ISO-8601.
-- Phiếu đi qua chuỗi `OperatingHoursValidator` (giờ đến không sớm hơn hiện tại quá 15 phút, trong 07:00–22:00 giờ Việt Nam) → `CapacityGuestValidator` (1–20 khách, không vượt số ghế) → `TableAvailabilityValidator` (không giao nhau trong khung 2 giờ trên cùng bàn).
+- Phiếu đi qua chuỗi `OperatingHoursValidator` (giờ đến không sớm hơn hiện tại quá 15 phút, trong 07:00–22:00 giờ Việt Nam; giờ kết thúc cùng ngày, sau giờ đến ít nhất 30 phút và không quá giờ đóng cửa) → `CapacityGuestValidator` (1–20 khách, không vượt số ghế) → `TableAvailabilityValidator` (khoảng `[dateTime, endTime)` không giao với phiếu chưa hủy khác trên cùng bàn; hai phiếu nối tiếp nhau như 18:00–19:00 và 19:00–20:30 không bị coi là trùng).
 - Hợp lệ trả **201**: `{ "ok": true, "data": { "id": "RES-0010", "status": "Chờ xác nhận" } }`.
 - Không qua chuỗi trả **400** `CHAIN_VALIDATION_FAILED`, thông báo lấy từ mắt xích đầu tiên thất bại.
 
@@ -260,7 +266,7 @@ Bật / tắt bán một món. Hệ thống không theo dõi số lượng tồn
 ```json
 { "customer": "An", "contact": "0911000111", "email": null, "note": "Sinh nhật", "dateTime": "2026-10-20T08:00:00Z", "tableIds": [5, 6], "guests": 8 }
 ```
-Sửa phiếu đang `pending` hoặc `confirmed` (trạng thái khác trả 409, không có phiếu trả 404). Bàn chọn như mục 3.5 (`tableIds`, `tableId` hoặc `table`). Mã phiếu, trạng thái và món đặt trước được giữ nguyên. Cả chuỗi Chain of Responsibility chạy lại; phiếu đang sửa không bị tính là trùng lịch với chính nó. Bị từ chối thì trả 400 `CHAIN_VALIDATION_FAILED` và phiếu không đổi. Bàn cũ không còn dùng được trả về `available` nếu không còn phiếu hay đơn nào giữ.
+Sửa phiếu đang `pending` hoặc `confirmed` (trạng thái khác trả 409, không có phiếu trả 404). Body nhận thêm `endTime`; không gửi thì phiếu giữ nguyên thời lượng cũ, dời theo `dateTime` mới. Bàn chọn như mục 3.5 (`tableIds`, `tableId` hoặc `table`). Mã phiếu, trạng thái và món đặt trước được giữ nguyên. Cả chuỗi Chain of Responsibility chạy lại; phiếu đang sửa không bị tính là trùng lịch với chính nó. Bị từ chối thì trả 400 `CHAIN_VALIDATION_FAILED` và phiếu không đổi. Bàn cũ không còn dùng được trả về `available` nếu không còn phiếu hay đơn nào giữ.
 
 ### 3.13. `PATCH /api/reservations/{code}/status`
 ```json
@@ -292,7 +298,17 @@ Tính trực tiếp từ DAO mỗi lần gọi. Doanh thu chỉ tính đơn đã
 ```json
 { "code": "welcome10", "subtotal": 100000 }
 ```
-Xem trước voucher bằng đúng Strategy mà checkout dùng (`VoucherCatalog`). Mã hợp lệ: `{ "code": "WELCOME10", "valid": true, "discountAmount": 10000, "description": "…" }`. Mã sai vẫn trả 200 với `"valid": false` và `discountAmount: 0`. Thiếu `subtotal` hoặc âm trả 400. Giỏ hàng Storefront (`/api/cart`, action `discount`) hỏi endpoint này để biết mã có hợp lệ không.
+Xem trước voucher bằng đúng Strategy mà checkout dùng (`VoucherService`). Trả về `{ code, valid, reason, discountAmount, shortfall, description, firstOnlineOrderOnly }`. `reason` là `OK`, `NOT_FOUND`, `DISABLED`, `NOT_STARTED`, `EXPIRED`, `SOLD_OUT`, `LOGIN_REQUIRED`, `ACCOUNT_LIMIT`, `ONLINE_ONLY` hoặc `BELOW_MIN_ORDER`; với lý do cuối, `shortfall` là số tiền còn thiếu. Mã sai vẫn trả 200 với `"valid": false` và `discountAmount: 0`. Thiếu `subtotal` hoặc âm trả 400. `userId` (không bắt buộc) chỉ được tin khi gọi kèm `X-Service-Key`. Giỏ hàng Storefront (`/api/cart`, action `discount`) hỏi endpoint này để biết mã có hợp lệ không.
+
+### 3.16b. Quản lý voucher `/api/vouchers` (MANAGER+)
+Voucher JSON: `{ id, code, type: "PERCENT"|"FIXED", value, maxDiscount, minOrder, maxUses, perAccountLimit, firstOnlineOrderOnly, startDate: "YYYY-MM-DD", endDate, description, active, usedCount, state }`. `maxUses` và `perAccountLimit` để `null` nghĩa là không giới hạn. `state` tính ra từ dữ liệu: `UPCOMING`, `RUNNING`, `EXPIRED`, `SOLD_OUT`, `DISABLED`. Mã hợp lệ từ 00:00 ngày bắt đầu đến 23:59:59 ngày hết hạn, giờ Việt Nam.
+- `GET /api/vouchers`: tất cả voucher. `POST /api/vouchers`: tạo mới, trả 201. `PUT /api/vouchers/{id}`: sửa.
+- Kiểm tra khi lưu: mã `^[A-Z0-9_-]{3,30}$` (tự viết hoa, trùng trả 409); `PERCENT` 1–100, `FIXED` > 0; đơn tối thiểu ≥ 0; hai giới hạn nếu có thì ≥ 1; ngày hết hạn ≥ ngày bắt đầu; tổng lượt không nhỏ hơn số lượt đã dùng (kiểm tra ngay trong lần ghi, nên một lượt redeem chen vào cũng bị tính; vi phạm trả 400); không đổi mã của voucher đã có lượt dùng (409). Id trong đường dẫn chỉ gồm chữ số; mọi đường dẫn `/api/vouchers/...` trừ `validate`, `active`, `redeem`, `release` đều cần MANAGER.
+- `DELETE /api/vouchers/{id}`: mã chưa ai dùng thì xoá hẳn (`{ deleted: true }`); đã có lượt dùng, kể cả một lượt vừa chen vào, thì chỉ tắt (`{ deleted: false, deactivated: true }`). Lượt dùng không bao giờ bị xoá theo voucher.
+- `GET /api/vouchers/{id}/usages`: `[{ userId, orderCode, discountAmount, createdAt }]`.
+- `GET /api/vouchers/active` (công khai): các mã đang chạy, không kèm số lượt đã dùng: `{ code, type, value, maxDiscount, minOrder, perAccountLimit, firstOnlineOrderOnly, endDate, description }`.
+- `POST /api/vouchers/redeem` (chỉ service key): `{ code, subtotal, userId?, orderCode }` → `{ usageId, discountAmount, code }`. Storefront gọi lúc khách đặt đơn COD; lượt bị trừ ngay. Không dùng được thì 400 `INVALID_VOUCHER`. Không ghi được lượt (lỗi database, hoặc mã đơn này đã giữ một lượt) thì 503 `DATABASE_UNAVAILABLE`, không trừ lượt nào; checkout cũng trả 503 trong trường hợp này.
+- `POST /api/vouchers/release` (chỉ service key): `{ orderCode }` → `{ released }`. Nhả lượt khi đơn COD không ghi được; gọi lần hai trả `released: false`.
 
 ### 3.17. `POST /api/orders/sync`
 Nhận lại các đơn frontend đã ghi khi Java mất kết nối. **Không thu tiền** (tiền đã thu lúc offline).

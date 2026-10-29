@@ -68,6 +68,45 @@ class JdbcIntegrationTest {
     }
 
     @Test
+    void reservationEndTimeRoundTrips() {
+        Instant start = Instant.now().plusSeconds(3 * 86_400).truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
+        Reservation ranged = new Reservation(null, null, "Khach", "0911000777", start, 2);
+        ranged.setTableId(1);
+        ranged.setEndTime(start.plusSeconds(5400));
+        assertTrue(reservations.save(ranged));
+        assertEquals(start.plusSeconds(5400), reservations.findById(ranged.getId()).orElseThrow().getStoredEndTime());
+
+        Reservation legacy = new Reservation(null, null, "Khach cu", "0911000778", start.plusSeconds(86_400), 2);
+        legacy.setTableId(1);
+        assertTrue(reservations.save(legacy));
+        Reservation reread = reservations.findById(legacy.getId()).orElseThrow();
+        assertNull(reread.getStoredEndTime());
+        assertEquals(reread.getDateTime().plus(Reservation.DEFAULT_LENGTH), reread.getEndTime());
+
+        // Upsert theo id giữ giờ kết thúc.
+        assertTrue(reservations.save(reservations.findById(ranged.getId()).orElseThrow()));
+        assertEquals(start.plusSeconds(5400), reservations.findById(ranged.getId()).orElseThrow().getStoredEndTime());
+        reservations.deleteById(ranged.getId());
+        reservations.deleteById(legacy.getId());
+    }
+
+    @Test
+    void orderVoucherCodeRoundTrips() {
+        Order order = new Order(null, "DB-VOUCHER-1", "Khach", null, OrderType.PICKUP);
+        order.addItem(new OrderItem(null, "Tra", 1, 20_000, null, null));
+        order.setVoucherCode("SALE10K");
+        order.setDiscountAmount(5_000);
+        assertTrue(orders.save(order));
+        Order reread = orders.findByOrderCode("DB-VOUCHER-1").orElseThrow();
+        assertEquals("SALE10K", reread.getVoucherCode());
+        assertEquals(5_000, reread.getDiscountAmount());
+        // Upsert theo id giữ mã voucher.
+        assertTrue(orders.save(reread));
+        assertEquals("SALE10K", orders.findById(reread.getId()).orElseThrow().getVoucherCode());
+        orders.deleteById(reread.getId());
+    }
+
+    @Test
     void schemaUpgradeIsIdempotentAndAddsForeignKeys() throws Exception {
         try (Connection conn = JdbcDatabase.getConnection()) {
             JdbcDatabase.initializeSchema(conn);

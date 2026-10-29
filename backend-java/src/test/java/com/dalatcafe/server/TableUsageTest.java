@@ -36,12 +36,27 @@ class TableUsageTest {
         Reservation booking = new Reservation(null, "RES", "Guest", "0901234567", now.plusSeconds(1800), 4);
         booking.setTableIds(List.of(1, 3));
         assertEquals(TableStatus.RESERVED, TableUsage.status(table, List.of(), List.of(booking), now));
-        assertEquals(TableStatus.RESERVED, TableUsage.status(table, List.of(), List.of(booking), now.plusSeconds(2699)));
-        assertEquals(TableStatus.AVAILABLE, TableUsage.status(table, List.of(), List.of(booking), now.plusSeconds(2700)));
+        // Giữ bàn 30 phút sau giờ khách đến (now + 30 phút).
+        assertEquals(TableStatus.RESERVED, TableUsage.status(table, List.of(), List.of(booking), now.plusSeconds(3599)));
+        assertEquals(TableStatus.AVAILABLE, TableUsage.status(table, List.of(), List.of(booking), now.plusSeconds(3600)));
         booking.setDateTime(now.plusSeconds(86400));
         assertEquals(TableStatus.AVAILABLE, TableUsage.status(table, List.of(), List.of(booking), now));
         booking.setStatus(ReservationStatus.CANCELLED);
         assertEquals(TableStatus.AVAILABLE, TableUsage.status(table, List.of(), List.of(booking), now));
+    }
+
+    @Test
+    void usageFollowsEndTime() {
+        // Thời gian chờ dài để luật tự hủy không che mất giờ kết thúc: phiếu dài 45 phút không còn
+        // giữ bàn 50 phút sau giờ bắt đầu, dù chưa tới hai giờ.
+        SystemConfigManager.getInstance().setAutoCancelMinutes(180);
+        Reservation booking = new Reservation(null, "RES", "Guest", "0901234567", now.plusSeconds(3600), 2);
+        booking.setTableIds(List.of(3));
+        booking.setStatus(ReservationStatus.CONFIRMED);
+        booking.setEndTime(now.plusSeconds(3600 + 45 * 60));
+        assertEquals(TableStatus.RESERVED, TableUsage.status(table, List.of(), List.of(booking), now));
+        assertEquals(TableStatus.RESERVED, TableUsage.status(table, List.of(), List.of(booking), now.plusSeconds(3600 + 40 * 60)));
+        assertEquals(TableStatus.AVAILABLE, TableUsage.status(table, List.of(), List.of(booking), now.plusSeconds(3600 + 50 * 60)));
     }
 
     @Test

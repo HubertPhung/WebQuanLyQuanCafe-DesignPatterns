@@ -30,8 +30,9 @@ final class TableUsage {
         boolean reserved = reservations.stream().anyMatch(reservation -> reservation.getTableIds().contains(table.getId())
                 && (reservation.getStatus() == ReservationStatus.PENDING || reservation.getStatus() == ReservationStatus.CONFIRMED)
                 && !reservation.isNoShowAt(now, grace)
-                && (reservation.getDateTime() == null || TableAvailabilityValidator.slotsOverlap(
-                        now, reservation.getDateTime(), TableAvailabilityValidator.DEFAULT_DURATION)));
+                // Bàn được báo là đã đặt từ hai giờ trước giờ khách đến cho tới giờ kết thúc khách chọn.
+                && (reservation.getDateTime() == null
+                        || reservation.overlaps(now, now.plus(TableAvailabilityValidator.DEFAULT_DURATION))));
         return reserved ? TableStatus.RESERVED : TableStatus.AVAILABLE;
     }
 }

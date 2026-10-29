@@ -27,7 +27,7 @@ import { localImageSrc } from '@/lib/assets'
 import { assertPosTableAvailable, withPosTableLock } from '@/lib/admin/pos-table-guard'
 import { isDaLatAddress, shippingFee } from '@/lib/storefront/delivery'
 import { withFirstOnlineOrder } from '@/lib/orders/first-online-order'
-import { voucherDiscount } from '@/lib/storefront/vouchers'
+import { withVoucherHold } from '@/lib/orders/voucher-hold'
 import {
   customizationSurcharge,
   describeCustomizations,
@@ -60,6 +60,8 @@ import {
   type StoreConfigChange,
   type SyncOrderPayload,
   validateVoucher,
+  redeemVoucher,
+  releaseVoucher,
 } from '@/lib/api-client'
 import type { Cart } from '@/lib/shopify'
 import { parseMenuVariant } from '@/lib/storefront/menu-catalog'
@@ -67,7 +69,7 @@ import { saveOrderContact, type Fulfilment } from '@/lib/orders/online-contacts'
 import { dequeueSync, enqueueSync, listSyncQueue } from '@/lib/admin/local-links'
 import { normalizeMenuName, resolveJavaMenuIds } from '@/lib/admin/menu-link'
 import { deleteMenuItemRecord, persistMenuItem, updateMenuItemRecord, type MenuCatalogInput } from '@/lib/admin/menu-store'
-import { hasReservationTimePassed } from '@/lib/reservation-rules'
+import { hasReservationTimePassed, reservationRangeError } from '@/lib/reservation-rules'
 import { getAdminBranch, ADMIN_BRANCH_COOKIE } from '@/lib/admin/branch'
 import { DEFAULT_BRANCH_ID, branchById, isBranchId, type BranchId } from '@/lib/branches'
 import {
@@ -325,7 +327,7 @@ async function forwardCheckout(
   order: LocalOrderInput,
   localMenu: LocalMenuItem[],
   member: MemberCheckout,
-  extra: Pick<CheckoutPayload, 'voucherCode' | 'note'> = {},
+  extra: Pick<CheckoutPayload, 'voucherCode' | 'note' | 'userId'> = {},
   asService = false,
 ): Promise<CheckoutOutcome> {
   // POST /api/checkout luôn thu tiền, nên hóa đơn mở (chưa trả) được ghi cục bộ rồi đồng bộ sau.
@@ -555,19 +557,15 @@ function readCart(raw: string | undefined): Cart | null {
 }
 
 // Tiền mặt khi nhận hàng chưa thu lúc này, nên Java không tính giá đơn: các quy tắc giống hệt được
-// áp dụng ở đây (giá thực đơn, phụ thu size L, voucher theo cách Java kiểm tra, VAT trên phần còn
-// lại).
-async function cashOnDeliveryTotals(lines: LocalOrderInput['lines'], localMenu: LocalMenuItem[], voucherCode?: string) {
+// áp dụng ở đây (giá thực đơn, phụ thu size L, VAT trên phần còn lại). Mức giảm của voucher là số
+// Java trả về khi giữ lượt cho đơn.
+function cashOnDeliverySubtotal(lines: LocalOrderInput['lines'], localMenu: LocalMenuItem[]): number {
   const byId = new Map(localMenu.map((item) => [item.id, item]))
   const raw = lines.reduce((sum, line) => sum + (byId.get(line.menuItemId)!.sellPrice + customizationSurcharge(line.customizations ?? [])) * line.qty, 0)
-  const subtotal = Math.round(raw * 100) / 100
-  let discount = 0
-  if (voucherCode) {
-    const verdict = await validateVoucher(voucherCode, subtotal)
-    if (verdict.ok && verdict.data.valid) discount = verdict.data.discountAmount
-    else if (!verdict.ok && verdict.unreachable) discount = voucherDiscount(subtotal, voucherCode)
-    else throw new Error('Mã giảm giá không hợp lệ.')
-  }
+  return Math.round(raw * 100) / 100
+}
+
+function cashOnDeliveryTotals(subtotal: number, discount: number) {
   return { subtotal, total: Math.round((subtotal - discount) * (1 + TAX_RATE) * 100) / 100 }
 }
 
@@ -629,9 +627,16 @@ export async function placeOnlineOrder(input: OnlineOrderInput): Promise<OnlineO
     return await withFirstOnlineOrder<OnlineOrderResult>(session.userId, async ({ isFirstOrder, markPlaced }) => {
       const paid = input.payment !== 'cod'
       const order: LocalOrderInput = { lines, customer: name, tableId: null, orderType: fulfilment, paymentMethod, paid, branch }
-      const voucherCode = cart?.discountCodes?.find((code) => code.applicable)?.code?.trim().toUpperCase()
-      if (voucherCode === 'WELCOME10' && !isFirstOrder) {
-        throw new Error('WELCOME10 chỉ áp dụng cho đơn online đầu tiên của tài khoản mới.')
+      const voucherCode = cart?.discountCodes?.find((code) => code.applicable)?.code?.trim().toUpperCase() || undefined
+      const subtotal = cashOnDeliverySubtotal(lines, localMenu)
+      if (voucherCode) {
+        // Java quyết định mã còn dùng được không; không hỏi được thì không hứa giảm giá.
+        const verdict = await validateVoucher(voucherCode, subtotal, session.userId)
+        if (!verdict.ok) return { ok: false, error: 'Tạm thời chưa áp dụng được mã giảm giá. Hãy thử lại hoặc bỏ mã.' }
+        if (!verdict.data.valid) return { ok: false, error: verdict.data.description }
+        if (verdict.data.firstOnlineOrderOnly && !isFirstOrder) {
+          throw new Error(`${voucherCode} chỉ áp dụng cho đơn online đầu tiên của tài khoản.`)
+        }
       }
       const javaNote = ['Đơn online', `Chi nhánh ${branchById(branch).street}`, fulfilment === 'delivery' ? `Giao tới: ${address}` : 'Khách tự đến lấy', `SĐT ${phone}`, note, ...lineNotes]
         .filter(Boolean)
@@ -639,12 +644,13 @@ export async function placeOnlineOrder(input: OnlineOrderInput): Promise<OnlineO
         .slice(0, 1000)
 
       let receipt: CheckoutReceipt | undefined
-      let totals: { subtotal: number; total: number }
+      // Đơn trả trước lấy tổng tiền Java đã thu; đơn COD tính ở dưới, sau khi giữ lượt voucher.
+      let totals!: { subtotal: number; total: number }
       if (paid) {
         // Chỉ tiền thu ngay mới được cộng điểm (tiền mặt khi nhận hàng thì không): số điện thoại
         // người mua trở thành thành viên.
         const member: MemberCheckout = { customerPhone: phone, enrollMember: true, customerEmail: email ?? session.email }
-        const outcome = await forwardCheckout(order, localMenu, member, { voucherCode, note: javaNote }, true)
+        const outcome = await forwardCheckout(order, localMenu, member, { voucherCode, note: javaNote, userId: session.userId }, true)
         if (outcome.kind === 'rejected') return { ok: false, error: outcome.error }
         // Thanh toán online do Java thu; không có Java thì không được thu tiền hay hứa hẹn gì.
         if (outcome.kind === 'local') {
@@ -653,13 +659,28 @@ export async function placeOnlineOrder(input: OnlineOrderInput): Promise<OnlineO
         receipt = outcome.receipt
         markPlaced()
         totals = { subtotal: receipt.subtotal, total: receipt.finalTotal }
-      } else {
-        totals = await cashOnDeliveryTotals(lines, localMenu, voucherCode)
-        totals.total += shippingFee(fulfilment)
       }
 
       const orderCode = receipt?.orderCode ?? newLocalOrderCode()
-      const recorded = await recordOrderLocally({ ...order, orderCode, totals }, quantities)
+      let redeemed = false
+      if (!receipt) {
+        // Đơn COD giữ lượt voucher ngay lúc đặt; Java ghi lượt theo mã đơn và dùng đúng mức giảm
+        // này khi đơn được đồng bộ sang.
+        let discount = 0
+        if (voucherCode) {
+          const redemption = await redeemVoucher({ code: voucherCode, subtotal, userId: session.userId, orderCode })
+          if (!redemption.ok) {
+            return { ok: false, error: redemption.unreachable ? 'Tạm thời chưa áp dụng được mã giảm giá. Hãy thử lại hoặc bỏ mã.' : redemption.error }
+          }
+          discount = redemption.data.discountAmount
+          redeemed = true
+        }
+        totals = cashOnDeliveryTotals(subtotal, discount)
+        totals.total += shippingFee(fulfilment)
+      }
+      // Ghi đơn thất bại (kể cả ném lỗi) thì trả lượt voucher vừa giữ; trả không được thì ghi log.
+      const recorded = await withVoucherHold(redeemed, () => recordOrderLocally({ ...order, orderCode, totals }, quantities),
+        () => releaseVoucher(orderCode), (message) => console.error(`[voucher] ${orderCode}: ${message}`))
       if (!recorded.ok) return recorded
       markPlaced()
       await saveOrderContact({
@@ -724,10 +745,21 @@ type NewReservationInput = {
   email?: string
   note?: string
   dateTime: string
+  // Giờ kết thúc (ISO-8601); không gửi thì Java giữ bàn hai giờ, hoặc giữ thời lượng cũ khi sửa.
+  endTime?: string
   guests: number
   tableId: number
   // Phiếu ghép nhiều bàn; khi đó tableId là bàn đầu tiên.
   tableIds?: number[]
+}
+
+// Giờ kết thúc nếu có gửi, kiểm tra cùng quy tắc với OperatingHoursValidator bên Java.
+function bookingEnd(input: NewReservationInput, dateTime: Date): Date | undefined {
+  if (!input.endTime) return undefined
+  const endTime = new Date(input.endTime)
+  const error = reservationRangeError(dateTime, endTime)
+  if (error) throw new Error(error)
+  return endTime
 }
 
 // Dùng chung cho tạo và sửa phiếu đặt bàn ở trang admin.
@@ -749,6 +781,7 @@ function bookingFields(input: NewReservationInput) {
     email: input.email?.trim() || undefined,
     note: input.note?.trim().slice(0, 500) || undefined,
     dateTime,
+    endTime: bookingEnd(input, dateTime),
     guests: input.guests,
     tableId: tableIds[0],
     tableIds,
@@ -767,7 +800,7 @@ export async function updateReservation(code: string, source: 'java' | 'local', 
       refresh()
       return res.ok ? { ok: true, message: `Đã lưu phiếu ${code}.` } : { ok: false, error: res.error ?? 'Không lưu được phiếu.' }
     }
-    const remote = await updateJavaReservation(code, { ...booking, dateTime: booking.dateTime.toISOString() })
+    const remote = await updateJavaReservation(code, { ...booking, dateTime: booking.dateTime.toISOString(), endTime: booking.endTime?.toISOString() })
     if (!remote.ok) {
       return { ok: false, error: remote.unreachable ? 'Backend Java chưa phản hồi, phiếu chưa thay đổi. Vui lòng thử lại.' : remote.error }
     }
@@ -797,6 +830,7 @@ export async function createReservation(input: NewReservationInput): Promise<Act
     if (hasReservationTimePassed(dateTime)) {
       throw new Error('Choose a date and time that has not passed yet.')
     }
+    const endTime = bookingEnd(input, dateTime)
 
     const booking = {
       customer,
@@ -804,6 +838,7 @@ export async function createReservation(input: NewReservationInput): Promise<Act
       email: input.email?.trim() || undefined,
       note: input.note?.trim().slice(0, 500) || undefined,
       dateTime: dateTime.toISOString(),
+      endTime: endTime?.toISOString(),
       guests: input.guests,
       tableId: input.tableId,
       branch: await getAdminBranch(),
@@ -823,7 +858,7 @@ export async function createReservation(input: NewReservationInput): Promise<Act
     }
 
     // Chế độ demo không có database: kho cục bộ áp cùng chuỗi kiểm tra với mặc định của Java.
-    const res = createMockReservation({ ...booking, email: booking.email ?? null, note: booking.note ?? null, dateTime })
+    const res = createMockReservation({ ...booking, email: booking.email ?? null, note: booking.note ?? null, dateTime, endTime: endTime ?? null })
     refresh()
     return res.ok ? { ok: true, message: `Reservation ${res.code} saved locally.` } : { ok: false, error: res.error ?? 'Failed' }
   } catch (error) {

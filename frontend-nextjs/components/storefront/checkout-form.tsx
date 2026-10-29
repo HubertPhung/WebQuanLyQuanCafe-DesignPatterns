@@ -33,7 +33,6 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { TAX_RATE } from '@/lib/admin/format'
 import { formatMoneyVND, useCartStore } from '@/lib/store/cart-store'
-import { voucherDiscount } from '@/lib/storefront/vouchers'
 import { isDaLatAddress, shippingFee } from '@/lib/storefront/delivery'
 import { DEFAULT_BRANCH_ID, branchById, branches, type BranchId } from '@/lib/branches'
 
@@ -111,7 +110,8 @@ export function CheckoutForm({ account }: { account: { name: string; email: stri
   const lineItems = cart?.lines?.nodes ?? []
   const subtotal = Number(cart?.cost?.subtotalAmount?.amount ?? '0')
   const voucher = cart?.discountCodes?.find((code) => code.applicable)
-  const discount = voucherDiscount(subtotal, voucher?.code)
+  // Giỏ hàng đã hỏi Java mức giảm của mã (đơn tối thiểu, mức tối đa): tổng sau giảm là số đó.
+  const discount = voucher ? Math.max(0, subtotal - Number(cart?.cost?.totalAmount?.amount ?? subtotal)) : 0
   const vat = Math.round((subtotal - discount) * TAX_RATE)
   const deliveryFee = shippingFee(fulfilment)
   const total = subtotal - discount + vat + deliveryFee

@@ -45,6 +45,8 @@ public class Order implements Serializable {
     private double vatRate;
     private double vatAmount;
     private double discountAmount;
+    /** Mã voucher đã giảm cho đơn này, null khi không dùng voucher. */
+    private String voucherCode;
     private double total;
     private PaymentMethod paymentMethod;
     private PaymentStatus paymentStatus;
@@ -175,6 +177,14 @@ public class Order implements Serializable {
     public void setDiscountAmount(double discountAmount) {
         this.discountAmount = Math.max(0, discountAmount);
         recalculateTotals();
+    }
+
+    public String getVoucherCode() {
+        return voucherCode;
+    }
+
+    public void setVoucherCode(String voucherCode) {
+        this.voucherCode = voucherCode;
     }
 
     public double getTotal() {
