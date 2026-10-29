@@ -273,6 +273,8 @@ type NewOrderInput = {
   useLoyaltyPoints?: number
   // Tiền mặt khách đưa (tùy chọn) cho đơn tiền mặt đã thanh toán; phải đủ tổng tiền.
   tenderedAmount?: number
+  // Mã voucher nhập ở quầy; chỉ áp khi thanh toán ngay, Java kiểm tra và giữ lượt.
+  voucherCode?: string
 }
 
 type LocalMenuItem = Pick<MenuItem, 'id' | 'name' | 'kind' | 'inStock' | 'variations' | 'sellPrice'>
@@ -458,6 +460,9 @@ export async function createOrder(input: NewOrderInput): Promise<ActionResult> {
     if (input.customerPhone?.trim() && !customerPhone) throw new Error('Enter a phone number with 8 to 15 digits.')
     if (points > 0 && !customerPhone) throw new Error('Look up the member phone number before redeeming points.')
     if (points > 0 && !input.paid) throw new Error('Points can only be redeemed when the order is paid now.')
+    // Đơn trả sau được tính tiền lại lúc thanh toán mà không có bước giảm giá, nên mã chỉ áp khi trả ngay.
+    const voucherCode = input.voucherCode?.trim().toUpperCase() || undefined
+    if (voucherCode && !input.paid) throw new Error('Mã giảm giá chỉ áp dụng khi thanh toán ngay.')
     const tendered = input.tenderedAmount
     if (tendered !== undefined && (!Number.isFinite(tendered) || tendered < 0 || tendered > 1_000_000_000)) {
       throw new Error('Enter the cash received as an amount between 0 and 1,000,000,000 đ.')
@@ -488,8 +493,12 @@ export async function createOrder(input: NewOrderInput): Promise<ActionResult> {
       if (unavailable) throw new Error('One of the items is no longer available.')
 
       const member: MemberCheckout = customerPhone ? { customerPhone, useLoyaltyPoints: points || undefined } : {}
-      const outcome = await forwardCheckout(order, localMenu, member)
+      const outcome = await forwardCheckout(order, localMenu, member, voucherCode ? { voucherCode } : {})
       if (outcome.kind === 'rejected') return { ok: false, error: outcome.error }
+      // Mã chỉ được kiểm tra và giữ lượt bên Java; không có Java thì không giảm giá hộ.
+      if (outcome.kind === 'local' && voucherCode) {
+        return { ok: false, error: 'Mã giảm giá cần backend Java để kiểm tra. Hãy thử lại hoặc bỏ mã.' }
+      }
       // Điểm nằm ở kho Java; thu đủ tiền thay vì đổi điểm sẽ khiến thành viên bất ngờ.
       if (outcome.kind === 'local' && points > 0) {
         return { ok: false, error: 'Redeeming points needs the Java backend, which could not price this order. Retry or remove the points.' }

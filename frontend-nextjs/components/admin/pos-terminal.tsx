@@ -11,6 +11,7 @@ import {
   Send,
   ShoppingBag,
   Sparkles,
+  TicketPercent,
   Trash2,
   Users,
 } from 'lucide-react'
@@ -21,6 +22,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { createOrder, lookupMember, type Member } from '@/app/admin/actions'
 import { TAX_RATE, formatCurrency, paymentLabels, tableStatusLabels } from '@/lib/admin/format'
 import { shippingFee } from '@/lib/storefront/delivery'
+import { posVoucherVerdict, type ActiveVoucher } from '@/lib/storefront/vouchers'
 import {
   customizationSurcharge,
   normalizeCustomizations,
@@ -71,10 +73,13 @@ export function PosTerminal({
   menu,
   tables,
   pointValue = DEFAULT_VND_PER_POINT,
+  vouchers = [],
 }: {
   menu: MenuItem[]
   tables: FloorTable[]
   pointValue?: number
+  // Mã đang chạy bên Java, để quầy tính trước mức giảm.
+  vouchers?: ActiveVoucher[]
 }) {
   const sellable = menu.filter((item) => item.kind === 'menu')
   const categories = ['Tất cả', ...new Set(sellable.map((item) => item.category))]
@@ -98,17 +103,21 @@ export function PosTerminal({
   const [tableId, setTableId] = useState<string>('')
   const [payment, setPayment] = useState<PaymentMethod>('cash')
   const [tendered, setTendered] = useState('')
+  const [voucherCode, setVoucherCode] = useState('')
   const [pending, startTransition] = useTransition()
 
   const visible = category === 'Tất cả' ? sellable : sellable.filter((item) => item.category === category)
   const member = memberState.kind === 'found' ? memberState.member : null
   const subtotal = useMemo(() => lines.reduce((sum, line) => sum + unitPrice(line) * line.qty, 0), [lines])
-  const tierDiscount = member ? Math.round(subtotal * (tierRates[member.rank] ?? 0)) : 0
+  // Như CheckoutHandler bên Java: voucher thay cho giảm theo hạng thành viên, điểm cộng dồn lên trên.
+  const voucherVerdict = posVoucherVerdict(vouchers, voucherCode, subtotal)
+  const voucherDiscount = voucherVerdict.discount
+  const tierDiscount = member && !voucherVerdict.voucher ? Math.round(subtotal * (tierRates[member.rank] ?? 0)) : 0
   const redeemablePoints = member && usePoints && pointValue > 0
-    ? Math.min(POINTS_PER_REDEMPTION, member.points, Math.floor((subtotal - tierDiscount) / pointValue))
+    ? Math.min(POINTS_PER_REDEMPTION, member.points, Math.floor((subtotal - voucherDiscount - tierDiscount) / pointValue))
     : 0
   const pointsDiscount = redeemablePoints * pointValue
-  const afterDiscount = subtotal - tierDiscount - pointsDiscount
+  const afterDiscount = subtotal - voucherDiscount - tierDiscount - pointsDiscount
   const tax = Math.round(afterDiscount * TAX_RATE)
   const deliveryFee = shippingFee(orderType)
   const total = afterDiscount + tax + deliveryFee
@@ -197,6 +206,7 @@ export function PosTerminal({
         customerPhone: member?.phone,
         useLoyaltyPoints: paid && redeemablePoints > 0 ? redeemablePoints : undefined,
         tenderedAmount: paid && countsCash ? Number(tendered) : undefined,
+        voucherCode: voucherCode.trim() || undefined,
       })
       if (!result.ok) {
         toast.error(result.error)
@@ -207,6 +217,7 @@ export function PosTerminal({
       })
       setLines([])
       setTendered('')
+      setVoucherCode('')
       // Điểm trên server đã thay đổi; tra cứu lại thành viên cho đơn tiếp theo.
       if (member) setMemberState({ kind: 'idle' })
       setUsePoints(false)
@@ -448,12 +459,40 @@ export function PosTerminal({
           )}
         </div>
 
+        {/* Mã giảm giá: Java kiểm tra lại và giữ lượt khi thanh toán */}
+        <div className="space-y-1 border-t border-stone-100 pt-3">
+          <label htmlFor="pos-voucher" className="flex items-center gap-1.5 text-xs font-semibold text-stone-700">
+            <TicketPercent className="size-3.5 text-[#5A3E2B]" />
+            Mã giảm giá
+          </label>
+          <input
+            id="pos-voucher"
+            value={voucherCode}
+            onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
+            placeholder="Nhập mã nếu khách có"
+            maxLength={30}
+            className="w-full h-9 rounded-lg border border-stone-200 bg-white px-2.5 font-mono text-sm uppercase placeholder:font-sans placeholder:normal-case placeholder:text-stone-400 focus:outline-none focus:border-[#5A3E2B]"
+          />
+          {voucherVerdict.error && <p role="status" className="text-[11px] text-rose-700">{voucherVerdict.error}</p>}
+          {voucherVerdict.voucher && !voucherVerdict.error && (
+            <p role="status" className="text-[11px] text-emerald-700">
+              {voucherVerdict.voucher.description || `Mã ${voucherVerdict.voucher.code}`} · chỉ áp dụng khi thanh toán ngay
+            </p>
+          )}
+        </div>
+
         {/* Tóm tắt hóa đơn */}
         <div className="space-y-1.5 border-t border-stone-100 pt-3 text-xs">
           <div className="flex justify-between text-stone-500">
             <span>Tạm tính</span>
             <span className="font-mono text-stone-800 tabular-nums">{subtotal.toLocaleString('vi-VN')} đ</span>
           </div>
+          {voucherDiscount > 0 && (
+            <div className="flex justify-between text-emerald-700">
+              <span>Mã {voucherVerdict.voucher?.code}</span>
+              <span className="font-mono tabular-nums">-{voucherDiscount.toLocaleString('vi-VN')} đ</span>
+            </div>
+          )}
           {tierDiscount > 0 && (
             <div className="flex justify-between text-emerald-700">
               <span>Giảm hạng thành viên</span>
@@ -527,7 +566,8 @@ export function PosTerminal({
         <div className="grid grid-cols-2 gap-2.5 pt-2">
           <Button
             type="button"
-            disabled={!lines.length || pending || tableUnavailable}
+            disabled={!lines.length || pending || tableUnavailable || Boolean(voucherCode.trim())}
+            title={voucherCode.trim() ? 'Mã giảm giá chỉ áp dụng khi thanh toán ngay' : undefined}
             onClick={() => submit(false)}
             variant="outline"
             className="h-11 rounded-lg border-stone-200 bg-white hover:bg-stone-50 text-stone-800 font-bold text-xs gap-2 shadow-xs"
@@ -538,7 +578,7 @@ export function PosTerminal({
 
           <Button
             type="button"
-            disabled={!lines.length || pending || cashShort || tableUnavailable}
+            disabled={!lines.length || pending || cashShort || tableUnavailable || Boolean(voucherVerdict.error)}
             onClick={() => submit(true)}
             className="h-11 rounded-lg bg-[#5A3E2B] hover:bg-[#684732] text-white font-extrabold text-xs gap-2 shadow-sm"
           >

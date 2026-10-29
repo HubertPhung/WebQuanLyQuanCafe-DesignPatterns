@@ -97,6 +97,18 @@ class VoucherServiceTest {
     }
 
     @Test
+    void perAccountVoucherIsOnlineOnlyAtPos() {
+        // Quầy POS không biết tài khoản của khách, nên mã giới hạn theo tài khoản chỉ dùng khi đặt online.
+        Voucher v = save("SALE1111", VoucherType.FIXED, 10_000);
+        v.setPerAccountLimit(1);
+        dao.save(v);
+        VoucherService.Verdict atPos = service.check("SALE1111", 100_000, null, false);
+        assertEquals(VoucherService.Reason.ONLINE_ONLY, atPos.reason());
+        assertEquals("Mã này chỉ dùng khi đặt online.", atPos.message());
+        assertEquals(VoucherService.Reason.LOGIN_REQUIRED, service.check("SALE1111", 100_000, null, true).reason());
+    }
+
+    @Test
     void onlineOnlyRejectsPos() {
         assertEquals(VoucherService.Reason.ONLINE_ONLY, service.check("WELCOME10", 100_000, 7, false).reason());
         assertTrue(service.check("WELCOME10", 100_000, 7, true).valid());

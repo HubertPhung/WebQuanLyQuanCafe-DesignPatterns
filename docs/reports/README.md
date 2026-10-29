@@ -28,7 +28,8 @@ Các báo cáo do agent viết trong ngày 2026-10-18 (nhánh `feature/hoai-bo`)
 | [NIGHTLY_REPORT_7.md](nightly/NIGHTLY_REPORT_7.md) | Phiên 7: chỉ khảo sát, dừng do hết hạn mức | Không sửa code |
 | [NIGHTLY_REPORT_8.md](nightly/NIGHTLY_REPORT_8.md) | Phiên 8: D1 (`occupied_since` bị đặt lại), D2 (`completedAt` của đơn offline) | Đã áp. Quy tắc D2 đổi thành: `completedAt` sớm hơn `createdAt` thì lấy `createdAt` và cảnh báo, không từ chối. Bản vá đã xoá |
 | [NIGHTLY_REPORT_9.md](nightly/NIGHTLY_REPORT_9.md) | Phiên 9: C1 (bán vượt kho đơn COD), C5 (tổng tiền `/cart`), có phép thử tranh chấp trên Postgres thật | **Không áp**: một phiên song song đã sửa cùng hai mục trên working tree. `NIGHTLY_9_stock_cart.patch` chỉ để tham khảo (có `TC-ACT-12`), xoá sau khi đọc |
-| [NIGHTLY_REPORT_10.md](nightly/NIGHTLY_REPORT_10.md) | Phiên 10: quản lý voucher (admin CRUD, giới hạn tổng và mỗi tài khoản, đơn tối thiểu, COD giữ/trả lượt) và giờ kết thúc khi đặt bàn (tự hủy sau 30 phút) | Trên nhánh `feature/voucher-reservation-time`, chưa merge. Không có bản vá |
+| [NIGHTLY_REPORT_10.md](nightly/NIGHTLY_REPORT_10.md) | Phiên 10: quản lý voucher (admin CRUD, giới hạn tổng và mỗi tài khoản, đơn tối thiểu, COD giữ/trả lượt) và giờ kết thúc khi đặt bàn (tự hủy sau 30 phút) | Đã merge vào `master` (PR #75). Không có bản vá |
+| [NIGHTLY_REPORT_11.md](nightly/NIGHTLY_REPORT_11.md) | Phiên 11: ô nhập voucher trên POS tại quầy (chỉ áp khi thanh toán ngay; mã giới hạn theo tài khoản chỉ dùng online) | Merge vào `master` qua PR từ `feature/hoai-bo`. Không có bản vá |
 
 ## 2. Thay đổi sau phiên 4 chưa có báo cáo riêng
 

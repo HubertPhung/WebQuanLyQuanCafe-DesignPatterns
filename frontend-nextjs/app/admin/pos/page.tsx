@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { fetchConfig } from '@/lib/api-client'
 import { getActiveOrders, getMenuItems, getPendingSyncCount, getTables } from '@/lib/admin/queries'
 import { markTablesInUse } from '@/lib/admin/pos-table-availability'
+import { loadActiveVouchers } from '@/lib/storefront/active-vouchers'
 
 export const metadata = { title: 'Đơn hàng & POS' }
 
@@ -18,8 +19,9 @@ export default async function PosPage({ searchParams }: { searchParams: Promise<
     getActiveOrders(),
     getPendingSyncCount(),
   ])
-  // Giá trị điểm lấy từ SystemConfigManager bên Java, để bản xem trước ở POS khớp với hóa đơn.
-  const config = await fetchConfig()
+  // Giá trị điểm lấy từ SystemConfigManager bên Java, để bản xem trước ở POS khớp với hóa đơn. Mã
+  // voucher đang chạy cũng lấy từ Java; không có Java thì danh sách rỗng và quầy không giảm giá.
+  const [config, vouchers] = await Promise.all([fetchConfig(), loadActiveVouchers()])
 
   return (
     <>
@@ -39,7 +41,7 @@ export default async function PosPage({ searchParams }: { searchParams: Promise<
         </TabsList>
         <TabsContent value="pos">
           <GroupTablePayment tables={tables} orders={activeOrders} />
-          <PosTerminal menu={menu} tables={markTablesInUse(tables, activeOrders)} pointValue={config.ok ? config.data.pointRedeemValueVnd : undefined} />
+          <PosTerminal menu={menu} tables={markTablesInUse(tables, activeOrders)} vouchers={vouchers} pointValue={config.ok ? config.data.pointRedeemValueVnd : undefined} />
         </TabsContent>
         <TabsContent value="kitchen">
           <KdsBoard orders={activeOrders} tables={tables} />
