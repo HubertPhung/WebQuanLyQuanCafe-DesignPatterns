@@ -13,6 +13,9 @@ import java.util.Objects;
 public class Reservation implements Serializable {
     private static final long serialVersionUID = 1L;
 
+    /** Thời gian giữ bàn của phiếu không ghi giờ kết thúc (phiếu cũ, hoặc client không gửi). */
+    public static final java.time.Duration DEFAULT_LENGTH = java.time.Duration.ofHours(2);
+
     /**
      * Thời gian chờ khách đến chỉ hủy các phiếu chưa nhận bàn, không bao giờ cắt ngang lượt của
      * khách đã ngồi.
@@ -47,6 +50,7 @@ public class Reservation implements Serializable {
                 && email.trim().equalsIgnoreCase(accountEmail.trim());
     }
     private Instant dateTime;
+    private Instant endTime;
     private String tableName;
     private Integer tableId;
     private List<Integer> tableIds = List.of();
@@ -137,6 +141,27 @@ public class Reservation implements Serializable {
 
     public void setDateTime(Instant dateTime) {
         this.dateTime = dateTime;
+    }
+
+    /** Giờ kết thúc khách chọn; phiếu cũ không có thì coi như giữ bàn {@link #DEFAULT_LENGTH}. */
+    public Instant getEndTime() {
+        if (endTime != null) return endTime;
+        return dateTime == null ? null : dateTime.plus(DEFAULT_LENGTH);
+    }
+
+    /** Giá trị đã lưu, null với phiếu tạo trước khi có giờ kết thúc. */
+    public Instant getStoredEndTime() {
+        return endTime;
+    }
+
+    public void setEndTime(Instant endTime) {
+        this.endTime = endTime;
+    }
+
+    /** Khoảng giữ bàn nửa mở [bắt đầu, kết thúc): phiếu sau được bắt đầu đúng lúc phiếu trước kết thúc. */
+    public boolean overlaps(Instant start, Instant end) {
+        Instant ownEnd = getEndTime();
+        return dateTime != null && ownEnd != null && dateTime.isBefore(end) && start.isBefore(ownEnd);
     }
 
     public String getTableName() {

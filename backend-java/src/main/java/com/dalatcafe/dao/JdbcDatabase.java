@@ -329,6 +329,8 @@ public class JdbcDatabase {
             ALTER TABLE orders ADD COLUMN IF NOT EXISTS items JSONB NOT NULL DEFAULT '[]'::jsonb;
             ALTER TABLE reservations ADD COLUMN IF NOT EXISTS pre_orders JSONB NOT NULL DEFAULT '[]'::jsonb;
             ALTER TABLE reservations ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id);
+            -- End of the booked range; NULL on bookings made before it existed (they hold two hours).
+            ALTER TABLE reservations ADD COLUMN IF NOT EXISTS end_time TIMESTAMPTZ;
             -- Branch of each table, order and booking; rows from before branches belong to the first one.
             ALTER TABLE tables ADD COLUMN IF NOT EXISTS branch VARCHAR(40) NOT NULL DEFAULT 'phan-dinh-phung';
             ALTER TABLE orders ADD COLUMN IF NOT EXISTS branch VARCHAR(40) NOT NULL DEFAULT 'phan-dinh-phung';

@@ -343,6 +343,27 @@ class ModelEntitiesTest {
     class ReservationTest {
 
         @Test
+        void endTimeDefaultsToTwoHours() {
+            Instant start = Instant.parse("2026-11-05T11:00:00Z");
+            Reservation res = new Reservation(1, "RES-001", "Khach", "0912345678", start, 2);
+            assertNull(res.getStoredEndTime());
+            assertEquals(start.plus(Reservation.DEFAULT_LENGTH), res.getEndTime());
+            res.setEndTime(start.plusSeconds(1800));
+            assertEquals(start.plusSeconds(1800), res.getEndTime());
+            assertEquals(start.plusSeconds(1800), res.getStoredEndTime());
+        }
+
+        @Test
+        void overlapsIsHalfOpen() {
+            Instant start = Instant.parse("2026-11-05T11:00:00Z");
+            Reservation res = new Reservation(1, "RES-001", "Khach", "0912345678", start, 2);
+            res.setEndTime(start.plusSeconds(3600));
+            assertFalse(res.overlaps(start.plusSeconds(3600), start.plusSeconds(9000)));
+            assertTrue(res.overlaps(start.plusSeconds(1800), start.plusSeconds(5400)));
+            assertFalse(res.overlaps(start.minusSeconds(3600), start));
+        }
+
+        @Test
         @DisplayName("Should initialize defaults and manage pre-orders")
         void testReservationDefaultsAndPreOrders() {
             Instant bookingTime = Instant.now().plusSeconds(7200);
