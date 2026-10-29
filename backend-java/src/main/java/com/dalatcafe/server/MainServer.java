@@ -61,6 +61,8 @@ public class MainServer {
         this.tokens = new TokenService(auth.jwtSecret(), auth.tokenTtl(), Clock.systemUTC());
         this.allowRoleHeader = auth.allowRoleHeader();
         this.serviceKey = auth.serviceKey();
+        // Một VoucherService dùng chung cho kiểm tra mã, checkout và đồng bộ đơn.
+        VoucherService vouchers = new VoucherService(daos.getVoucherDao(), Clock.systemUTC());
         OrderEventSubject subject = new OrderEventSubject();
         // Dữ liệu trước (bàn, phiếu đặt), phiếu cho quầy pha chế sau cùng: số nhỏ hơn được báo
         // trước.
@@ -79,7 +81,7 @@ public class MainServer {
                 daos.getTableDao(), daos.getCustomerDao(), subject, databaseHealthy));
         register("/api/customers", new CustomerHandler(daos.getCustomerDao()));
         register("/api/analytics", new AnalyticsHandler(daos.getOrderDao(), daos.getMenuDao(), daos.getTableDao()));
-        register("/api/vouchers", new VoucherHandler());
+        register("/api/vouchers", new VoucherHandler(vouchers, daos.getVoucherDao()));
         register("/api/config", new ConfigHandler());
         register("/api/tables", new TableHandler(daos.getTableDao(), daos.getOrderDao(), daos.getReservationDao()));
         reservations = new ReservationHandler(daos.getReservationDao(), daos.getTableDao(), daos.getOrderDao(), daos.getMenuDao());

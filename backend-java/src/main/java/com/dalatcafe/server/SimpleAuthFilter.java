@@ -149,10 +149,14 @@ public class SimpleAuthFilter extends Filter {
         return path.equals(context) || path.startsWith(base);
     }
 
-    /** Những lời gọi duy nhất service key của storefront được phép: đặt và đồng bộ đơn online. */
+    /**
+     * Những lời gọi duy nhất service key của storefront được phép: đặt và đồng bộ đơn online, kiểm
+     * tra mã cho một tài khoản, giữ và nhả lượt voucher của đơn COD.
+     */
     static boolean isServiceRoute(String method, String path) {
         String p = path.replaceAll("/+$", "");
-        return method.equals("POST") && (p.equals("/api/checkout") || p.equals("/api/orders/sync"));
+        return method.equals("POST") && (p.equals("/api/checkout") || p.equals("/api/orders/sync")
+                || p.equals("/api/vouchers/validate") || p.equals("/api/vouchers/redeem") || p.equals("/api/vouchers/release"));
     }
 
     /**
@@ -185,8 +189,13 @@ public class SimpleAuthFilter extends Filter {
         if (p.equals("/api/tables/catalog") && method.equals("GET")
                 || p.equals("/api/menu") && method.equals("GET")
                 || p.equals("/api/reservations") && method.equals("POST")
-                || p.equals("/api/vouchers/validate") && method.equals("POST")) {
+                || p.equals("/api/vouchers/validate") && method.equals("POST")
+                || p.equals("/api/vouchers/active") && method.equals("GET")) {
             return Access.PUBLIC;
+        }
+        // Thêm, sửa, xóa voucher và xem ai đã dùng mã; giữ/nhả lượt do handler tự đòi service key.
+        if (p.equals("/api/vouchers") || p.matches("/api/vouchers/[0-9]+(/usages)?")) {
+            return Access.MANAGER;
         }
         if (p.equals("/api/auth/register") || p.equals("/api/auth/login") || p.equals("/api/auth/google")) {
             return Access.PUBLIC; // endpoint Google tự kiểm tra service key của nó

@@ -885,12 +885,24 @@ class ServerTest {
 
     @Test
     void voucherValidationIsPublicAndMatchesCheckout() throws Exception {
-        HttpResponse<String> ok = call("POST", "/api/vouchers/validate", null, "{\"code\":\"welcome10\",\"subtotal\":100000}");
+        com.dalatcafe.model.Voucher sale = new com.dalatcafe.model.Voucher();
+        sale.setCode("SALE10");
+        sale.setType(com.dalatcafe.model.VoucherType.PERCENT);
+        sale.setValue(10);
+        sale.setMaxDiscount(50_000.0);
+        sale.setStartDate(LocalDate.now(com.dalatcafe.model.Voucher.CAFE_ZONE).minusDays(1));
+        sale.setEndDate(LocalDate.now(com.dalatcafe.model.Voucher.CAFE_ZONE).plusDays(1));
+        assertTrue(DaoFactory.getInstance().getVoucherDao().save(sale));
+        HttpResponse<String> ok = call("POST", "/api/vouchers/validate", null, "{\"code\":\"sale10\",\"subtotal\":100000}");
         assertEquals(200, ok.statusCode(), ok.body());
         assertEquals(Boolean.TRUE, data(ok).get("valid"));
         assertEquals(10_000.0, number(data(ok), "discountAmount"));
-        HttpResponse<String> capped = call("POST", "/api/vouchers/validate", null, "{\"code\":\"WELCOME10\",\"subtotal\":900000}");
+        HttpResponse<String> capped = call("POST", "/api/vouchers/validate", null, "{\"code\":\"SALE10\",\"subtotal\":900000}");
         assertEquals(50_000.0, number(data(capped), "discountAmount"));
+        // WELCOME10 giới hạn mỗi tài khoản một lần, nên khách vãng lai phải đăng nhập.
+        HttpResponse<String> welcome = call("POST", "/api/vouchers/validate", null, "{\"code\":\"WELCOME10\",\"subtotal\":100000}");
+        assertEquals(Boolean.FALSE, data(welcome).get("valid"));
+        assertEquals("LOGIN_REQUIRED", data(welcome).get("reason"));
         HttpResponse<String> bad = call("POST", "/api/vouchers/validate", null, "{\"code\":\"NOPE\",\"subtotal\":100000}");
         assertEquals(Boolean.FALSE, data(bad).get("valid"));
         assertEquals(400, call("POST", "/api/vouchers/validate", null, "{\"code\":\"WELCOME10\"}").statusCode());
@@ -905,6 +917,9 @@ class ServerTest {
         assertEquals(SimpleAuthFilter.Access.PUBLIC, SimpleAuthFilter.required("GET", "/api/menu/"));
         assertEquals(SimpleAuthFilter.Access.PUBLIC, SimpleAuthFilter.required("POST", "/api/reservations"));
         assertEquals(SimpleAuthFilter.Access.PUBLIC, SimpleAuthFilter.required("POST", "/api/vouchers/validate"));
+        assertEquals(SimpleAuthFilter.Access.PUBLIC, SimpleAuthFilter.required("GET", "/api/vouchers/active"));
+        assertEquals(SimpleAuthFilter.Access.MANAGER, SimpleAuthFilter.required("POST", "/api/vouchers"));
+        assertEquals(SimpleAuthFilter.Access.MANAGER, SimpleAuthFilter.required("GET", "/api/vouchers/3/usages"));
         assertEquals(SimpleAuthFilter.Access.STAFF, SimpleAuthFilter.required("GET", "/api/anything-new"));
         assertEquals(SimpleAuthFilter.Access.MANAGER, SimpleAuthFilter.required("POST", "/api/menu"));
         assertEquals(SimpleAuthFilter.Access.STAFF, SimpleAuthFilter.required("PATCH", "/api/menu/1/stock"));
