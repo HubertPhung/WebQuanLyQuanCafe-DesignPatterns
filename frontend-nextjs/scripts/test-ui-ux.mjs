@@ -710,6 +710,13 @@ async function runAuthTests() {
       },
     },
     {
+      id: 'TC-VOUCHER-05', name: 'POS Counter Has a Voucher Field',
+      run: async () => {
+        const res = await fetchPage(`${BASE_URL}/admin/pos`, manual(await sessionCookie('STAFF')))
+        return [res.status === 200 && res.body.includes('id="pos-voucher"') && res.body.includes('Mã giảm giá'), `status=${res.status}`]
+      },
+    },
+    {
       id: 'TC-RES-END-01', name: 'Admin Reservations Page Shows Time Ranges',
       run: async () => {
         const res = await fetchPage(`${BASE_URL}/admin/reservations`, manual(await sessionCookie('ADMIN')))

@@ -33,6 +33,27 @@ export function voucherDiscount(subtotal: number, voucher: ActiveVoucher | undef
   return Math.max(0, Math.min(subtotal, raw))
 }
 
+export type PosVoucherVerdict = { voucher: ActiveVoucher | undefined; discount: number; error: string | null }
+
+/**
+ * Mã nhập ở quầy POS: mức giảm tính trước bằng cùng công thức với Java, kèm lý do khi không dùng
+ * được. Quầy không biết tài khoản của khách nên mã chỉ cho online hoặc giới hạn theo tài khoản bị
+ * từ chối, như VoucherService. Java vẫn kiểm tra lại khi thanh toán.
+ */
+export function posVoucherVerdict(vouchers: ActiveVoucher[], code: string, subtotal: number): PosVoucherVerdict {
+  if (!normalizeVoucherCode(code)) return { voucher: undefined, discount: 0, error: null }
+  const voucher = findVoucher(vouchers, code)
+  if (!voucher) return { voucher: undefined, discount: 0, error: 'Mã không tồn tại hoặc đã hết hạn.' }
+  if (voucher.firstOnlineOrderOnly || voucher.perAccountLimit) {
+    return { voucher: undefined, discount: 0, error: 'Mã này chỉ dùng khi đặt online.' }
+  }
+  if (subtotal < voucher.minOrder) {
+    const money = (value: number) => `${Math.round(value).toLocaleString('vi-VN')} đ`
+    return { voucher, discount: 0, error: `Đơn tối thiểu ${money(voucher.minOrder)}, cần mua thêm ${money(voucher.minOrder - subtotal)}.` }
+  }
+  return { voucher, discount: voucherDiscount(subtotal, voucher), error: null }
+}
+
 /** Dòng mô tả ngắn cho khách: mức giảm, đơn tối thiểu và hạn dùng. */
 export function voucherTerms(voucher: ActiveVoucher): string {
   const money = (value: number) => `${value.toLocaleString('vi-VN')} đ`
