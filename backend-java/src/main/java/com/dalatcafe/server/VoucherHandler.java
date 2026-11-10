@@ -164,9 +164,14 @@ public class VoucherHandler extends ApiHandler {
 
     private void active(HttpExchange exchange) throws IOException {
         Instant now = service.now();
+        Integer accountId = isStorefront(exchange) ? queryUserId(exchange) : null;
         List<Object> rows = new ArrayList<>();
         for (Voucher v : dao.findAll()) {
             if (v.stateAt(now) != Voucher.VoucherState.RUNNING) continue;
+            if (accountId != null && v.getPerAccountLimit() != null
+                    && dao.countUsages(v.getId(), accountId) >= v.getPerAccountLimit()) {
+                continue;
+            }
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("code", v.getCode());
             row.put("type", v.getType().name());
@@ -230,6 +235,15 @@ public class VoucherHandler extends ApiHandler {
             throw new ApiException(403, "FORBIDDEN", "Only the storefront service can "
                     + (user == null ? "redeem vouchers" : "redeem vouchers, not role " + user.getRole()));
         }
+    }
+
+    private static Integer queryUserId(HttpExchange exchange) {
+        String raw = queryParam(exchange, "userId");
+        if (raw == null) return null;
+        if (!raw.matches("[1-9][0-9]{0,8}")) {
+            throw ApiException.badRequest("Field 'userId' must be a positive integer");
+        }
+        return Integer.parseInt(raw);
     }
 
     private static double subtotal(Map<String, Object> body) {

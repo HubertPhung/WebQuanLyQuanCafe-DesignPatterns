@@ -344,6 +344,24 @@ async function runCartAndWishlistTests() {
         recordTest('TC-VOUCHER-02', 'Account Page Lists Only Vouchers From Java', 'Cart & Wishlist', 'FAIL', `status ${accountRes.status}`)
       }
 
+      // TC-VOUCHER-06: nút mũi tên chọn voucher trên khung nhập mã và API danh sách voucher khả dụng
+      const availGuestRes = await fetch(`${BASE_URL}/api/vouchers/available`)
+      const availGuestJson = await availGuestRes.json()
+      const checkoutRes = await fetch(`${BASE_URL}/checkout`, { headers: { Cookie: customer }, redirect: 'manual' })
+      const checkoutHtml = await checkoutRes.text()
+      if (
+        availGuestRes.status === 200 &&
+        Array.isArray(availGuestJson.vouchers) &&
+        availGuestJson.vouchers.length === 0 &&
+        checkoutRes.status === 200 &&
+        checkoutHtml.includes('aria-label="Chọn mã ưu đãi khả dụng"') &&
+        checkoutHtml.includes('placeholder="Nhập mã ưu đãi"')
+      ) {
+        recordTest('TC-VOUCHER-06', 'Online Ordering Voucher Picker Dropdown & Available API', 'Cart & Wishlist', 'PASS', 'Voucher input arrow & /api/vouchers/available verified')
+      } else {
+        recordTest('TC-VOUCHER-06', 'Online Ordering Voucher Picker Dropdown & Available API', 'Cart & Wishlist', 'FAIL', `avail=${availGuestRes.status}, checkout=${checkoutRes.status}`)
+      }
+
     } else {
       recordTest('TC-API-02', 'Add Drink with Customizations to Cart', 'Cart & Wishlist', 'FAIL', `guest=${guestCart.status}, cart: ${JSON.stringify(cartData)}`)
     }

@@ -195,6 +195,29 @@ class VoucherHandlerTest {
     }
 
     @Test
+    void activeFiltersExhaustedPerAccountVouchersOnlyForStorefront() throws Exception {
+        create("MEMBER1", ",\"perAccountLimit\":1");
+        service("/api/vouchers/redeem", "{\"code\":\"MEMBER1\",\"subtotal\":100000,\"userId\":7,\"orderCode\":\"WEB-7\"}");
+
+        // Gọi từ storefront kèm userId=7: ẩn mã tài khoản số 7 đã dùng hết lượt.
+        HttpResponse<String> forUser7 = call("GET", "/api/vouchers/active?userId=7", null, null, "X-Service-Key", SERVICE_KEY);
+        assertEquals(200, forUser7.statusCode(), forUser7.body());
+        List<Object> codes7 = list(forUser7).stream().map(v -> v.get("code")).map(Object.class::cast).toList();
+        assertFalse(codes7.contains("MEMBER1"), "exhausted per-account voucher must be hidden for user 7");
+        assertTrue(codes7.contains("WELCOME10"));
+
+        // Tài khoản số 8 chưa dùng nên vẫn thấy.
+        HttpResponse<String> forUser8 = call("GET", "/api/vouchers/active?userId=8", null, null, "X-Service-Key", SERVICE_KEY);
+        List<Object> codes8 = list(forUser8).stream().map(v -> v.get("code")).map(Object.class::cast).toList();
+        assertTrue(codes8.contains("MEMBER1"));
+
+        // Gọi công khai không có service key thì phớt lờ userId (không lộ ai đã dùng mã).
+        HttpResponse<String> anonymousProbe = call("GET", "/api/vouchers/active?userId=7", null, null);
+        List<Object> publicCodes = list(anonymousProbe).stream().map(v -> v.get("code")).map(Object.class::cast).toList();
+        assertTrue(publicCodes.contains("MEMBER1"));
+    }
+
+    @Test
     void validateReportsReasonAndShortfall() throws Exception {
         create("MIN150", ",\"minOrder\":150000");
         HttpResponse<String> below = call("POST", "/api/vouchers/validate", null, "{\"code\":\"min150\",\"subtotal\":120000}");

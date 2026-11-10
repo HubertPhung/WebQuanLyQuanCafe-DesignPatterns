@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { validateVoucher } from '../lib/api-client'
+import { fetchActiveVouchers, validateVoucher } from '../lib/api-client'
 
 // Kiểm tra mã cho một tài khoản cần service key: thiếu key thì báo lỗi cấu hình, không âm thầm
 // hỏi Java như khách vãng lai (khách đã đăng nhập sẽ thấy "Đăng nhập để dùng mã này").
@@ -7,9 +7,37 @@ async function main() {
   const fetchBefore = globalThis.fetch
   const keyBefore = process.env.AUTH_SERVICE_KEY
   const backendBefore = process.env.JAVA_BACKEND_URL
-  const calls: { headers: Record<string, string>; body: Record<string, unknown> }[] = []
-  globalThis.fetch = (async (_input: unknown, init?: RequestInit) => {
-    calls.push({ headers: init?.headers as Record<string, string>, body: JSON.parse(String(init?.body)) })
+  const calls: { url: string; headers: Record<string, string>; body?: Record<string, unknown> }[] = []
+  globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
+    const url = String(input)
+    calls.push({
+      url,
+      headers: (init?.headers as Record<string, string>) ?? {},
+      body: init?.body ? JSON.parse(String(init.body)) : undefined,
+    })
+    if (url.includes('/api/vouchers/active')) {
+      return Response.json({
+        ok: true,
+        data: [
+          {
+            id: 1,
+            code: 'WELCOME10',
+            type: 'PERCENT',
+            value: 10,
+            maxDiscount: 50_000,
+            minOrder: 0,
+            startDate: '2025-01-01',
+            endDate: '2026-12-31',
+            usageLimit: 0,
+            usedCount: 0,
+            perAccountLimit: 1,
+            firstOnlineOrderOnly: true,
+            active: true,
+            description: 'Chào mừng',
+          },
+        ],
+      })
+    }
     return Response.json({ ok: true, data: { code: 'SALE', valid: true, reason: 'OK', discountAmount: 0, shortfall: 0, description: '', firstOnlineOrderOnly: false } })
   }) as typeof fetch
   const errors: unknown[] = []
@@ -26,13 +54,25 @@ async function main() {
 
     const guest = await validateVoucher('SALE', 100_000)
     assert.equal(guest.ok, true, 'a guest check needs no key')
-    assert.equal(calls.at(-1)!.body.userId, undefined)
+    assert.equal(calls.at(-1)!.body?.userId, undefined)
+
+    // Khi thiếu service key, fetchActiveVouchers(7) không gửi userId không xác thực
+    const activeNoKey = await fetchActiveVouchers(7)
+    assert.equal(activeNoKey.ok, true)
+    assert.equal(calls.at(-1)!.url, 'http://voucher-api.test/api/vouchers/active')
 
     process.env.AUTH_SERVICE_KEY = 'test-service-key'
     const member = await validateVoucher('SALE', 100_000, 7)
     assert.equal(member.ok, true)
     assert.equal(calls.at(-1)!.headers['X-Service-Key'], 'test-service-key')
-    assert.equal(calls.at(-1)!.body.userId, 7)
+    assert.equal(calls.at(-1)!.body?.userId, 7)
+
+    // Khi có service key và userId, fetchActiveVouchers(7) truyền ?userId=7 và X-Service-Key
+    const activeMember = await fetchActiveVouchers(7)
+    assert.equal(activeMember.ok, true)
+    assert.equal(calls.at(-1)!.url, 'http://voucher-api.test/api/vouchers/active?userId=7')
+    assert.equal(calls.at(-1)!.headers['X-Service-Key'], 'test-service-key')
+
     console.log('voucher api: all checks passed')
   } finally {
     globalThis.fetch = fetchBefore

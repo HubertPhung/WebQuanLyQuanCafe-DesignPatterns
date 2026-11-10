@@ -67,3 +67,58 @@ export function voucherTerms(voucher: ActiveVoucher): string {
   parts.push(`hạn đến ${voucher.endDate.split('-').reverse().join('/')}`)
   return parts.join(' · ')
 }
+
+export type VoucherBenefitSummary = {
+  discountText: string
+  expiryText: string
+  minOrderText: string | null
+}
+
+/** Thông tin ngắn gọn trên từng dòng trong menu chọn voucher đặt hàng online. */
+export function voucherBenefitSummary(voucher: ActiveVoucher): VoucherBenefitSummary {
+  const money = (value: number) => `${Math.round(value).toLocaleString('vi-VN')} đ`
+  const discountText =
+    voucher.type === 'FIXED'
+      ? `Giảm ${money(voucher.value)}`
+      : `Giảm ${voucher.value}%${voucher.maxDiscount ? `, tối đa ${money(voucher.maxDiscount)}` : ''}`
+  const expiryText = `HSD: ${voucher.endDate.split('-').reverse().join('/')}`
+  const minOrderText = voucher.minOrder > 0 ? `Đơn từ ${money(voucher.minOrder)}` : null
+  return { discountText, expiryText, minOrderText }
+}
+
+export type RankedVoucher = {
+  voucher: ActiveVoucher
+  discount: number
+  eligible: boolean
+  shortfall: number
+  isBest: boolean
+}
+
+/**
+ * Xếp hạng các voucher khả dụng theo tạm tính giỏ hàng hiện tại và gắn nhãn `isBest` cho mã giảm
+ * được nhiều tiền nhất (> 0đ). Nếu cùng mức giảm cao nhất thì ưu tiên mã hết hạn sớm hơn.
+ */
+export function rankStorefrontVouchers(vouchers: ActiveVoucher[], subtotal: number): RankedVoucher[] {
+  const safeSubtotal = Math.max(0, subtotal)
+  const items: RankedVoucher[] = vouchers.map((voucher) => {
+    const shortfall = Math.max(0, voucher.minOrder - safeSubtotal)
+    const discount = voucherDiscount(safeSubtotal, voucher)
+    const eligible = shortfall === 0 && discount > 0
+    return { voucher, discount, eligible, shortfall, isBest: false }
+  })
+
+  items.sort((a, b) => {
+    if (a.eligible !== b.eligible) return a.eligible ? -1 : 1
+    if (b.discount !== a.discount) return b.discount - a.discount
+    if (a.shortfall !== b.shortfall) return a.shortfall - b.shortfall
+    const byDate = a.voucher.endDate.localeCompare(b.voucher.endDate)
+    if (byDate !== 0) return byDate
+    return a.voucher.code.localeCompare(b.voucher.code)
+  })
+
+  if (items.length > 0 && items[0].eligible && items[0].discount > 0) {
+    items[0].isBest = true
+  }
+
+  return items
+}

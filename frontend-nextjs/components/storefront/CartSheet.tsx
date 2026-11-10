@@ -28,6 +28,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { useCartStore, formatMoneyVND } from '@/lib/store/cart-store'
+import { VoucherPickerInput } from '@/components/storefront/VoucherPickerInput'
 
 export interface CartSheetProps {
   isOpen?: boolean
@@ -72,14 +73,14 @@ export function CartSheet({
     }
   }
 
-  const handleApplyPromo = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!promoCode.trim()) return
+  const applyCode = async (rawCode: string) => {
+    const code = rawCode.trim()
+    if (!code) return
     setIsBusy(true)
     setPromoNotice('')
     try {
       if (onUpdateCart) {
-        const updated = await onUpdateCart({ action: 'discount', code: promoCode.trim() })
+        const updated = await onUpdateCart({ action: 'discount', code })
         const reason = (updated as { voucherMessage?: string } | null | undefined)?.voucherMessage
         if (updated && updated.discountCodes?.some((c) => c.applicable)) {
           setPromoNotice(reason || 'Mã ưu đãi đã áp dụng thành công!')
@@ -89,7 +90,7 @@ export function CartSheet({
           toast.error(reason || 'Mã không hợp lệ hoặc đã hết hạn.')
         }
       } else {
-        const res = await store.applyPromo(promoCode)
+        const res = await store.applyPromo(code)
         setPromoNotice(res.message)
       }
     } finally {
@@ -247,24 +248,15 @@ export function CartSheet({
                   />
                 </div>
 
-                {/* Form nhập mã khuyến mãi */}
-                <form onSubmit={handleApplyPromo} className="promo-form flex gap-2">
-                  <input
-                    aria-label="Mã giảm giá"
-                    placeholder="Nhập mã ưu đãi"
-                    value={promoCode}
-                    onChange={(e) => setPromoCode(e.target.value)}
-                    className="flex-1 rounded-xl border border-stone-200/80 bg-white px-3.5 py-2 text-xs text-stone-900 placeholder:text-stone-400 uppercase tracking-wider focus:outline-none focus:ring-1 focus:ring-[#5A3E2B] truncate"
-                  />
-                  <Button
-                    type="submit"
-                    variant="outline"
-                    disabled={isBusy || store.isBusy || !promoCode}
-                    className="rounded-xl border-stone-300 text-[#5A3E2B] text-xs font-semibold hover:bg-stone-100 cursor-pointer"
-                  >
-                    Áp dụng
-                  </Button>
-                </form>
+                {/* Form nhập & chọn mã khuyến mãi */}
+                <VoucherPickerInput
+                  value={promoCode}
+                  onChange={setPromoCode}
+                  onApply={applyCode}
+                  subtotal={Number(subtotalAmount?.amount ?? 0)}
+                  appliedCode={cart?.discountCodes?.find((c) => c.applicable)?.code}
+                  disabled={isBusy || store.isBusy}
+                />
 
                 {promoNotice && (
                   <p

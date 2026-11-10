@@ -33,6 +33,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { TAX_RATE } from '@/lib/admin/format'
 import { formatMoneyVND, useCartStore } from '@/lib/store/cart-store'
+import { VoucherPickerInput } from '@/components/storefront/VoucherPickerInput'
 import { isDaLatAddress, shippingFee } from '@/lib/storefront/delivery'
 import { DEFAULT_BRANCH_ID, branchById, branches, type BranchId } from '@/lib/branches'
 
@@ -83,7 +84,8 @@ function Choice({
 }
 
 export function CheckoutForm({ account }: { account: { name: string; email: string } | null }) {
-  const { cart, fetchCart } = useCartStore()
+  const { cart, fetchCart, applyPromo, isBusy } = useCartStore()
+  const [promoCode, setPromoCode] = useState('')
   const [name, setName] = useState(account?.name ?? '')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState(account?.email ?? '')
@@ -396,6 +398,17 @@ export function CheckoutForm({ account }: { account: { name: string; email: stri
                   ))
                 )}
               </div>
+
+              <VoucherPickerInput
+                value={promoCode}
+                onChange={setPromoCode}
+                onApply={async (code) => {
+                  await applyPromo(code)
+                }}
+                subtotal={subtotal}
+                appliedCode={voucher?.code}
+                disabled={pending || isBusy || lineItems.length === 0}
+              />
 
               <div className="space-y-2 border-t border-stone-200/80 pt-4 text-xs">
                 <div className="flex justify-between text-stone-600">

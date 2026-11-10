@@ -417,8 +417,19 @@ export function validateVoucher(code: string, subtotal: number, userId?: number)
 }
 
 // GET /api/vouchers/active (công khai): các mã đang chạy, cho giỏ hàng và trang tài khoản.
-export function fetchActiveVouchers(): Promise<JavaResult<ActiveVoucher[]>> {
-  return request<ActiveVoucher[]>('/api/vouchers/active', { method: 'GET', auth: false })
+// Khi truyền userId (kèm service key), Java tự ẩn các mã mà tài khoản đó đã dùng hết lượt.
+export function fetchActiveVouchers(userId?: number): Promise<JavaResult<ActiveVoucher[]>> {
+  if (userId === undefined) {
+    return request<ActiveVoucher[]>('/api/vouchers/active', { method: 'GET', auth: false })
+  }
+  const service = storefrontService()
+  if (service === null) {
+    return request<ActiveVoucher[]>('/api/vouchers/active', { method: 'GET', auth: false })
+  }
+  return request<ActiveVoucher[]>(`/api/vouchers/active?userId=${encodeURIComponent(String(userId))}`, {
+    method: 'GET',
+    ...service,
+  })
 }
 
 export type VoucherState = 'UPCOMING' | 'RUNNING' | 'EXPIRED' | 'SOLD_OUT' | 'DISABLED'

@@ -64,13 +64,13 @@ export async function getTables(): Promise<FloorTable[]> {
 // Đơn đang mở của chi nhánh đang chọn: dùng cho KDS, các tab POS và số đếm trên header.
 export async function getActiveOrders(): Promise<Order[]> {
   await assertAdminAccess()
-  await ensureOrderTableGroups()
   const branch = await getAdminBranch()
   const mock = () => getMockActiveOrders().filter((order) => order.branch === branch)
   if (!isDbConfigured || !db) {
     return mock()
   }
   try {
+    await ensureOrderTableGroups()
     return await db.select().from(adminOrders)
       .where(and(ne(adminOrders.status, 'completed'), ne(adminOrders.status, 'cancelled'), eq(adminOrders.branch, branch)))
       .orderBy(asc(adminOrders.createdAt))
@@ -83,13 +83,13 @@ export async function getActiveOrders(): Promise<Order[]> {
 // Đơn của chi nhánh đang chọn, hoặc của cả quán với số liệu dùng chung (khách hàng).
 export async function getOrdersSince(days: number, scope: 'branch' | 'all' = 'branch'): Promise<Order[]> {
   await assertAdminAccess()
-  await ensureOrderTableGroups()
   const branch = scope === 'branch' ? await getAdminBranch() : null
   const mock = () => getMockOrdersSince(days).filter((order) => !branch || order.branch === branch)
   if (!isDbConfigured || !db) {
     return mock()
   }
   try {
+    await ensureOrderTableGroups()
     return await db
       .select()
       .from(adminOrders)
@@ -315,7 +315,7 @@ function formatRange(start: Date, end: Date) {
 export async function getReservations(): Promise<{ reservations: ReservationView[]; javaOnline: boolean }> {
   await assertAdminAccess()
   const branch = await getAdminBranch()
-  const local: ReservationView[] = (isDbConfigured ? [] : getMockReservations()).filter((r) => r.branch === branch).map((r) => ({
+  const mockToViews = (): ReservationView[] => getMockReservations().filter((r) => r.branch === branch).map((r) => ({
     id: r.code,
     source: 'local',
     customer: r.customer,
@@ -334,7 +334,8 @@ export async function getReservations(): Promise<{ reservations: ReservationView
   }))
 
   const remote = await fetchReservations(branch)
-  if (!remote.ok) return { reservations: local, javaOnline: false }
+  if (!remote.ok) return { reservations: mockToViews(), javaOnline: false }
+  const local: ReservationView[] = isDbConfigured ? [] : mockToViews()
   const fromJava: ReservationView[] = remote.data.map((r) => ({
     id: r.id,
     source: 'java',
@@ -369,12 +370,12 @@ export async function getOnlineOrders(): Promise<OnlineOrderView[]> {
 // Các dòng đơn ứng với danh sách liên hệ được truyền vào, theo thứ tự của danh sách đó. Nơi gọi đã
 // giới hạn sẵn danh sách (toàn bộ với nhân viên, chỉ của một tài khoản với /account).
 export async function joinContactOrders(contacts: OrderContact[]): Promise<OnlineOrderView[]> {
-  await ensureOrderTableGroups()
   if (contacts.length === 0) return []
   const codes = contacts.map((contact) => contact.orderCode)
   let orders: Order[] = getMockOrdersByCode(codes)
   if (isDbConfigured && db) {
     try {
+      await ensureOrderTableGroups()
       orders = await db.select().from(adminOrders).where(inArray(adminOrders.orderCode, codes))
     } catch (error) {
       console.warn('Database query failed, using fallback mock store:', error)
@@ -395,7 +396,6 @@ export type OrderHistoryItem = Order & {
 // Mọi giao dịch và đơn hàng (online, mang đi, tại bàn/POS), mới nhất trước.
 export async function getOrderHistory(scope: 'branch' | 'all' = 'branch'): Promise<OrderHistoryItem[]> {
   await assertAdminAccess()
-  await ensureOrderTableGroups()
   const branch = scope === 'branch' ? await getAdminBranch() : null
   const [contacts, tables] = await Promise.all([
     listOrderContacts(),
@@ -407,6 +407,7 @@ export async function getOrderHistory(scope: 'branch' | 'all' = 'branch'): Promi
   let orders: Order[] = []
   if (isDbConfigured && db) {
     try {
+      await ensureOrderTableGroups()
       orders = await db
         .select()
         .from(adminOrders)

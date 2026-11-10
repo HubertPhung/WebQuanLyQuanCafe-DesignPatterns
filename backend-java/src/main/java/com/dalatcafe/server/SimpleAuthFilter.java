@@ -155,6 +155,9 @@ public class SimpleAuthFilter extends Filter {
      */
     static boolean isServiceRoute(String method, String path) {
         String p = path.replaceAll("/+$", "");
+        if (method.equals("GET") && p.equals("/api/vouchers/active")) {
+            return true;
+        }
         return method.equals("POST") && (p.equals("/api/checkout") || p.equals("/api/orders/sync")
                 || p.equals("/api/vouchers/validate") || p.equals("/api/vouchers/redeem") || p.equals("/api/vouchers/release"));
     }

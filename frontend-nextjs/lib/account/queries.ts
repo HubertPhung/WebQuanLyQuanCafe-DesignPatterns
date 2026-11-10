@@ -47,7 +47,7 @@ export async function getAccountOverview(session: Session): Promise<AccountOverv
     listContactsForUser(session.userId),
     isFirstOnlineOrderAvailable(session.userId).catch(() => false),
     getAccountReservations(session),
-    loadActiveVouchers(),
+    loadActiveVouchers(session.userId),
   ])
   const orders = (await joinContactOrders(contacts)).map<AccountOrder>((order) => ({
     orderCode: order.orderCode,

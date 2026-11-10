@@ -19,6 +19,7 @@ import { Logo } from '@/components/brand/logo'
 import { useCartStore, formatMoneyVND } from '@/lib/store/cart-store'
 import { useReservationStore } from '@/lib/store/reservation-store'
 import { ReservationDialog } from '@/components/storefront/ReservationDialog'
+import { VoucherPickerInput } from '@/components/storefront/VoucherPickerInput'
 import { toast } from 'sonner'
 
 export default function CartPage() {
@@ -35,10 +36,9 @@ export default function CartPage() {
   const total = Number(cart?.cost?.totalAmount?.amount ?? subtotal)
   const discountAmount = Math.max(0, subtotal - total)
 
-  const handleApplyPromo = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!promoCode.trim()) return
-    await applyPromo(promoCode)
+  const handleApplyCode = async (code: string) => {
+    if (!code.trim()) return
+    await applyPromo(code.trim())
   }
 
   const handleSaveNote = async () => {
@@ -174,23 +174,15 @@ export default function CartPage() {
               <div className="rounded-2xl border border-stone-200/80 bg-white p-6 shadow-xs space-y-4">
                 <h3 className="font-bold text-base text-stone-900">Tóm tắt đơn hàng</h3>
 
-                {/* Form nhập mã khuyến mãi */}
-                <form onSubmit={handleApplyPromo} className="flex gap-2">
-                  <input
-                    value={promoCode}
-                    onChange={(e) => setPromoCode(e.target.value)}
-                    placeholder="Nhập mã ưu đãi"
-                    className="flex-1 rounded-xl border border-stone-200 px-3 py-2 text-xs uppercase tracking-wider focus:outline-none focus:ring-1 focus:ring-[#3E2723]"
-                  />
-                  <Button
-                    type="submit"
-                    variant="outline"
-                    disabled={isBusy || !promoCode}
-                    className="rounded-xl border-stone-300 text-[#3E2723] text-xs font-semibold hover:bg-stone-100"
-                  >
-                    Áp dụng
-                  </Button>
-                </form>
+                {/* Form nhập & chọn mã khuyến mãi */}
+                <VoucherPickerInput
+                  value={promoCode}
+                  onChange={setPromoCode}
+                  onApply={handleApplyCode}
+                  subtotal={subtotal}
+                  appliedCode={cart?.discountCodes?.find((d) => d.applicable)?.code}
+                  disabled={isBusy}
+                />
 
                 <div className="space-y-2 border-t border-stone-200/80 pt-4 text-xs">
                   <div className="flex justify-between text-stone-600">
